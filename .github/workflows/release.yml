@@ -1,0 +1,111 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+jobs:
+  # Gate the release on the `ci` workflow having succeeded for this exact
+  # commit. Tags are expected to point at a commit already pushed to master,
+  # where ci.yml runs. We poll because the tag may be pushed before that CI
+  # run finishes; we only build images once CI is conclusively green.
+  verify-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ci to succeed on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 1800 ))  # 30 min cap
+          while :; do
+            # Most recent `ci` run for this commit, if any.
+            read -r status conclusion < <(
+              gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
+                --jq '.workflow_runs[0] | "\(.status // "none") \(.conclusion // "none")"'
+            )
+            echo "ci run for $SHA: status=$status conclusion=$conclusion"
+            case "$status" in
+              completed)
+                if [ "$conclusion" = "success" ]; then
+                  echo "ci passed — proceeding with release."
+                  exit 0
+                fi
+                echo "::error::ci concluded '$conclusion' for $SHA; refusing to release."
+                exit 1
+                ;;
+              none)
+                # No run yet. Could be a tag pushed moments after the master
+                # push (run not created), or a commit that never hit master.
+                # Wait until the deadline before giving up either way.
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "::error::no ci run for $SHA after timeout. Tag a commit that has run ci on master."
+                  exit 1
+                fi
+                echo "no ci run for $SHA yet; waiting 15s..."
+                sleep 15
+                ;;
+              *)
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "::error::timed out waiting for ci to finish for $SHA."
+                  exit 1
+                fi
+                echo "ci still $status; waiting 15s..."
+                sleep 15
+                ;;
+            esac
+          done
+
+  build:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, web, mcp]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/almanac-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/${{ matrix.service }}/Dockerfile
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            GIT_TAG=${{ github.ref_name }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Registry-backed layer cache: reuses apt deps, pnpm install, and the
+          # better-sqlite3 node-gyp compile across tag builds. mode=max also
+          # caches intermediate build-stage layers, not just the final image.
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/almanac-${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/almanac-${{ matrix.service }}:buildcache,mode=max

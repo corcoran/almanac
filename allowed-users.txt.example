@@ -1,0 +1,3 @@
+# One email per line. oauth2-proxy reloads on file change.
+# Copy to allowed-users.txt at deploy time.
+your-email@example.com

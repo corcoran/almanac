@@ -1,0 +1,69 @@
+{
+  "name": "@almanac/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "production": "./dist/index.js",
+      "default": "./src/index.ts"
+    },
+    "./types": {
+      "production": "./dist/domain/index.js",
+      "default": "./src/domain/index.ts"
+    },
+    "./schemas": {
+      "production": "./dist/schemas/index.js",
+      "default": "./src/schemas/index.ts"
+    },
+    "./signals": {
+      "production": "./dist/signals/index.js",
+      "default": "./src/signals/index.ts"
+    },
+    "./repos": {
+      "production": "./dist/repos/index.js",
+      "default": "./src/repos/index.ts"
+    },
+    "./db": {
+      "production": "./dist/db/index.js",
+      "default": "./src/db/index.ts"
+    },
+    "./bootstrap": {
+      "production": "./dist/bootstrap/index.js",
+      "default": "./src/bootstrap/index.ts"
+    },
+    "./test-support": {
+      "production": "./dist/test-support/index.js",
+      "default": "./src/test-support/index.ts"
+    },
+    "./llm": {
+      "production": "./dist/llm/index.js",
+      "default": "./src/llm/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed-user": "node --import tsx/esm src/bin/seed-user.ts",
+    "seed-accomplishments": "node --import tsx/esm src/bin/seed-accomplishments.ts",
+    "seed-demo": "node --import tsx/esm src/bin/seed-demo.ts",
+    "backfill-daily-net": "node --import tsx/esm src/bin/backfill-daily-net.ts"
+  },
+  "bin": {
+    "almanac-seed-user": "./src/bin/seed-user.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "better-sqlite3": "^12.10.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.19.41",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

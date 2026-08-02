@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.env
+.env.local
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-shm
+data/*.sqlite-wal
+.superpowers/
+.DS_Store
+.worktrees/
+data/backups/
+allowed-users.txt
+almanac-data/
+.claude

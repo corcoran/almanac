@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Almanac — Workout View (Active) — mock</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1c2030;
+    --line: #262a36;
+    --line-2: #353a4a;
+    --ink: #e6e8ee;
+    --ink-dim: #9aa0ad;
+    --ink-faint: #6b7180;
+    --accent: #6ea8ff;
+    --accent-dim: #2c4670;
+    --good: #4cc38a;
+    --warn: #e6b450;
+    --bad: #e26b6b;
+
+    /* Calendar pill template hues (Stage 4 hash → palette) */
+    --t-push: #f1c453;
+    --t-pull: #6ea8ff;
+    --t-legs: #e26b6b;
+
+    /* Macro hues — used across phase header, remaining, and 7-day grid. */
+    --m-kcal: #d8b4fe;
+    --m-protein: #6ee7a8;
+    --m-carb:    #f5c25a;
+    --m-fat:     #f08a8a;
+
+    /* Calendar geometry — tweak in one place. */
+    --cal-cell-h: 60px;     /* tall enough to host 3 pill rows + chip + day number */
+    --cal-gap:    2px;
+    --pill-h:     5px;
+    --pill-gap:   2px;      /* vertical gap between stacked pills */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif; }
+
+  .app {
+    display: grid;
+    grid-template-columns: minmax(560px, 1.2fr) minmax(440px, 1fr);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .pane { overflow: auto; padding: 18px 22px 80px; }
+  .pane.left { border-right: 1px solid var(--line); }
+  .pane.right { background: linear-gradient(180deg, #12141c 0%, #0f1115 100%); }
+
+  /* ───────────── Left pane ───────────── */
+
+  .session-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .session-header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  .session-header .meta { font-size: 12px; color: var(--ink-dim); }
+
+  .end-btn {
+    background: var(--accent);
+    color: #0c1018;
+    border: 0;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .end-btn:hover { filter: brightness(1.08); }
+
+  .end-session-row {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0 10px;
+  }
+  .end-session-row .end-btn { font-size: 14px; padding: 12px 28px; }
+
+  .exercise-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .ex-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+  .ex-head .name { font-weight: 600; }
+  .ex-head .group { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.6px; }
+  .ex-head .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+  .ex-head .badge.added { background: #2a3b56; color: var(--accent); }
+
+  table.sets {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+  table.sets th, table.sets td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  table.sets th {
+    color: var(--ink-faint);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 10px;
+  }
+  table.sets td:first-child, table.sets th:first-child { text-align: left; width: 56px; padding-left: 14px; }
+  table.sets td:last-child, table.sets th:last-child { width: 64px; text-align: center; padding-right: 14px; }
+  table.sets tr:last-child td { border-bottom: 0; }
+
+  .set-num { color: var(--ink-dim); font-weight: 500; }
+
+  .input {
+    background: transparent;
+    border: 1px solid var(--line-2);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 3px 6px;
+    width: 70px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font: inherit;
+  }
+  .input:focus { outline: 1px solid var(--accent); }
+
+  .done-row td { color: var(--ink-faint); }
+  .done-row .input { color: var(--ink-faint); border-color: transparent; background: transparent; }
+
+  .active-row td { background: rgba(110,168,255,0.05); }
+  .active-row .input { border-color: var(--accent-dim); }
+
+  .check {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    border: 1.5px solid var(--line-2);
+    background: transparent;
+    color: var(--ink-dim);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .check.done { background: var(--good); border-color: var(--good); color: #0c1018; }
+  .check.next { border-color: var(--accent); color: var(--accent); }
+
+  .add-set-row td {
+    padding: 0;
+    border-bottom: 0;
+  }
+  .add-set-btn {
+    width: 100%;
+    background: transparent;
+    color: var(--ink-faint);
+    border: 0;
+    border-top: 1px dashed var(--line);
+    padding: 7px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    text-align: center;
+  }
+  .add-set-btn:hover { color: var(--accent); }
+
+  .add-exercise-btn {
+    width: 100%;
+    background: transparent;
+    color: var(--ink-dim);
+    border: 1px dashed var(--line-2);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    font: inherit;
+    margin-top: 4px;
+  }
+  .add-exercise-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ───────────── Right pane ───────────── */
+
+  .block {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+
+  /* Phase header — laid out like the macros block: small uppercase label row,
+     then a clean value row, then a base-macros sub-row. */
+  .phase-header .eyebrow {
+    font-size: 11px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .phase-header .eyebrow .intent { color: var(--warn); font-weight: 600; }
+  .phase-header .eyebrow .day {
+    margin-left: auto;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .phase-header .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .phase-header .title-row .name {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .phase-header .title-row .started {
+    color: var(--ink-faint);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-base {
+    color: var(--ink-dim);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .phase-base .lbl {
+    color: var(--ink-faint);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .macro {
+    font-variant-numeric: tabular-nums;
+  }
+  .macro b { color: var(--ink); font-weight: 600; }
+  .macro .tag {
+    font-size: 10px;
+    margin-left: 2px;
+    font-weight: 600;
+  }
+  .macro .tag .g {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .macro.kcal    { color: var(--m-kcal); }
+  .macro.protein { color: var(--m-protein); }
+  .macro.carb    { color: var(--m-carb); }
+  .macro.fat     { color: var(--m-fat); }
+
+  /* Remaining */
+  .remaining {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .remaining .big {
+    font-size: 30px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+  }
+  .remaining .unit { color: var(--ink-dim); }
+  .remaining .sub {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+  }
+  .remaining .sub b { color: var(--ink); font-weight: 600; }
+
+  /* Macros 7-day grid */
+  .macros-grid {
+    display: grid;
+    grid-template-columns: 64px repeat(7, 1fr);
+    gap: 2px 6px;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+  }
+  .macros-grid .head { color: var(--ink-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+  .macros-grid .rowlbl { color: var(--ink-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .macros-grid .cell { text-align: center; padding: 2px 0; border-radius: 3px; }
+  .macros-grid .cell.today { background: rgba(110,168,255,0.13); color: var(--accent); font-weight: 600; }
+  .macros-grid .cell.under { color: var(--bad); }
+  .macros-grid .cell.over  { color: var(--warn); }
+  .macros-grid .cell.empty { color: var(--ink-faint); }
+
+  /* Weight / sleep blocks */
+  .stat-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .stat-row .label { color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-row .val { font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; }
+  .stat-row .delta { color: var(--ink-dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .stat-row .delta.up { color: var(--bad); }
+  .stat-row .delta.dn { color: var(--good); }
+
+  .sparkline { height: 28px; width: 100%; display: block; }
+
+  /* Sleep 7-night mini bar with 8h scale */
+  .sleep-block { position: relative; }
+  .sleep-bars {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    height: 60px;
+    margin-top: 8px;
+    padding-bottom: 14px;
+  }
+  .sleep-bars .bar {
+    background: var(--line-2);
+    border-radius: 2px;
+    align-self: end;
+    position: relative;
+  }
+  .sleep-bars .bar.short { background: #5e3d3d; }
+  .sleep-bars .bar.short.deep { background: #8a4a4a; }
+  .sleep-bars .lbl {
+    position: absolute;
+    bottom: -14px;
+    left: 0; right: 0;
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 9px;
+  }
+  /* 8h reference line — placed so 8h bars touch it. Scale: max-bar = 9h → 8h is at top + 11.1% */
+  .sleep-bars::before {
+    content: "8h";
+    position: absolute;
+    top: 11.1%;
+    left: 0; right: 0;
+    height: 0;
+    border-top: 1px dashed var(--line-2);
+    color: var(--ink-faint);
+    font-size: 9px;
+    padding-left: 2px;
+    line-height: 0;
+  }
+
+  /* Calendar */
+  .cal-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .cal-head .title { font-weight: 600; }
+  .cal-head .tally { color: var(--ink-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .cal-nav button {
+    background: transparent;
+    border: 1px solid var(--line-2);
+    color: var(--ink-dim);
+    border-radius: 4px;
+    width: 22px; height: 22px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .cal-nav { display: inline-flex; gap: 4px; }
+
+  .cal-tally-chips {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-tally-chips .chip-dot {
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .cal {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--cal-gap);
+    font-variant-numeric: tabular-nums;
+  }
+  .cal .dow {
+    color: var(--ink-faint);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    text-align: center;
+    padding-bottom: 4px;
+  }
+
+  .cal .cell {
+    position: relative;
+    height: var(--cal-cell-h);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 3px 5px 0;
+    background: rgba(255,255,255,0.015);
+    color: var(--ink-dim);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cal .cell.dim { color: var(--ink-faint); background: transparent; }
+  .cal .cell.today { border-color: var(--accent); color: var(--ink); }
+  .cal .cell .dnum { font-size: 11px; }
+
+  /* Per-cell pill track: stacks one row per template that has a segment for this day.
+     Each row is height pill-h. Rendered in template-sort order. */
+  .cell .pill-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pill-gap);
+    margin-top: auto;       /* push to bottom */
+    padding-bottom: 3px;
+  }
+  .cell .pill {
+    height: var(--pill-h);
+    border-radius: 3px;
+    position: relative;
+  }
+  .cell .pill.too_soon   { background: transparent; border: 1px dashed currentColor; opacity: 0.6; }
+  .cell .pill.acceptable { opacity: 0.35; background: currentColor; }
+  .cell .pill.prime      { opacity: 1.0;  background: currentColor; }
+  .cell .pill.in_window  { opacity: 0.65; background: currentColor; }
+  /* When a pill is the START of a segment-run, left edge rounds; END, right edge rounds.
+     For simplicity in mock we apply rounding everywhere; live impl can compute. */
+
+  .cell .pill.push { color: var(--t-push); }
+  .cell .pill.pull { color: var(--t-pull); }
+  .cell .pill.legs { color: var(--t-legs); }
+
+  .cell .pill .star {
+    position: absolute;
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #fff;
+    text-shadow: 0 0 2px rgba(0,0,0,0.6);
+    line-height: 1;
+  }
+
+  /* Past-session chip — placed in the cell flow above the pill stack */
+  .session-chip {
+    align-self: flex-start;
+    height: 11px;
+    padding: 0 4px;
+    border-radius: 2px;
+    font-size: 9px;
+    color: #0c1018;
+    font-weight: 700;
+    line-height: 11px;
+  }
+  .session-chip.push { background: var(--t-push); }
+  .session-chip.pull { background: var(--t-pull); }
+  .session-chip.legs { background: var(--t-legs); }
+
+  .offline-banner {
+    background: #3a2a14;
+    color: var(--warn);
+    padding: 6px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid #4a3818;
+    display: none;
+  }
+  .offline-banner.show { display: block; }
+
+  .legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: var(--ink-faint);
+    font-size: 10px;
+    margin-top: 10px;
+  }
+  .legend .sw { display: inline-block; width: 18px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+  .legend .sw.too_soon { background: transparent; border: 1px dashed var(--ink-dim); }
+  .legend .sw.acceptable { background: var(--t-pull); opacity: 0.35; }
+  .legend .sw.prime { background: var(--t-pull); opacity: 1.0; }
+  .legend .sw.in_window { background: var(--t-pull); opacity: 0.65; }
+
+  .mock-note {
+    position: fixed;
+    bottom: 10px; right: 10px;
+    background: rgba(0,0,0,0.5);
+    color: var(--ink-dim);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-style: italic;
+    border: 1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ───────────────────────── Left pane: ActiveView ───────────────────────── -->
+    <div class="pane left">
+      <div class="offline-banner">Couldn't reach API — using cached data.</div>
+
+      <div class="session-header">
+        <div>
+          <h1>PUSH A</h1>
+          <div class="meta">started 5:42 PM · 23 min in · 3 of 5 exercises done</div>
+        </div>
+      </div>
+
+      <!-- Exercise 1: fully done -->
+      <div class="exercise-card">
+        <div class="ex-head">
+          <span><span class="name">Barbell Bench Press</span></span>
+          <span class="group">Chest</span>
+        </div>
+        <table class="sets">
+          <thead>
+            <tr><th>Set</th><th>Planned</th><th>Reps</th><th>Weight (kg)</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr class="done-row">
+              <td><span class="set-num">1</span></td>
+              <td>8 × 80</td>
+              <td><input class="input" value="8" /></td>
+              <td><input class="input" value="80" /></td>
+              <td><button class="check done">✓</button></td>
+            </tr>
+            <tr class="done-row">
+              <td><span class="set-num">2</span></td>
+              <td>8 × 80</td>
+              <td><input class="input" value="8" /></td>
+              <td><input class="input" value="82.5" /></td>
+              <td><button class="check done">✓</button></td>
+            </tr>
+            <tr class="done-row">
+              <td><span class="set-num">3</span></td>
+              <td>8 × 80</td>
+              <td><input class="input" value="7" /></td>
+              <td><input class="input" value="82.5" /></td>
+              <td><button class="check done">✓</button></td>
+            </tr>
+            <tr class="add-set-row">
+              <td colspan="5"><button class="add-set-btn">+ Add set</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Exercise 2: in progress -->
+      <div class="exercise-card">
+        <div class="ex-head">
+          <span><span class="name">Incline Dumbbell Press</span></span>
+          <span class="group">Chest</span>
+        </div>
+        <table class="sets">
+          <thead>
+            <tr><th>Set</th><th>Planned</th><th>Reps</th><th>Weight (kg)</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr class="done-row">
+              <td><span class="set-num">1</span></td>
+              <td>10 × 28</td>
+              <td><input class="input" value="10" /></td>
+              <td><input class="input" value="28" /></td>
+              <td><button class="check done">✓</button></td>
+            </tr>
+            <tr class="active-row">
+              <td><span class="set-num">2</span></td>
+              <td>10 × 28</td>
+              <td><input class="input" value="10" /></td>
+              <td><input class="input" value="28" /></td>
+              <td><button class="check next">○</button></td>
+            </tr>
+            <tr>
+              <td><span class="set-num">3</span></td>
+              <td>10 × 28</td>
+              <td><input class="input" value="10" /></td>
+              <td><input class="input" value="28" /></td>
+              <td><button class="check">○</button></td>
+            </tr>
+            <tr class="add-set-row">
+              <td colspan="5"><button class="add-set-btn">+ Add set</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Exercise 3: ad-hoc added mid-session -->
+      <div class="exercise-card">
+        <div class="ex-head">
+          <span>
+            <span class="name">Cable Crossover</span>
+            <span class="badge added">added</span>
+          </span>
+          <span class="group">Chest</span>
+        </div>
+        <table class="sets">
+          <thead>
+            <tr><th>Set</th><th>Planned</th><th>Reps</th><th>Weight (kg)</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="set-num">1</span></td>
+              <td>—</td>
+              <td><input class="input" placeholder="—" /></td>
+              <td><input class="input" placeholder="—" /></td>
+              <td><button class="check">○</button></td>
+            </tr>
+            <tr class="add-set-row">
+              <td colspan="5"><button class="add-set-btn">+ Add set</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Exercise 4: template-defined, not yet started -->
+      <div class="exercise-card">
+        <div class="ex-head">
+          <span><span class="name">Overhead Press</span></span>
+          <span class="group">Shoulders</span>
+        </div>
+        <table class="sets">
+          <thead>
+            <tr><th>Set</th><th>Planned</th><th>Reps</th><th>Weight (kg)</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="set-num">1</span></td>
+              <td>6 × 50</td>
+              <td><input class="input" value="6" /></td>
+              <td><input class="input" value="50" /></td>
+              <td><button class="check">○</button></td>
+            </tr>
+            <tr>
+              <td><span class="set-num">2</span></td>
+              <td>6 × 50</td>
+              <td><input class="input" value="6" /></td>
+              <td><input class="input" value="50" /></td>
+              <td><button class="check">○</button></td>
+            </tr>
+            <tr>
+              <td><span class="set-num">3</span></td>
+              <td>6 × 50</td>
+              <td><input class="input" value="6" /></td>
+              <td><input class="input" value="50" /></td>
+              <td><button class="check">○</button></td>
+            </tr>
+            <tr class="add-set-row">
+              <td colspan="5"><button class="add-set-btn">+ Add set</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <button class="add-exercise-btn">+ Add exercise</button>
+
+      <div class="end-session-row">
+        <button class="end-btn">End Session</button>
+      </div>
+    </div>
+
+    <!-- ───────────────────────── Right pane: TodayPane ───────────────────────── -->
+    <div class="pane right">
+      <!-- Phase header -->
+      <div class="block phase-header">
+        <div class="eyebrow">
+          <span class="intent">Cut</span>
+          <span class="day">day 24</span>
+        </div>
+        <div class="title-row">
+          <span class="name">Spring Lean</span>
+          <span class="started">started Apr 20</span>
+        </div>
+        <div class="phase-base">
+          <span class="lbl">Base</span>
+          <span class="macro kcal"><b>2200</b><span class="tag">kcal</span></span>
+          <span class="macro protein"><b>180</b><span class="tag"><span class="g">g</span>P</span></span>
+          <span class="macro carb"><b>200</b><span class="tag"><span class="g">g</span>C</span></span>
+          <span class="macro fat"><b>70</b><span class="tag"><span class="g">g</span>F</span></span>
+        </div>
+      </div>
+
+      <!-- Remaining today -->
+      <div class="block">
+        <div class="remaining">
+          <div class="macro kcal">
+            <span class="big" style="color: var(--m-kcal)">812</span>
+            <span class="unit" style="color: var(--ink-dim)">kcal remaining</span>
+          </div>
+          <div class="sub">
+            <span class="macro protein"><b>62</b><span class="tag"><span class="g">g</span>P</span></span>
+            <span class="macro carb"><b>74</b><span class="tag"><span class="g">g</span>C</span></span>
+            <span class="macro fat"><b>22</b><span class="tag"><span class="g">g</span>F</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-day macros grid -->
+      <div class="block">
+        <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;">
+          Last 7 days · today rightmost
+        </div>
+        <div class="macros-grid">
+          <span></span>
+          <span class="head">Sa</span>
+          <span class="head">Su</span>
+          <span class="head">Mo</span>
+          <span class="head">Tu</span>
+          <span class="head">We</span>
+          <span class="head">Th</span>
+          <span class="head">Fr</span>
+
+          <span class="rowlbl" style="color: var(--m-kcal)">kcal</span>
+          <span class="cell">2180</span>
+          <span class="cell over">2640</span>
+          <span class="cell">2200</span>
+          <span class="cell under">1850</span>
+          <span class="cell">2120</span>
+          <span class="cell">2200</span>
+          <span class="cell today">1728</span>
+
+          <span class="rowlbl" style="color: var(--m-protein)">P (g)</span>
+          <span class="cell">178</span>
+          <span class="cell">182</span>
+          <span class="cell">185</span>
+          <span class="cell under">142</span>
+          <span class="cell">180</span>
+          <span class="cell">190</span>
+          <span class="cell today">118</span>
+
+          <span class="rowlbl" style="color: var(--m-carb)">C (g)</span>
+          <span class="cell">198</span>
+          <span class="cell over">260</span>
+          <span class="cell">205</span>
+          <span class="cell">182</span>
+          <span class="cell">198</span>
+          <span class="cell">210</span>
+          <span class="cell today">126</span>
+
+          <span class="rowlbl" style="color: var(--m-fat)">F (g)</span>
+          <span class="cell">68</span>
+          <span class="cell">82</span>
+          <span class="cell">70</span>
+          <span class="cell">62</span>
+          <span class="cell">66</span>
+          <span class="cell">70</span>
+          <span class="cell today">48</span>
+        </div>
+      </div>
+
+      <!-- Weight block -->
+      <div class="block">
+        <div class="stat-row">
+          <span class="label">Weight</span>
+          <span class="val">82.4 kg</span>
+          <span class="delta dn">−0.18 vs trend</span>
+        </div>
+        <div class="stat-row">
+          <span class="label">EMA (10d)</span>
+          <span class="val" style="font-size: 13px; font-weight: 500; color: var(--ink-dim);">82.58 kg</span>
+          <span class="delta dn">−0.42 / 14d</span>
+        </div>
+        <svg class="sparkline" viewBox="0 0 280 28" preserveAspectRatio="none">
+          <polyline fill="none" stroke="#444a5d" stroke-width="1"
+            points="0,8 20,10 40,6 60,12 80,9 100,11 120,7 140,13 160,8 180,12 200,10 220,14 240,12 260,15 280,11" />
+          <polyline fill="none" stroke="var(--accent)" stroke-width="1.5"
+            points="0,9 20,9 40,8 60,9 80,9 100,10 120,9 140,10 160,10 180,11 200,11 220,12 240,12 260,13 280,12" />
+        </svg>
+        <div style="font-size: 10px; color: var(--ink-faint); display: flex; justify-content: space-between; margin-top: 2px;">
+          <span>May 1</span><span>May 15 (today)</span>
+        </div>
+      </div>
+
+      <!-- Sleep block, scaled to 8h with reference line -->
+      <div class="block sleep-block">
+        <div class="stat-row">
+          <span class="label">Last night</span>
+          <span class="val">6h 40m</span>
+          <span class="delta up">debt 4.2h / 7d</span>
+        </div>
+        <!-- Bars are % of max(8h, observed max). With max=9 (Wed), 8h sits at 88.9% height.
+             Heights below: hrs/9*100 -->
+        <div class="sleep-bars">
+          <div class="bar short"      style="height: 78%"><span class="lbl">Sa</span></div>
+          <div class="bar"            style="height: 88%"><span class="lbl">Su</span></div>
+          <div class="bar"            style="height: 88%"><span class="lbl">Mo</span></div>
+          <div class="bar short deep" style="height: 67%"><span class="lbl">Tu</span></div>
+          <div class="bar"            style="height: 100%"><span class="lbl">We</span></div>
+          <div class="bar short"      style="height: 81%"><span class="lbl">Th</span></div>
+          <div class="bar short"      style="height: 74%"><span class="lbl">Fr</span></div>
+        </div>
+      </div>
+
+      <!-- Calendar -->
+      <div class="block">
+        <div class="cal-head">
+          <div>
+            <span class="title">May 2026</span>
+            <span class="tally">· Total 9 · PUSH 4 · PULL 3 · LEGS 2</span>
+          </div>
+          <div class="cal-nav">
+            <button>‹</button>
+            <button>›</button>
+          </div>
+        </div>
+
+        <div class="cal-tally-chips">
+          <span><span class="chip-dot" style="background: var(--t-push)"></span>PUSH A</span>
+          <span><span class="chip-dot" style="background: var(--t-pull)"></span>PULL A</span>
+          <span><span class="chip-dot" style="background: var(--t-legs)"></span>LEGS A</span>
+        </div>
+
+        <!--
+          Fixtures, today = Fri May 15, 2026.
+
+          PUSH A: last hit Thu May 14 (24h ago).
+            Forward classification per day since hit:
+              May 15 (24-48h):   too_soon
+              May 16 (48-72h):   too_soon  (still inside 48h boundary on day-start)
+              May 17 (72-96h):   acceptable
+              May 18 (96-120h):  prime  ← first prime, and today-or-future → ★ here
+              May 19 (120-144h): in_window
+              May 20 (144-168h): in_window
+              May 21 → fading → not emitted
+
+          PULL A: last hit Tue May 12 (72h ago).
+            May 15 (72-96h):   prime   (first prime = May 15, today-or-future → ★)
+            May 16 (96-120h):  prime
+            May 17 (120-144h): in_window
+            May 18 (144-168h): in_window
+            May 19 → fading → not emitted
+
+          LEGS A: last hit Fri May 8 (7d ago = 168h).
+            Already at/past in_window cutoff → Q9b: no pill rendered.
+            Only the May 8 past-session chip is visible.
+        -->
+
+        <div class="cal">
+          <div class="dow">S</div><div class="dow">M</div><div class="dow">T</div><div class="dow">W</div><div class="dow">T</div><div class="dow">F</div><div class="dow">S</div>
+
+          <!-- Row 1: Apr 26-30 dim, May 1-2 -->
+          <div class="cell dim"><span class="dnum">26</span></div>
+          <div class="cell dim"><span class="dnum">27</span></div>
+          <div class="cell dim"><span class="dnum">28</span></div>
+          <div class="cell dim"><span class="dnum">29</span></div>
+          <div class="cell dim"><span class="dnum">30</span></div>
+          <div class="cell">
+            <span class="dnum">1</span>
+            <span class="session-chip pull">PULL</span>
+          </div>
+          <div class="cell">
+            <span class="dnum">2</span>
+            <span class="session-chip legs">LEGS</span>
+          </div>
+
+          <!-- Row 2: May 3-9 -->
+          <div class="cell"><span class="dnum">3</span></div>
+          <div class="cell">
+            <span class="dnum">4</span>
+            <span class="session-chip push">PUSH</span>
+          </div>
+          <div class="cell"><span class="dnum">5</span></div>
+          <div class="cell">
+            <span class="dnum">6</span>
+            <span class="session-chip pull">PULL</span>
+          </div>
+          <div class="cell"><span class="dnum">7</span></div>
+          <div class="cell">
+            <span class="dnum">8</span>
+            <span class="session-chip legs">LEGS</span>
+          </div>
+          <div class="cell"><span class="dnum">9</span></div>
+
+          <!-- Row 3: May 10-16 — today is Fri May 15 -->
+          <div class="cell">
+            <span class="dnum">10</span>
+            <span class="session-chip push">PUSH</span>
+          </div>
+          <div class="cell"><span class="dnum">11</span></div>
+          <div class="cell">
+            <span class="dnum">12</span>
+            <span class="session-chip pull">PULL</span>
+          </div>
+          <div class="cell"><span class="dnum">13</span></div>
+          <div class="cell">
+            <span class="dnum">14</span>
+            <span class="session-chip push">PUSH</span>
+          </div>
+          <div class="cell today">
+            <span class="dnum">15</span>
+            <!-- today: PUSH too_soon (24-48h) + PULL prime (72-96h, first prime → ★) -->
+            <div class="pill-stack">
+              <div class="pill push too_soon"></div>
+              <div class="pill pull prime"><span class="star">★</span></div>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="dnum">16</span>
+            <!-- May 16: PUSH too_soon (48-72h boundary) + PULL prime (96-120h) -->
+            <div class="pill-stack">
+              <div class="pill push too_soon"></div>
+              <div class="pill pull prime"></div>
+            </div>
+          </div>
+
+          <!-- Row 4: May 17-23 -->
+          <div class="cell">
+            <span class="dnum">17</span>
+            <!-- PUSH acceptable + PULL in_window -->
+            <div class="pill-stack">
+              <div class="pill push acceptable"></div>
+              <div class="pill pull in_window"></div>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="dnum">18</span>
+            <!-- PUSH prime (★ first prime + future) + PULL in_window -->
+            <div class="pill-stack">
+              <div class="pill push prime"><span class="star">★</span></div>
+              <div class="pill pull in_window"></div>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="dnum">19</span>
+            <!-- PUSH in_window. PULL goes to fading → no pill -->
+            <div class="pill-stack">
+              <div class="pill push in_window"></div>
+            </div>
+          </div>
+          <div class="cell">
+            <span class="dnum">20</span>
+            <div class="pill-stack">
+              <div class="pill push in_window"></div>
+            </div>
+          </div>
+          <div class="cell"><span class="dnum">21</span></div>
+          <div class="cell"><span class="dnum">22</span></div>
+          <div class="cell"><span class="dnum">23</span></div>
+
+          <!-- Row 5: May 24-30 -->
+          <div class="cell"><span class="dnum">24</span></div>
+          <div class="cell"><span class="dnum">25</span></div>
+          <div class="cell"><span class="dnum">26</span></div>
+          <div class="cell"><span class="dnum">27</span></div>
+          <div class="cell"><span class="dnum">28</span></div>
+          <div class="cell"><span class="dnum">29</span></div>
+          <div class="cell"><span class="dnum">30</span></div>
+
+          <!-- Row 6: May 31 + Jun 1-6 dim -->
+          <div class="cell"><span class="dnum">31</span></div>
+          <div class="cell dim"><span class="dnum">1</span></div>
+          <div class="cell dim"><span class="dnum">2</span></div>
+          <div class="cell dim"><span class="dnum">3</span></div>
+          <div class="cell dim"><span class="dnum">4</span></div>
+          <div class="cell dim"><span class="dnum">5</span></div>
+          <div class="cell dim"><span class="dnum">6</span></div>
+        </div>
+
+        <div class="legend">
+          <span><span class="sw too_soon"></span>too_soon</span>
+          <span><span class="sw acceptable"></span>acceptable</span>
+          <span><span class="sw prime"></span>prime ★</span>
+          <span><span class="sw in_window"></span>in_window</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="mock-note">Static mock · fixtures hard-coded · today = Fri May 15, 2026</div>
+</body>
+</html>

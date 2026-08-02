@@ -1,0 +1,242 @@
+# docker-compose.yml at repo root. On the deploy server this lives at
+# ~/almanac/docker-compose.yml. Operator runs `docker compose up -d --build`.
+#
+# Four services:
+#   - oauth2-proxy: gates browser traffic via Google SSO; passes /mcp/*
+#                   through to the MCP container without auth (PATs are
+#                   validated by almanac-api / almanac-mcp themselves)
+#   - almanac-api:  Fastify API on :3001 (compose-internal only)
+#   - almanac-mcp:  Streamable HTTP MCP server on :3030 (compose-internal)
+#   - almanac-web:  Vite-built static SPA served by nginx on :80 (compose-internal)
+#
+# Only oauth2-proxy binds a host port (127.0.0.1:4180). Host nginx proxies
+# to it. The three almanac services use `expose:` (compose-internal only) —
+# they MUST NOT be reachable from outside the docker network, because the
+# API trusts X-Forwarded-Email headers from oauth2-proxy.
+#
+# Build context is `.` (the repo root). Dockerfiles live in packages/*/.
+
+services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    container_name: almanac-oauth2-proxy
+    restart: unless-stopped
+    command:
+      - "--http-address=0.0.0.0:4180"
+      - "--provider=google"
+      - "--cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}"
+      - "--cookie-secure=true"
+      - "--cookie-samesite=lax"
+      # Session cookie lifetime. Default is 168h (7 days), which for a
+      # single-user home app meant re-authing weekly. Extend to 30 days.
+      # (No --cookie-refresh: silent renewal needs a Google refresh token
+      #  via access_type=offline, which this proxy path doesn't request —
+      #  a longer hard expiry is the simpler win here.)
+      - "--cookie-expire=720h"
+      - "--redirect-url=${OAUTH2_PROXY_REDIRECT_URL}"
+      - "--client-id=${OAUTH2_PROXY_CLIENT_ID}"
+      - "--client-secret=${OAUTH2_PROXY_CLIENT_SECRET}"
+      - "--authenticated-emails-file=/emails/allowed-users.txt"
+      - "--set-xauthrequest=true"
+      - "--pass-user-headers=true"
+      # Skip auth for /mcp/* — machine clients (Claude Desktop / Code / ChatGPT)
+      # can't do interactive OAuth, so they use personal access tokens (PATs)
+      # minted from the web Settings UI. The API and MCP services validate
+      # PATs themselves.
+      - "--skip-auth-route=^/mcp"
+      # MCP OAuth 2.1 endpoints — served by the MCP container, bypass SSO.
+      - "--skip-auth-route=^/.well-known/"
+      - "--skip-auth-route=^/authorize"
+      - "--skip-auth-route=^/token"
+      - "--skip-auth-route=^/register"
+      - "--skip-auth-route=^/revoke"
+      - "--skip-auth-route=^/oauth/google/"
+      # Public health probe.
+      - "--skip-auth-route=^/api/v1/health$"
+      # Upstreams routed by path prefix. MCP OAuth paths route to the
+      # MCP container; everything else to API or web.
+      - "--upstream=http://almanac-mcp:3030/.well-known/"
+      - "--upstream=http://almanac-mcp:3030/authorize"
+      - "--upstream=http://almanac-mcp:3030/token"
+      - "--upstream=http://almanac-mcp:3030/register"
+      - "--upstream=http://almanac-mcp:3030/revoke"
+      - "--upstream=http://almanac-mcp:3030/oauth/"
+      - "--upstream=http://almanac-mcp:3030/mcp"
+      - "--upstream=http://almanac-api:3001/api/"
+      - "--upstream=http://almanac-web:80/"
+    volumes:
+      # The operator-maintained allowlist. oauth2-proxy reloads the file on
+      # change — no container restart needed to add or remove a user.
+      - ./allowed-users.txt:/emails/allowed-users.txt:ro
+    ports:
+      - "127.0.0.1:24180:4180"
+    depends_on:
+      almanac-api:
+        condition: service_healthy
+      almanac-mcp:
+        condition: service_healthy
+      almanac-web:
+        condition: service_healthy
+    networks:
+      - default
+
+  almanac-api:
+    # Image built and published by CI (.github/workflows/release.yml) on tag
+    # push, tagged by version + latest + commit SHA. ALMANAC_TAG defaults to
+    # latest; pin it (e.g. in .env) to roll back to a specific version.
+    image: ghcr.io/${ALMANAC_IMAGE_OWNER:-corcoran}/almanac-api:${ALMANAC_TAG:-latest}
+    container_name: almanac-api
+    restart: unless-stopped
+    # Watched by watchtower (see the watchtower service below): on a new
+    # :latest digest in GHCR, the container is auto-pulled and recreated.
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    volumes:
+      - ./data:/data
+      - ./allowed-users.txt:/emails/allowed-users.txt:ro
+    environment:
+      ALMANAC_TRUST_PROXY_HEADERS: "true"
+      ALMANAC_FIRST_LOGIN_EMAIL: "${ALMANAC_FIRST_LOGIN_EMAIL:-}"
+      ALMANAC_ALLOWED_EMAILS: "/emails/allowed-users.txt"
+      # Pino level override. Unset -> the code's own fallback wins (info in
+      # prod, since NODE_ENV=production is baked into the Dockerfile). Set to
+      # debug to surface the quietLog health/version probes when diagnosing.
+      ALMANAC_LOG_LEVEL: "${ALMANAC_LOG_LEVEL:-}"
+      # --- AI Meal Assistant (LLM meal-chat + web search). Read by the API only.
+      # All gated by ALMANAC_LLM_ENABLED (default off) AND a per-user flag, so
+      # the feature stays dark until explicitly turned on in the host .env. See
+      # .env.example for the full description of each var.
+      ALMANAC_LLM_ENABLED: "${ALMANAC_LLM_ENABLED:-false}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ALMANAC_LLM_MODEL: "${ALMANAC_LLM_MODEL:-claude-haiku-4-5}"
+      # Soft daily token limit (advisory; "~N logs left"; never blocks).
+      ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT: "${ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT:-}"
+      # Hard daily token ceiling (429 circuit-breaker). Unset = no hard cap.
+      ALMANAC_LLM_HARD_DAILY_TOKEN_CAP: "${ALMANAC_LLM_HARD_DAILY_TOKEN_CAP:-}"
+      # Flat per-search token charge when no recent search history (default 2500).
+      ALMANAC_LLM_TOKENS_PER_SEARCH: "${ALMANAC_LLM_TOKENS_PER_SEARCH:-2500}"
+      # Max web searches per user-local day. Unset = uncapped.
+      ALMANAC_LLM_HARD_DAILY_SEARCH_CAP: "${ALMANAC_LLM_HARD_DAILY_SEARCH_CAP:-}"
+    expose:
+      - "3001"
+    # Liveness: GET /api/v1/health must return 200. Uses node (no curl in the
+    # slim image). The route is config.quietLog, so this polling won't spam
+    # the log. start_period covers migrations running on first boot.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - default
+
+  almanac-mcp:
+    image: ghcr.io/${ALMANAC_IMAGE_OWNER:-corcoran}/almanac-mcp:${ALMANAC_TAG:-latest}
+    container_name: almanac-mcp
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    depends_on:
+      almanac-api:
+        condition: service_healthy
+    volumes:
+      - ./allowed-users.txt:/emails/allowed-users.txt:ro
+    environment:
+      ALMANAC_API_URL: "http://almanac-api:3001"
+      ALMANAC_MCP_TRANSPORT: "http"
+      ALMANAC_MCP_HOST: "0.0.0.0"
+      ALMANAC_MCP_PORT: "3030"
+      # OAuth 2.1 for Claude mobile / ChatGPT. Reuses the same Google
+      # OAuth credentials. Leave blank to disable (PAT-only mode).
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "${OAUTH2_PROXY_CLIENT_ID:-}"
+      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "${OAUTH2_PROXY_CLIENT_SECRET:-}"
+      ALMANAC_MCP_PUBLIC_URL: "${ALMANAC_MCP_PUBLIC_URL:-}"
+      ALMANAC_ALLOWED_EMAILS: "/emails/allowed-users.txt"
+    expose:
+      - "3030"
+    # Liveness: the MCP HTTP server returns a response on any path (e.g. 404 on
+    # "/", 401 on /mcp without a PAT) once it's listening. Any HTTP status back
+    # = alive; only a connection error fails the check.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3030/').then(()=>process.exit(0)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+
+  almanac-web:
+    image: ghcr.io/${ALMANAC_IMAGE_OWNER:-corcoran}/almanac-web:${ALMANAC_TAG:-latest}
+    container_name: almanac-web
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    expose:
+      - "80"
+    # Liveness: nginx serves the SPA on GET /. The nginx:alpine image ships
+    # busybox wget (no curl); --spider does a HEAD-style fetch.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+
+  # Auto-deploy. Polls GHCR every 5 min; when a watched service's :latest tag
+  # gets a new digest (i.e. a release was cut — see deploy/README.md), pulls it
+  # and recreates the container, dependency-ordered, respecting healthchecks.
+  #
+  # Image is the community-maintained fork: containrrr/watchtower was archived
+  # 2025-12-17 (no more releases/fixes). nicholas-fedor/watchtower picks up the
+  # same codebase — same labels, env vars, and shoutrrr notifier.
+  #
+  # Scope is opt-in via --label-enable: only the three services carrying the
+  # `com.centurylinklabs.watchtower.enable=true` label are watched. oauth2-proxy
+  # is deliberately NOT labelled — its image is pinned (v7.6.0) and must not move.
+  #
+  # Auth: the almanac images are private, so watchtower reads the deploying
+  # user's docker creds (the same ~/.docker/config.json that `docker login
+  # ghcr.io` wrote) to pull. Mounted read-only. If that PAT expires, pulls fail
+  # silently except for the email below — so keep it alive.
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest
+    container_name: almanac-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.docker/config.json:/config.json:ro
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      # Email on updates/errors via shoutrrr. The URL form (vs the legacy
+      # WATCHTOWER_NOTIFICATION_EMAIL_* vars) is required to set clienthost —
+      # the HELO name. Default HELO is the literal "localhost", which a strict
+      # postfix rejects ("need fully-qualified hostname"); clienthost forces an
+      # FQDN. auth=None + starttls=no = a plain :25 relay on our own mail host
+      # (no credentials). Blank WATCHTOWER_EMAIL_TO disables notifications.
+      WATCHTOWER_NOTIFICATIONS: "shoutrrr"
+      WATCHTOWER_NOTIFICATIONS_LEVEL: "info"
+      WATCHTOWER_NOTIFICATION_URL: "smtp://${WATCHTOWER_EMAIL_SERVER:-mail.example.com}:${WATCHTOWER_EMAIL_PORT:-25}/?fromAddress=${WATCHTOWER_EMAIL_FROM:-watchtower@almanac.example.com}&toAddresses=${WATCHTOWER_EMAIL_TO:-}&auth=None&starttls=no&clienthost=${WATCHTOWER_EMAIL_HELO:-almanac.example.com}"
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge

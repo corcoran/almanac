@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#
+# pre-push — run the test suite before any push.
+#
+# Stored in the repo at .githooks/pre-push. Activate it with either:
+#   git config core.hooksPath .githooks      (point git at the tracked dir)
+#   scripts/install-hooks.sh                  (copy into .git/hooks)
+#
+# Skip in a pinch with `git push --no-verify`, but don't make a habit of it —
+# this is the same suite the CI gate checks before a release builds images.
+set -euo pipefail
+
+# Run from the repo root so pnpm resolves the workspace.
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: running test suite..."
+if ! pnpm -r test; then
+  echo "pre-push: tests failed — push aborted. Use --no-verify to override." >&2
+  exit 1
+fi
+
+echo "pre-push: tests passed."

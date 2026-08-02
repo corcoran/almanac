@@ -1,0 +1,410 @@
+# Almanac
+
+**A fitness tracker you talk to instead of tapping through forms.**
+
+Tell Claude or ChatGPT "chicken burrito bowl for lunch" and it's logged, macros estimated. Ask "what should I train today?" or "am I still on track for my cut?" and it answers against your real history — TDEE, weight trend, per-muscle recovery, sleep debt. Assistants connect over MCP with 60+ tools and the same access the dashboard has.
+
+Prefer clicking? The web UI does everything the assistants can: log and edit meals, weight, sleep, cardio, and steps; run nutrition phases; build workout templates; browse any past day. It has its own **AI Meal Assistant** (describe a meal, get editable entries — it web-searches unfamiliar foods) and an **AI insights coach** that reads your history back to you. One Fastify API, one SQLite file, so nothing drifts.
+
+## Screenshots
+
+The web dashboard — nutrition phase and TDEE, today's macros and meals, movement,
+a 7-day macro grid, weight trend, sleep, and the training panel with recommended
+session and recent wins.
+
+<p align="center">
+  <img src="screenshots/demo-dashboard.png" alt="Almanac dashboard" width="984">
+</p>
+
+The built-in **AI Meal Assistant** — describe a meal in plain language and it
+web-searches nutrition facts, asks about portion size when it matters, and
+proposes an editable entry to log and optionally save to your meal library.
+
+<p align="center">
+  <img src="screenshots/demo-meal-lookup.png" alt="AI Meal Assistant parsing a meal description into editable macros" width="984">
+</p>
+
+The **AI insights coach** — a read-only analyst over your logged history,
+covering nutrition adherence, TDEE drift, training volume, and sleep.
+
+<p align="center">
+  <img src="screenshots/demo-insights-chat.png" alt="AI insights coach summarizing nutrition, training, and sleep" width="984">
+</p>
+
+Logging and reviewing through an external assistant over MCP:
+
+<p align="center">
+  <img src="screenshots/chat3.png" alt="Training recommendation and accomplishments" width="385">
+  &nbsp;&nbsp;
+  <img src="screenshots/chat4.png" alt="Resistance training volume analysis" width="385">
+</p>
+
+<p align="center">
+  <img src="screenshots/chat2.png" alt="Cut progress overview" width="385">
+  &nbsp;&nbsp;
+  <img src="screenshots/chat1.png" alt="Daily check-in" width="385">
+</p>
+
+## Architecture
+
+```
+Browser ──► nginx ──► oauth2-proxy ──► almanac-web   (Vue 3 SPA)
+                          │
+                          ├──► almanac-api   (Fastify + SQLite)
+                          │
+Claude / ChatGPT ─────────┴──► almanac-mcp   (60+ tools, 5 resources)
+                                    │
+                                    └──► almanac-api
+```
+
+Four containers behind nginx. oauth2-proxy handles browser SSO (Google sign-in); MCP traffic bypasses SSO and authenticates via OAuth 2.1 or personal access tokens (PATs). All auth paths converge on the same PAT format stored in SQLite.
+
+See [docs/mcp-auth.md](docs/mcp-auth.md) for the full authentication architecture.
+
+## Features
+
+### Nutrition
+
+- **Meal logging** — log meals with kcal, protein, carbs, and fats. Edit, delete, and review meals by date.
+- **Stored meals** — save a meal definition once (name + macros) and log it as eaten in one tap.
+- **Nutrition phases** — create cut, bulk, or maintenance phases with daily kcal targets (static or TDEE-relative). Set macro splits, track days elapsed, and end/start phases on the fly. The create form suggests a protein/carb/fat split from your bodyweight and target, and a guided cold-start collects everything a TDEE estimate needs for brand-new users.
+- **Macro analytics** — today's totals vs. target, historical summaries by date or range, rolling 7-day averages, and on-track / at-risk / off-track verdicts.
+- **TDEE estimation** — three-tier basis: profile baseline (Mifflin BMR × activity multiplier), measured intake (back-calculated from weight trend), or user assertion. An activity-level setting tunes the cold-start estimate; it calibrates to measured data over ~14 days of weigh-ins.
+
+### Body composition
+
+- **Weight logging** — daily weigh-ins with optional notes.
+- **Weight trend** — exponential-weighted moving average with 14-day and 30-day views, change rate, and confidence levels.
+
+### Training
+
+- **Workout templates** — build reusable templates with ordered exercises and defaults, directly in the app or via an assistant. Start a session from a template, then skip, override, or add exercises as you go. Starter programs (Push/Pull/Legs, Upper/Lower) seed a whole split for new users.
+- **Set tracking** — log reps, weight, and RPE (1–10) per set. Duration and estimated kcal per workout.
+- **Exercise library** — custom exercises organized into muscle groups. Archive exercises you no longer use.
+- **Stim state / recovery** — per-muscle-group recovery tracking (0–100) with phase classification (too_soon → prime → detrained). Multi-phase decay model with hours-since-last and trainable-capacity signals.
+- **Workout recommendations** — template recommendation engine scores which workout to do next based on current recovery state across all muscle groups.
+
+### Cardio, steps, and alcohol
+
+- **Cardio** — log sessions by modality (bike, run, ruck, etc.) with duration, distance, average HR, and estimated kcal (Keytel / METs formulas).
+- **Steps** — daily step count with automatic kcal estimation. Override estimates when you have better data.
+- **Alcohol** — session-based logging (start/end, drink count in US standard drinks, kcal estimate). Overlays onto daily energy balance.
+
+### Sleep
+
+- **Sleep logging** — hours and quality (1–5) per night, with timezone-aware midnight crossing.
+- **Sleep debt** — rolling debt calculation over a configurable window (default 14 days) against a baseline.
+
+### Accomplishments
+
+- **Wins** — positive milestones derived automatically from your logs, the counterpart to the deficit-driven nudges. Logging streaks (weigh-ins), workout consistency, calorie-target adherence streaks, body-weight milestones (per phase, off the smoothed trend), strength PRs, sleep recovery, and the moment your TDEE flips to measured-from-data. Each is shown with the previous best of its kind, and earns the moment a log completes the milestone — so they reflect real, consistent use. Plus lifetime milestones — your 100th workout, total kilograms lifted, and meals and weigh-ins logged — earned at cumulative thresholds and backdated to the day you actually crossed them.
+
+### Web UI
+
+- **Daily dashboard** — a calorie ring and draining protein/carb/fat bars, current vs. phase TDEE, deficit/surplus and on-target adherence, today's meals and movement, weekly macro grid, weight sparkline, sleep debt, phase progress, and an earned-wins section above the workout picker.
+- **Editable cards** — meals, weight, sleep, cardio, and steps are all add/edit/delete directly in the dashboard, not just in chat. Edits update the ring, bars, week grid, and trends right away.
+- **Phase controls** — start, edit, and stop a nutrition phase from the dashboard, with a live TDEE estimate and macro suggestions in the create form.
+- **Workout panel** — template picker, build/edit templates and starter programs, active session with live set entry, add-exercise-mid-session, end/save dialog, and last-session reference.
+- **Calendar** — month view in Workouts or Intake mode. Workouts mode shows per-template tallies, recovery pills (too_soon, prime, etc.), and a forward recommendation window; Intake mode tints each day by adherence. Tap a day (or step with `‹ ›`) to view and edit any past day; the URL reflects the day (`?date=…`).
+- **Copy stats for LLM** — one button copies a full markdown briefing of your current picture (phase, TDEE, today, trends, recent workouts, a 14-day history table) to paste into any chat.
+- **AI Meal Assistant** — an in-app chat panel (no external client needed) where you describe what you ate in plain language and get editable proposal cards to log. It matches your stored-meal library first, estimates otherwise, and can web-search nutrition facts for unfamiliar restaurant or packaged foods. A daily token budget shows "~N logs left" and searches draw a flat per-search charge from it; both have configurable caps. Gated per-user and only shown when the server has an API key. (Optional — see the LLM `.env` section.)
+- **AI insights coach** — a second in-app panel that reads your logged history back to you: nutrition adherence, TDEE drift against the phase anchor, training volume and split balance, and sleep. Read-only by design — it has no write tools and no web search, so it can only analyze what you've logged. Transcripts persist per day with `◀ ▶` navigation through past days, and opening a fresh day auto-asks for a quick read. Uses a stronger model than the meal parser (`ALMANAC_LLM_INSIGHTS_MODEL`) and shares the same per-user gate and daily token budget.
+- **Settings** — profile editing, activity level, timezone and unit (metric/imperial) selectors, PAT creation/revocation, and the MCP URL for connecting an assistant.
+- **Mobile responsive** — single 768 px breakpoint, swipeable panels via CSS scroll-snap, contextual sticky header, and 36 px touch targets.
+
+### MCP integration
+
+- **60+ tools, 5 resources** — full CRUD for every entity (including stored meals and `log_meal_from_stored`), plus derived signals (stim state, TDEE, sleep debt, day status, calendar), `get_next_best_action` for onboarding/next-step guidance, and `get_accomplishments` so an assistant can surface your earned wins in chat.
+- **Works with Claude (mobile, Desktop, Code) and ChatGPT** — say "log a 350 kcal breakfast" and it shows up in the web UI.
+- **OAuth 2.1** — Claude mobile and ChatGPT connect with automatic Google sign-in. No manual token setup.
+- **PAT auth** — personal access tokens for Claude Code or any HTTP client.
+- **Idempotent logging** — safe to retry meal, weight, and sleep log calls.
+
+### Auth
+
+- **Three-layer allowlist** — oauth2-proxy (browser SSO), API (account provisioning), and MCP (OAuth flow) all enforce the same `allowed-users.txt` file.
+- **OAuth tokens are real PATs** — minted via the API, stored in SQLite, visible and revocable in the web Settings panel.
+- **Per-user data isolation** — every record is scoped to its owner. Reads and writes are enforced against the authenticated user at the data layer, so one account never sees or touches another's data.
+
+## Requirements
+
+- Node 20 or newer
+- pnpm 9 or newer
+- Docker (for production; optional for local dev)
+
+SQLite ships bundled via `better-sqlite3`.
+
+## Quickstart — local dev
+
+The local dev script starts all services (API, web, MCP, oauth2-proxy) in one command:
+
+### 1. Install
+
+```bash
+pnpm install
+```
+
+### 2. Configure `.env`
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set the required Google OAuth credentials and your dev email. See `.env.example` for documentation on each variable.
+
+### 3. Start everything
+
+```bash
+scripts/local-dev/up.sh
+```
+
+This starts:
+- **almanac-api** on `:3001` (Fastify, trusts proxy headers)
+- **almanac-web** on `:5173` (Vite dev server)
+- **almanac-mcp** on `:3030` (Streamable HTTP + OAuth 2.1)
+- **oauth2-proxy** on `:4180` (Docker container, Google SSO)
+
+Stop everything with `scripts/local-dev/down.sh`.
+
+#### Without Docker (no Google OAuth)
+
+If you don't need the real Google sign-in path, skip `.env`, docker, and
+oauth2-proxy entirely:
+
+```bash
+scripts/local-dev/dev-noauth.sh you@example.com          # web on 127.0.0.1
+scripts/local-dev/dev-noauth.sh you@example.com --lan    # web on 0.0.0.0 (other devices)
+```
+
+This runs the API + web with **header-trust auth**: the Vite dev proxy injects
+the `x-forwarded-email` header that oauth2-proxy would emit in prod, so the UI
+needs no login and acts as the email you pass. Migrations run automatically on
+API boot. Ctrl-C stops both.
+
+> **`--lan` caveat:** binding the web server to `0.0.0.0` means anyone on your
+> network is authenticated as that email. Use it only on a trusted network.
+
+For **MCP** in this mode, run it in stdio transport against the local API (mint a
+PAT in the web Settings panel first) — the script prints the exact command on
+startup.
+
+#### Demo instance (populated with fake data)
+
+To see the UI fully populated — every panel non-empty, both AI surfaces unlocked —
+without touching your real data:
+
+```bash
+scripts/local-dev/demo.sh              # 127.0.0.1
+scripts/local-dev/demo.sh --lan        # LAN, for phone testing
+scripts/local-dev/demo.sh --days 90    # longer history
+```
+
+This seeds a throwaway SQLite file and runs the API + web on `:3099`/`:5199`, so
+it can run alongside your normal dev stack. The data is anchored relative to
+today (an active cut phase, 40 days of meals, weigh-ins, sleep, steps, a PPL
+split with session history), so it never goes stale. It sources `.env` for
+`ANTHROPIC_API_KEY` — without one the UI still renders but the AI panels report
+`llm_available: false`. Ctrl-C stops it; `rm -f /tmp/almanac-demo.sqlite*` to
+delete the data.
+
+#### Screenshots
+
+`scripts/local-dev/screenshot.mjs` captures the running UI headlessly, driving
+your system Chrome via `playwright-core` (no bundled browser download). Capture
+height is independent of your display, so a full-page dashboard shot works on
+any screen:
+
+```bash
+node scripts/local-dev/screenshot.mjs                        # full dashboard
+node scripts/local-dev/screenshot.mjs --preset both          # desktop + mobile
+node scripts/local-dev/screenshot.mjs --scene meal-lookup    # AI modal (real LLM call)
+```
+
+Defaults to 984 px wide at 1×, matching the screenshots above. `--scene` clicks a
+modal open before capturing; `--help` lists the available scenes.
+
+### 4. Connect Claude Code to MCP
+
+Register the MCP server by URL:
+
+```json
+{
+  "mcpServers": {
+    "almanac": {
+      "type": "url",
+      "url": "https://almanac.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer alm_XXXXX"
+      }
+    }
+  }
+}
+```
+
+For local dev with a PAT, point at `http://localhost:4180/mcp`. For OAuth-capable clients (Claude mobile, ChatGPT), just use the public URL — the OAuth flow handles everything automatically.
+
+### 5. Verify
+
+Open Claude Code. The `almanac` tools should show up under the `almanac` server. Ask Claude to "log a 350 kcal breakfast" — the meal should appear in the web UI and via `get_macros_today`.
+
+## `.env` reference
+
+### Core
+
+| Variable | Purpose | Required when |
+|---|---|---|
+| `ALMANAC_DB_PATH` | SQLite file location | always |
+| `ALMANAC_API_PORT` / `_HOST` | Where API listens | always |
+| `ALMANAC_API_URL` | Where MCP reaches API | always |
+| `ALMANAC_TRUST_PROXY_HEADERS` | API trusts `X-Forwarded-Email` from oauth2-proxy | behind a proxy |
+| `ALMANAC_ALLOWED_EMAILS` | Email allowlist — file path or comma-separated. Shared by the API and MCP server. | production |
+| `ALMANAC_WEB_PORT` | Port the Vite dev server binds (default `5173`). Set when running two stacks side by side. | local dev |
+| `ALMANAC_DEV_EMAIL` | Email the Vite dev proxy injects as `X-Forwarded-Email`. The API auto-provisions this user. | local dev |
+| `ALMANAC_LOG_LEVEL` | Pino level override (`fatal`…`silent`). Unset uses debug in dev, info in prod. | optional |
+
+### MCP
+
+| Variable | Purpose | Required when |
+|---|---|---|
+| `ALMANAC_MCP_TRANSPORT` | `stdio`, `http`, or `sse` (legacy) | always |
+| `ALMANAC_MCP_PORT` / `_HOST` | Where MCP listens (HTTP/SSE only) | http/sse |
+| `ALMANAC_MCP_CLIENT_TOKEN` | Static PAT for stdio transport | stdio |
+
+### OAuth 2.1 (MCP + browser SSO)
+
+| Variable | Purpose | Required when |
+|---|---|---|
+| `OAUTH2_PROXY_CLIENT_ID` | Google OAuth client ID (shared by oauth2-proxy and MCP) | production |
+| `OAUTH2_PROXY_CLIENT_SECRET` | Google OAuth client secret | production |
+| `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy session cookie encryption key | production |
+| `OAUTH2_PROXY_REDIRECT_URL` | oauth2-proxy callback URL (`https://domain/oauth2/callback`) | production |
+| `ALMANAC_MCP_OAUTH_CLIENT_ID` | Google client ID for MCP OAuth (typically `${OAUTH2_PROXY_CLIENT_ID}`) | MCP OAuth mode |
+| `ALMANAC_MCP_OAUTH_CLIENT_SECRET` | Google client secret for MCP OAuth | MCP OAuth mode |
+| `ALMANAC_MCP_PUBLIC_URL` | Public URL for MCP OAuth issuer (`https://domain`) | MCP OAuth mode |
+| `ALMANAC_FIRST_LOGIN_EMAIL` | One-shot: binds an existing email-less `users.id = 1` to this email on first boot | only when adopting a pre-auth database |
+
+> **When do you need `ALMANAC_FIRST_LOGIN_EMAIL`?** Almost never. When you sign in
+> through OAuth or oauth2-proxy, the API provisions your account from your verified
+> email automatically — no setup. This variable only matters when a `users.id = 1`
+> row already exists *without* an email, which happens if data was created before
+> going through the auth flow: a local-dev database, or records written directly via
+> the API/MCP during early setup. Setting it links that orphaned row to your real
+> email on the next boot, so signing in resolves to your existing data instead of
+> creating a fresh, empty account. On a clean database, or if you only ever use
+> OAuth, you never set it. It's a one-shot: confirm the binding, then remove the var.
+
+### Watchtower auto-deploy notifications (deploy-only, optional)
+
+The `watchtower` compose service emails on container updates/errors via shoutrrr SMTP. Set `WATCHTOWER_EMAIL_TO` to turn notifications on; leave it blank and watchtower runs silently.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `WATCHTOWER_EMAIL_TO` | Recipient. Blank = notifications off | unset (silent) |
+| `WATCHTOWER_EMAIL_FROM` | Sender address | — |
+| `WATCHTOWER_EMAIL_SERVER` | SMTP host | — |
+| `WATCHTOWER_EMAIL_PORT` | SMTP port | `25` |
+| `WATCHTOWER_EMAIL_HELO` | HELO/EHLO hostname — **must be an FQDN**; a strict postfix rejects shoutrrr's `localhost` default with `504 5.5.2 … need fully-qualified hostname` | — |
+
+### LLM / AI surfaces (optional)
+
+Read by the API only. Both AI surfaces — the **AI Meal Assistant** and the **AI insights coach** — are gated behind the same `ALMANAC_LLM_ENABLED` switch (off by default), so they stay dark until explicitly turned on. The prod `docker-compose.yml` already forwards these from the host `.env` to the `almanac-api` service.
+
+The two surfaces use **separate models**: meal parsing is a cheap extraction task and stays on Haiku, while the coach does harder multi-signal reasoning and defaults to Sonnet.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `ALMANAC_LLM_ENABLED` | Master switch for both AI surfaces (meal chat + insights coach) | `false` |
+| `ANTHROPIC_API_KEY` | Anthropic key. Without it both AI surfaces are hidden (`llm_available=false`) | — |
+| `ALMANAC_LLM_PROVIDER` | Provider seam. Only `anthropic` is supported; any other value fails at boot | `anthropic` |
+| `ALMANAC_LLM_MODEL` | Model for the **meal assistant** (the cheap parser) | `claude-haiku-4-5` |
+| `ALMANAC_LLM_INSIGHTS_MODEL` | Model for the **insights coach** — harder reasoning, so a stronger default | `claude-sonnet-4-6` |
+| `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` | Soft daily token limit — drives "~N logs left"; warns but never blocks | unset (no soft limit) |
+| `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` | Hard daily token ceiling — 429 circuit-breaker | unset (no hard cap) |
+| `ALMANAC_LLM_TOKENS_PER_SEARCH` | Flat token charge per web search when no recent search history to average | `2500` |
+| `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day; at the cap search is disabled but meals still log | unset (uncapped) |
+
+> **Turning it on** also needs: (1) the per-user flag `llm_logging_enabled = 1`
+> (admin API/MCP tool, or `UPDATE users SET llm_logging_enabled = 1 WHERE email = '…'`),
+> and (2) web search enabled for your org in the Anthropic Console (Settings → Privacy).
+> Web searches draw a flat charge from the same daily token budget; the real token
+> cost is still recorded but the budget is billed the flat per-search amount.
+
+## Production deployment
+
+### Stack
+
+```
+Internet → nginx (:443, TLS) → oauth2-proxy (:4180) → api / mcp / web containers
+```
+
+Four Docker Compose services. oauth2-proxy is the only service that binds a host port (127.0.0.1:24180); nginx reverse-proxies to it. The three almanac services use `expose:` only — they are not reachable from outside the Docker network.
+
+### Auth layers
+
+Three independent layers enforce the email allowlist:
+
+1. **oauth2-proxy** — `--authenticated-emails-file` blocks unauthorized Google accounts at the proxy level (browser traffic).
+2. **API** — `ALMANAC_ALLOWED_EMAILS` prevents auto-provisioning user accounts for unknown emails (defense-in-depth).
+3. **MCP** — `ALMANAC_ALLOWED_EMAILS` (same var) blocks unauthorized emails during the OAuth 2.1 flow.
+
+All three read from the same `allowed-users.txt` file (one email per line), matched by exact email address.
+
+### Deploy
+
+```bash
+# On the server:
+cd ~/almanac
+git pull
+docker compose up -d --build
+```
+
+### Backup
+
+SQLite is the entire state. The `.backup` command is atomic and doesn't block writes:
+
+```bash
+0 3 * * * sqlite3 /data/almanac.sqlite ".backup /backups/almanac-$(date +\%F).sqlite"
+```
+
+## Testing
+
+```bash
+pnpm -r test        # full test suite across all packages
+pnpm -r typecheck   # tsc --noEmit workspace-wide
+pnpm lint           # Biome
+pnpm format         # Biome
+```
+
+Per-package: `pnpm --filter @almanac/<pkg> test`.
+
+## Troubleshooting
+
+- **API returns 403 for a new user.** The email is not in `allowed-users.txt`. Add it and restart the API container (or wait for oauth2-proxy to hot-reload the file).
+- **`ALMANAC_DB_PATH` ended up in the wrong place.** Classic `pnpm --filter` cwd trap — relative path resolved against `packages/<pkg>/`, not the workspace root. Use an absolute path.
+
+## Project layout
+
+```
+almanac/
+├── packages/
+│   ├── core/           # SQLite, migrations, repos, domain types, signals, schemas
+│   ├── api/            # Fastify HTTP server, zod request/response validation
+│   ├── mcp/            # MCP server, MCP tools + resources, OAuth 2.1
+│   └── web/            # Vue 3 SPA, Vite, Pinia
+├── deploy/             # nginx config, post-migration smoke test
+├── docs/
+│   ├── mcp-auth.md     # MCP authentication architecture reference
+│   └── superpowers/
+│       ├── specs/      # design spec
+│       └── plans/      # implementation plans
+├── scripts/
+│   └── local-dev/      # up.sh / down.sh, dev-noauth.sh, demo.sh, screenshot.mjs
+├── docker-compose.yml
+├── allowed-users.txt   # shared email allowlist
+├── .env.example
+└── pnpm-workspace.yaml
+```
+
+## License
+
+[BSD 2-Clause](LICENSE)
