@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Almanac — a precise fitness record your AI agent can read</title>
+<meta name="description" content="A self-hosted record of your training, nutrition, weight, and sleep, kept accurate enough for your own AI assistant to reason over. Ask how your cut is going and get an answer from your real numbers.">
+<meta property="og:title" content="Almanac — a precise fitness record your AI agent can read">
+<meta property="og:description" content="Almanac keeps an accurate record of your training and nutrition, then hands it to the assistant you already use. The answers come from your own numbers, not a guess.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f6f5f0;
+    --paper-2: #eeece4;
+    --ink: #171c18;
+    --ink-soft: #3a423b;
+    --muted: #6f6d63;
+    --line: #ddd9cd;
+    --amber: #c8871f;
+    --amber-soft: #f0e6cf;
+    --sage: #4a7a5f;
+    --card: #ffffff;
+    --shot-bg: #10130f;
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "Inter", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --maxw: 940px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #12140f;
+      --paper-2: #191c15;
+      --ink: #e9e7dd;
+      --ink-soft: #c3c1b6;
+      --muted: #8f8d81;
+      --line: #2b2f26;
+      --amber: #e9ac3a;
+      --amber-soft: #322a16;
+      --sage: #6faa85;
+      --card: #1b1e17;
+      --shot-bg: #0c0e0a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  a { color: inherit; }
+
+  /* ---- eyebrow / structural labels ---- */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 26px;
+    height: 1px;
+    background: var(--amber);
+  }
+
+  /* ---- hero ---- */
+  header { padding: 88px 0 64px; }
+  .brand {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 40px;
+  }
+  .brand b { color: var(--ink); font-weight: 500; }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(38px, 6.4vw, 68px);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    margin: 0 0 24px;
+    max-width: 15ch;
+  }
+  h1 em { font-style: italic; color: var(--amber); }
+  .lede {
+    font-size: clamp(18px, 2.3vw, 21px);
+    color: var(--ink-soft);
+    max-width: 54ch;
+    margin: 0 0 36px;
+  }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--font-body);
+    font-size: 15.5px; font-weight: 500;
+    text-decoration: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    border: 1px solid var(--ink);
+    transition: transform .12s ease, background .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--ink); }
+  .btn svg { width: 17px; height: 17px; }
+  .meta-line {
+    margin: 40px 0 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+  }
+  .meta-line span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--sage); }
+
+  /* ---- section rhythm ---- */
+  section { padding: 68px 0; border-top: 1px solid var(--line); }
+  .section-head { max-width: 62ch; margin-bottom: 40px; }
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(26px, 3.6vw, 36px);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+  }
+  .section-head p { font-size: 18px; color: var(--ink-soft); margin: 0; max-width: 56ch; }
+
+  /* ---- screenshot frame ---- */
+  figure { margin: 0; }
+  .shot {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--shot-bg);
+    line-height: 0;
+  }
+  .shot img { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+  .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+
+  /* ---- transcript (signature element) ---- */
+  .transcripts { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .thread {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px 22px 26px;
+  }
+  .ask {
+    margin: 0 0 20px;
+    display: flex; justify-content: flex-end;
+  }
+  .ask span {
+    background: var(--amber-soft);
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 15px;
+    padding: 10px 16px;
+    border-radius: 14px 14px 4px 14px;
+    max-width: 85%;
+  }
+  .toolcall {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 12px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .toolcall svg { width: 13px; height: 13px; opacity: .7; }
+  .reply { font-size: 15px; color: var(--ink-soft); line-height: 1.6; }
+  .reply p { margin: 0 0 11px; }
+  .reply p:last-child { margin-bottom: 0; }
+  .reply b { color: var(--ink); font-weight: 600; }
+  .reply .k { color: var(--sage); font-weight: 500; }
+  .reply .win { color: var(--amber); font-weight: 500; }
+
+  /* ---- feature grid (text only) ---- */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .feature {
+    background: var(--paper);
+    padding: 26px 24px 28px;
+  }
+  .feature h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 8px;
+    letter-spacing: -0.005em;
+  }
+  .feature p { margin: 0; font-size: 15px; color: var(--muted); line-height: 1.55; }
+  .feature h3 { margin-top: 0; }
+
+  /* ---- self-host ---- */
+  .host-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start; }
+  .host-grid p { color: var(--ink-soft); font-size: 17px; }
+  .stack {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px;
+    color: var(--ink-soft);
+    line-height: 1.9;
+  }
+  .stack .c { color: var(--muted); }
+  .stack .s { color: var(--sage); }
+
+  /* ---- footer ---- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 40px 0 56px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .footer-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: center; }
+  footer a { color: var(--ink-soft); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+  .foot-links { display: flex; gap: 22px; flex-wrap: wrap; }
+
+  @media (max-width: 720px) {
+    .transcripts, .two-up, .host-grid { grid-template-columns: 1fr; }
+    .features { grid-template-columns: 1fr; }
+    header { padding: 56px 0 44px; }
+    section { padding: 52px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="brand"><b>Almanac</b> · self-hosted fitness record</p>
+    <h1>A precise record of your training and nutrition, ready for your <em>AI agent</em> to read.</h1>
+    <p class="lede">Almanac keeps an accurate account of what you eat, lift, weigh, and sleep, then hands it to the assistant you already use. Ask how your cut is going or what to train today, and the answer comes from your own numbers instead of a guess.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/corcoran/almanac">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        View on GitHub
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/corcoran/almanac/blob/master/deploy/README.md">Self-host it</a>
+    </div>
+    <p class="meta-line">
+      <span><span class="dot"></span>Single-user</span>
+      <span><span class="dot"></span>MCP + web dashboard</span>
+      <span><span class="dot"></span>One SQLite file</span>
+      <span><span class="dot"></span>BSD-2 licensed</span>
+    </p>
+  </div>
+</header>
+
+<section id="hook">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">One record, two ways in</p>
+      <h2>Reach the same data from your assistant or the dashboard.</h2>
+      <p>Your assistant reads and writes it over MCP; the dashboard does everything too. One API, one SQLite file, so both sides see the same numbers.</p>
+    </div>
+    <figure>
+      <div class="shot"><img src="screenshots/demo-dashboard.png" alt="The Almanac web dashboard: nutrition phase and TDEE, today's macros and meals, a 7-day macro grid, weight trend, sleep, and the training panel." loading="lazy"></div>
+      <figcaption>The dashboard: nutrition phase and TDEE, today's macros, a seven-day grid, weight trend, sleep, and the training panel with a recommended session.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="talk">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Answers from your own numbers</p>
+      <h2>The point isn't that it talks back. It's that it's right.</h2>
+      <p>Any chatbot can guess. Yours counts what you actually logged, so it knows what's recovered and where the cut stands.</p>
+    </div>
+    <div class="transcripts">
+
+      <div class="thread">
+        <div class="ask"><span>What should I train next?</span></div>
+        <p class="toolcall">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          used 2 tools
+        </p>
+        <div class="reply">
+          <p><span class="k">PUSH</span> is the clear call for tomorrow.</p>
+          <p>Chest, front delts, triceps, and abs are all in the prime window (~94h since last hit) — ideal timing, full output expected. No conflicts, no too-soon groups.</p>
+          <p><span class="k">LEGS</span> is available too (quads/hams/calves recovered at ~49h) but the timing signal is weak — acceptable, not prime. Fine to swap the order, but PUSH is the better pick today.</p>
+          <p><span class="k">PULL</span> is a hard no — you just finished it. Back, biceps, traps, forearms, rear delts all need another 24–48h minimum.</p>
+        </div>
+      </div>
+
+      <div class="thread">
+        <div class="ask"><span>How am I doing today?</span></div>
+        <p class="toolcall">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          get today context
+        </p>
+        <div class="reply">
+          <p>Solid day. Here's where you stand:</p>
+          <p><b>Nutrition</b> — 1,790 / 1,900 kcal, on track with 110 left. Protein's at 142g of 180 — room for a high-protein snack before bed.</p>
+          <p><b>Training</b> — PULL done today, your 4th workout this week. Back, biceps, traps, forearms all fully depleted, which is exactly right.</p>
+          <p><b>Weight</b> — 169.2 lb this morning; trend 170.2 and drifting down, about 1.6 lb over the past 17 days.</p>
+          <p><span class="win">Energy balance</span> — net −438 kcal against your measured TDEE of ~2,230. Day 39 of the Spring cut. Everything's logged, zero nudges.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="ai-web">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Built in, if you don't run your own</p>
+      <h2>No assistant of your own? The web app has one.</h2>
+      <p>Two chat surfaces are built in, so the AI is there even if you never connect an outside agent.</p>
+    </div>
+    <div class="two-up">
+      <figure>
+        <div class="shot"><img src="screenshots/demo-meal-lookup.png" alt="The AI meal assistant parsing a plain-language meal description into editable macro entries." loading="lazy"></div>
+        <figcaption>Meal assistant: describe what you ate and it returns editable entries, looking up unfamiliar foods and asking about portion size when it changes the math.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="screenshots/demo-insights-chat.png" alt="The AI insights coach summarizing nutrition, training, and sleep from the user's history." loading="lazy"></div>
+        <figcaption>Insights coach: reads your nutrition, training, and sleep back to you and takes follow-up questions. It reads the log but never changes it.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">What it keeps track of</p>
+      <h2>More than calories.</h2>
+    </div>
+    <div class="features">
+      <div class="feature">
+        <h3>Nutrition and TDEE</h3>
+        <p>Meals, macros, and alcohol. Once it has enough data, your TDEE is back-calculated from what you actually ate and how your weight moved, not a formula.</p>
+      </div>
+      <div class="feature">
+        <h3>Weight trend</h3>
+        <p>A smoothed trend that sees through day-to-day water swings, with a usable read on direction after just a couple of weigh-ins.</p>
+      </div>
+      <div class="feature">
+        <h3>Training and recovery</h3>
+        <p>Workout templates, per-muscle recovery timing, strength PRs, and a suggested next session based on what has actually recovered.</p>
+      </div>
+      <div class="feature">
+        <h3>Sleep and steps</h3>
+        <p>Sleep hours, quality, and a running debt. Daily steps count toward your energy balance as everyday movement.</p>
+      </div>
+      <div class="feature">
+        <h3>Nutrition phases</h3>
+        <p>Run a cut, bulk, or maintenance phase with targets and adherence. Mark time off so a vacation doesn't drag your averages.</p>
+      </div>
+      <div class="feature">
+        <h3>Calendar and history</h3>
+        <p>Open any past day to review or fix it, on a month view that flips between workouts and intake.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="host">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Self-hosted by design</p>
+      <h2>Why the data is yours to trust.</h2>
+    </div>
+    <div class="host-grid">
+      <div>
+        <p>It runs on your own hardware. Your health data stays on a machine you control, which is what makes it safe to point an assistant at.</p>
+        <p>It's a Docker Compose stack behind oauth2-proxy, so you can sign in with Google, GitHub, or any OIDC provider. Assistants connect with a token or the MCP OAuth flow. The deploy guide covers nginx, TLS, and the stack end to end.</p>
+        <div class="cta-row" style="margin-top:28px">
+          <a class="btn btn-primary" href="https://github.com/corcoran/almanac">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            Get the code
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/corcoran/almanac/blob/master/deploy/README.md">Deploy runbook</a>
+        </div>
+      </div>
+      <div class="stack">
+        <span class="c"># the stack</span><br>
+        <span class="s">almanac-web</span> &nbsp;static SPA (nginx)<br>
+        <span class="s">almanac-api</span> &nbsp;Fastify + SQLite<br>
+        <span class="s">almanac-mcp</span> &nbsp;MCP server<br>
+        <span class="c">└─</span> oauth2-proxy · your SSO<br>
+        <br>
+        <span class="c"># clients</span><br>
+        Claude Desktop / Code<br>
+        ChatGPT · any MCP client<br>
+        <span class="c"># or just the browser</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-row">
+    <span>Almanac — built with Claude Code.</span>
+    <span class="foot-links">
+      <a href="https://github.com/corcoran/almanac">GitHub</a>
+      <a href="https://github.com/corcoran/almanac/blob/master/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/corcoran/almanac/blob/master/LICENSE">BSD-2 License</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>

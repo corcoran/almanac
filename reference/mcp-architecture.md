@@ -27,7 +27,7 @@ When an AI client (Claude, ChatGPT) connects to the MCP server, three things hap
 
 There is also a `get_capabilities` tool that returns a hand-curated catalog: every entity the system tracks, which CRUD tools apply to each, data conventions, and step-by-step workflow recipes for common tasks ("new_user_onboarding", "log a meal the user described", "delete a duplicate workout", "first-time setup"). It also names a `recommended_entrypoint` (`get_next_best_action`) so a fresh client has one orienting call to start from. This gives the AI a map of the system on first use. A unit test fails if a registered tool isn't represented in the catalog.
 
-Onboarding discoverability is deliberately layered — catalog (`recommended_entrypoint`) → a dedicated `get_next_best_action` tool that reports current setup state → per-tool follow-up hints — so an LLM peer reliably finds "what's next?" rather than inferring it from `phase: null`. See `docs/superpowers/specs/2026-06-03-next-best-action-design.md` for the rationale.
+Onboarding discoverability is deliberately layered — catalog (`recommended_entrypoint`) → a dedicated `get_next_best_action` tool that reports current setup state → per-tool follow-up hints — so an LLM peer reliably finds "what's next?" rather than inferring it from `phase: null`.
 
 ### Resources
 
