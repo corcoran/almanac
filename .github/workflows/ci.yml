@@ -16,6 +16,7 @@ jobs:
         uses: pnpm/action-setup@v6
 
       - name: Set up Node
+        id: setup-node
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -28,7 +29,9 @@ jobs:
       # every node_modules tree. Caching node_modules skips the link step and,
       # crucially, preserves the compiled better-sqlite3 native addon under
       # node_modules/.pnpm/.../build — avoiding the slow node-gyp rebuild.
-      # Keyed on the lockfile so any dependency change invalidates the cache.
+      # The key includes the Node version because that native addon is compiled
+      # against a Node-major ABI (NODE_MODULE_VERSION); a Node bump must bust the
+      # cache or the restored addon fails to self-register under the new runtime.
       - name: Cache pnpm store and node_modules
         id: deps-cache
         uses: actions/cache@v6
@@ -37,9 +40,9 @@ jobs:
             ${{ steps.pnpm-store.outputs.path }}
             node_modules
             packages/*/node_modules
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-
+            ${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}-pnpm-
 
       - name: Install
         run: pnpm install --frozen-lockfile
