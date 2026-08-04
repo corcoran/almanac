@@ -10,17 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.0.0
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Locate pnpm store
         id: pnpm-store
@@ -33,7 +31,7 @@ jobs:
       # Keyed on the lockfile so any dependency change invalidates the cache.
       - name: Cache pnpm store and node_modules
         id: deps-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ steps.pnpm-store.outputs.path }}
