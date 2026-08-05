@@ -30,10 +30,10 @@ async function buildTestClient(fetchImpl: typeof fetch) {
 }
 
 describe("registerTools", () => {
-  it("registers all 77 tools and they advertise via ListToolsRequest", async () => {
+  it("registers all 76 tools and they advertise via ListToolsRequest", async () => {
     const client = await buildTestClient(vi.fn());
     const result = await client.listTools();
-    expect(result.tools).toHaveLength(77);
+    expect(result.tools).toHaveLength(76);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toContain("log_meal");
     expect(names).toContain("get_today_context");
@@ -42,7 +42,10 @@ describe("registerTools", () => {
     expect(names).toContain("list_exercise_groups");
     expect(names).toContain("list_exercises");
     expect(names).toContain("list_workout_templates");
-    expect(names).toContain("bootstrap_user");
+    // Removed: it created an email-less user row, which stranded that user's
+    // data behind a second account on first sign-in. Provisioning is the auth
+    // layer's job now.
+    expect(names).not.toContain("bootstrap_user");
     expect(names).toContain("get_recommended_template");
     expect(names).toContain("get_workout_recommendation"); // alias of get_recommended_template
     expect(names).toContain("get_training_history");
@@ -97,7 +100,7 @@ describe("registerTools", () => {
   it("write tools advertise readOnlyHint: false so clients prompt before invoking", async () => {
     const client = await buildTestClient(vi.fn());
     const result = await client.listTools();
-    const writes = ["log_meal", "log_workout", "update_workout", "update_meal", "bootstrap_user"];
+    const writes = ["log_meal", "log_workout", "update_workout", "update_meal", "log_weight"];
     for (const name of writes) {
       const t = result.tools.find((tt) => tt.name === name);
       expect(t, `${name} missing from registry`).toBeDefined();

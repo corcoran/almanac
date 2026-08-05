@@ -8,14 +8,20 @@ export type SeedInput = {
 };
 
 /**
- * Inserts the single user row for this single-user app. Throws if a user
- * already exists — callers handle this as a "409 Conflict" or equivalent.
+ * Seeds the first user row into an empty database. Throws if any user already
+ * exists — callers handle that as a conflict.
  *
- * The seeded user is the FIRST user (this throws otherwise), so it owns the
- * instance and is bootstrapped as admin (`is_admin = 1`). This self-bootstraps
- * a fresh deployment so the admin tooling isn't locked out without a manual DB
- * edit. It only ever fires on an empty users table, so it cannot grant admin on
- * an existing deployment.
+ * DEV/TEST ONLY. This is reachable from the CLI seed scripts (seed-demo,
+ * seed-user, seed-accomplishments) and tests; it is deliberately NOT exposed
+ * over the API or MCP. The row it writes has NO email, and production account
+ * lookup is by email (`resolveEmailToUserId` in the API's auth layer), so an
+ * email-less row would be invisible at sign-in — the signer-in would get a
+ * SECOND account and this row's data would be stranded. Real accounts are
+ * provisioned by the auth layer, which always sets the verified email.
+ *
+ * The seeded user is the FIRST user (this throws otherwise), so it is
+ * bootstrapped as admin (`is_admin = 1`), matching what the auth layer does
+ * for the first real sign-in.
  *
  * Does NOT create a nutrition phase. The first `start_nutrition_phase`
  * call is responsible for that; phase IDs start at 1 instead of 2.

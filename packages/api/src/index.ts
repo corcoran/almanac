@@ -1,4 +1,3 @@
-import { bindFirstLoginEmail } from "./bootstrap/first-login-binding.js";
 import { loadAllowedEmails, loadConfig } from "./config.js";
 import { buildLoggerOptions } from "./logger.js";
 import { buildApp } from "./server.js";
@@ -14,11 +13,6 @@ const app = buildApp({
     level: cfg.ALMANAC_LOG_LEVEL,
   }),
 });
-
-const bound = bindFirstLoginEmail(app.db, cfg.ALMANAC_FIRST_LOGIN_EMAIL);
-if (bound) {
-  app.log.info({ email: cfg.ALMANAC_FIRST_LOGIN_EMAIL }, "first-login email bound to user_id=1");
-}
 
 app.listen({ port: cfg.ALMANAC_API_PORT, host: cfg.ALMANAC_API_HOST }).then(() => {
   app.log.info(`almanac-api listening on ${cfg.ALMANAC_API_HOST}:${cfg.ALMANAC_API_PORT}`);

@@ -2,6 +2,7 @@
 import { storeToRefs } from "pinia";
 import { onMounted, ref } from "vue";
 import type { ApiClient } from "../../api/client.js";
+import { isPubliclyReachable, mcpUrlFor } from "../../lib/mcp-url.js";
 import { useAuthStore } from "../../stores/auth.js";
 import AboutMeField from "./AboutMeField.vue";
 import ActivitySelector from "./ActivitySelector.vue";
@@ -35,7 +36,10 @@ const { lastMintedToken } = storeToRefs(auth);
 
 // MCP-connect details, mirrored from the welcome splash so a user who dismissed
 // it (or never saw it) can still connect their assistant later.
-const mcpUrl = `${window.location.origin}/mcp`;
+const mcpUrl = mcpUrlFor(window.location.origin);
+// See lib/mcp-url.ts: a localhost/LAN origin is unreachable from Claude's and
+// ChatGPT's servers, so the connect instructions change shape.
+const mcpReachable = isPubliclyReachable(window.location.origin);
 const mcpCopied = ref(false);
 function copyMcpUrl() {
   void navigator.clipboard.writeText(mcpUrl);
@@ -119,9 +123,13 @@ const buildVersion = __APP_VERSION__ === "dev" ? shortSha : __APP_VERSION__;
 
       <section class="section">
         <h3 class="subhead">Connect your assistant</h3>
-        <p class="mcp-lead">
+        <p v-if="mcpReachable" class="mcp-lead">
           Add this as a remote MCP server in Claude or ChatGPT to log and review
           your data by chat. You'll sign in with Google when prompted.
+        </p>
+        <p v-else class="mcp-lead">
+          Add this as an MCP server in Claude Code, or any assistant running on
+          this machine, using a token from below.
         </p>
         <div class="mcp-url-row">
           <code class="mcp-url" data-test="settings-mcp-url">{{ mcpUrl }}</code>
@@ -133,6 +141,11 @@ const buildVersion = __APP_VERSION__ === "dev" ? shortSha : __APP_VERSION__;
             @click="copyMcpUrl"
           >{{ mcpCopied ? "Copied" : "Copy" }}</button>
         </div>
+        <p v-if="!mcpReachable" class="mcp-note" data-test="settings-mcp-local-note">
+          This is a local address. Claude's and ChatGPT's web and mobile apps
+          connect from their own servers and can't reach it — that needs Almanac
+          published at a public HTTPS domain.
+        </p>
       </section>
 
       <section class="section">
@@ -244,6 +257,12 @@ const buildVersion = __APP_VERSION__ === "dev" ? shortSha : __APP_VERSION__;
   font-size: 12px;
   color: var(--ink-faint, #9aa0ad);
   margin: 0 0 8px;
+  line-height: 1.5;
+}
+.mcp-note {
+  font-size: 12px;
+  color: var(--ink-faint, #9aa0ad);
+  margin: 14px 0 0;
   line-height: 1.5;
 }
 .mcp-url-row {

@@ -9,7 +9,6 @@ const ConfigSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
-  ALMANAC_FIRST_LOGIN_EMAIL: z.string().optional(),
   // File path or comma-separated list of emails allowed to auto-provision.
   // When empty/unset, any authenticated email can create an account.
   ALMANAC_ALLOWED_EMAILS: z.string().optional(),

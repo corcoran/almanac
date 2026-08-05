@@ -9,9 +9,14 @@ const IdParams = z.object({ id: z.coerce.number().int().positive() }).strict();
 
 /**
  * Admin-only user management. Every handler calls requireAdmin first (hard
- * server-side check). Bootstrapping the FIRST admin is a one-time DB edit
- * (UPDATE users SET is_admin = 1 WHERE email = '...') — intentionally not an
- * endpoint, to avoid an unauthenticated privilege-escalation surface.
+ * server-side check).
+ *
+ * The FIRST admin is bootstrapped by the auth layer: `resolveEmailToUserId`
+ * grants is_admin to the account it provisions when the users table is empty,
+ * so a fresh deployment isn't locked out of admin tooling. That grant is safe
+ * because it sits behind the allowlist check and only fires on an empty table
+ * — it can never escalate an existing deployment. Promoting any LATER user is
+ * an admin-only operation through PATCH below, never an open endpoint.
  */
 export const registerAdminRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(

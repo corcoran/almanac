@@ -6,7 +6,6 @@ import { makeAdminSetUserAdminTool } from "./admin-set-user-admin.js";
 import { makeAdminSetUserDailyLimitTool } from "./admin-set-user-daily-limit.js";
 import { makeAdminSetUserLlmAccessTool } from "./admin-set-user-llm-access.js";
 // Setup/define tools (30d).
-import { makeBootstrapUserTool } from "./bootstrap-user.js";
 import { makeCreateUntrackedPeriodTool } from "./create-untracked-period.js";
 import { makeDefineExerciseTool } from "./define-exercise.js";
 import { makeDefineExerciseGroupTool } from "./define-exercise-group.js";
@@ -158,7 +157,6 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     makeDeleteSetTool(deps) as Tool<unknown>,
     makeDeleteUntrackedPeriodTool(deps) as Tool<unknown>,
     // Setup
-    makeBootstrapUserTool(deps) as Tool<unknown>,
     makeDefineStoredMealTool(deps) as Tool<unknown>,
     makeDefineExerciseGroupTool(deps) as Tool<unknown>,
     makeDefineExerciseTool(deps) as Tool<unknown>,

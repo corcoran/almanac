@@ -93,7 +93,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     {
       name: "user",
       summary:
-        "The single user this server tracks. Holds profile (name, dob, height_cm, sex, preferred_unit_system, timezone). Required for TDEE math, unit display, and timestamp resolution.",
+        "The account this connection is authenticated as. Holds profile (name, dob, height_cm, sex, preferred_unit_system, timezone). Required for TDEE math, unit display, and timestamp resolution.",
     },
     {
       name: "nutrition_phase",
@@ -166,12 +166,12 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     {
       name: "admin",
       summary:
-        "Admin-only user management. An admin can list users and set another user's LLM meal-chat access, daily token limit, and admin flag — without editing the database. The first admin is bootstrapped by a one-time DB edit. Non-admin callers are rejected by the API.",
+        "Admin-only user management. An admin can list users and set another user's LLM meal-chat access, daily token limit, and admin flag — without editing the database. The first account to sign in on a fresh instance is bootstrapped as admin. Non-admin callers are rejected by the API.",
     },
   ],
   tools_by_entity: {
     user: {
-      create: ["bootstrap_user"],
+      // No create: accounts are provisioned by the auth layer on first sign-in.
       read: ["get_user_profile"],
       update: ["update_user_profile"],
     },
@@ -307,7 +307,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
       when: "A brand-new user, or get_next_best_action reports onboarding_complete=false.",
       steps: [
         "Call get_next_best_action — it names the first unmet gate as the headline.",
-        "complete_profile: confirm timezone, dob, height_cm, sex, preferred_unit_system via update_user_profile (or bootstrap_user if no user exists).",
+        "complete_profile: confirm timezone, dob, height_cm, sex, preferred_unit_system via update_user_profile. The account itself already exists — it was provisioned at sign-in.",
         "log_initial_weight: log the user's current weight so TDEE can move off the formula baseline.",
         "start_nutrition_phase: if no goal stated, start a provisional maintenance phase off formula-based TDEE; note it recalibrates over ~14 days.",
         "create_workout_templates: ask the user's training split, then define_workout_template for each day.",

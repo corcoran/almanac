@@ -231,7 +231,19 @@ For each person:
    on file change — no container restart).
 2. Have them visit `https://almanac.example.com/`.
 3. Their first sign-in auto-provisions their user row.
-4. They mint their own PAT under Settings -> Tokens for their MCP client.
+4. If they want to use their own assistant, they mint a PAT under
+   Settings -> Tokens for their MCP client.
+
+> **Check their plan before promising step 4.** Connecting a custom MCP server
+> is a paid-plan feature on both Claude and ChatGPT, and the qualifying tiers
+> have changed more than once — verify the current terms rather than assuming.
+> Someone on a free plan cannot add Almanac to their assistant at all.
+>
+> They are not stuck, though: the web dashboard does everything the MCP tools
+> do, and the built-in AI meal assistant and insights coach run on the server's
+> `ANTHROPIC_API_KEY`, so they work for every signed-in user regardless of what
+> AI subscription they have. Enable them per-user with
+> `admin_set_user_llm_access` (or `UPDATE users SET llm_logging_enabled = 1`).
 
 ## Smoke test
 
@@ -435,37 +447,3 @@ scp /path/to/almanac.sqlite you@server:"$ALMANAC_DIR"/data/almanac.sqlite
 Keep a snapshot of the source DB somewhere safe first, in case you need to redo
 the import. Then boot as in Step 8; the migration runner brings the schema
 current on startup.
-
-### Adopting a pre-auth database
-
-If the database you're importing was created *before* going through any auth
-flow (e.g. records written directly via the API/MCP during early local setup),
-it may have a `users.id = 1` row with no email. On a normal OAuth sign-in the
-API provisions your account from your verified email automatically, but an
-email-less row won't match, so you'd get a fresh empty account instead of your
-data.
-
-To bind that orphaned row to your email on the next boot, set a one-shot in
-`.env` before Step 8:
-
-```
-ALMANAC_FIRST_LOGIN_EMAIL=you@example.com
-```
-
-After first boot, confirm the binding:
-
-```
-docker compose exec almanac-api sh -c \
-  "node -e 'const db=require(\"better-sqlite3\")(\"/data/almanac.sqlite\"); console.log(db.prepare(\"SELECT id, name, email FROM users\").all())'"
-```
-
-You should see `id 1` with your email set. Then **remove the
-`ALMANAC_FIRST_LOGIN_EMAIL` line** from `.env` and recreate the API container so
-the hook never fires again:
-
-```
-docker compose up -d almanac-api
-```
-
-On a clean database, or if you only ever sign in through OAuth, you never need
-this variable.

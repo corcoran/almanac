@@ -73,27 +73,6 @@ export const UserUpdateSchema = z
   .strict();
 
 /**
- * Body schema for `POST /v1/users` — bootstraps the single user this
- * single-user app supports. Only `name` is required; other fields fall back
- * to column defaults. Validate IANA timezone strictly so a typo doesn't
- * silently produce broken user-day math downstream.
- */
-export const BootstrapUserInputSchema = z
-  .object({
-    name: z.string().min(1),
-    dob: IsoDateSchema.optional(),
-    height_cm: z.number().positive().optional(),
-    sex: SexSchema.optional(),
-    timezone: IanaTimezoneSchema.optional(),
-    preferred_unit_system: UnitSystemSchema.optional(),
-    // Optional at creation; seeds the initial maintenance/TDEE estimate. Without
-    // this, activity level set during onboarding was silently dropped and only
-    // settable later via Settings (PATCH /v1/users/me).
-    activity_level: ActivityLevelSchema.optional(),
-  })
-  .strict();
-
-/**
  * Response from `GET /v1/auth/whoami` — the subset of the user record the web
  * UI needs to render the user menu and decide locale/unit defaults. A
  * deliberately smaller surface than `UserResponseSchema`: we omit body-comp

@@ -14,8 +14,8 @@
 # Requirements:
 #   - docker + jq on the operator's host (curl runs inside a sidecar)
 #   - The compose stack is running (`docker compose ps` shows healthy services)
-#   - TEST_EMAIL is already bound to a user row (either user_id=1 via
-#     ALMANAC_FIRST_LOGIN_EMAIL or auto-provisioned via a prior browser request)
+#   - TEST_EMAIL is already bound to a user row (auto-provisioned by a prior
+#     browser sign-in, or by this script's own whoami step)
 #
 # Steps exercised, in order:
 #   1. /api/v1/health (internal) + /api/v1/health (public, via oauth2-proxy)
