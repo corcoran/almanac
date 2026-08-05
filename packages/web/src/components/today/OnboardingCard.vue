@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { isPubliclyReachable, mcpUrlFor } from "../../lib/mcp-url.js";
 
 defineEmits<{
   (e: "open-settings"): void;
   (e: "dismiss"): void;
 }>();
 
-const mcpUrl = computed(() => {
-  const origin = window.location.origin;
-  return `${origin}/mcp`;
-});
+const mcpUrl = computed(() => mcpUrlFor(window.location.origin));
+// Claude web/mobile and ChatGPT fetch this URL from their own servers, so a
+// localhost or LAN address can't work there — only a local client like Claude
+// Code can reach it. Swap the guidance rather than promise a broken setup.
+const reachable = computed(() => isPubliclyReachable(window.location.origin));
 
 const copied = ref(false);
 function copyUrl() {
@@ -34,9 +36,13 @@ function copyUrl() {
         <span class="num">1</span>
         <div>
           <strong>Add the MCP server</strong>
-          <p>
+          <p v-if="reachable">
             In Claude or ChatGPT, add this as a remote MCP server.
             You'll sign in with Google when prompted.
+          </p>
+          <p v-else>
+            Add this in Claude Code, or any assistant running on this
+            machine, with a personal access token.
           </p>
           <div class="url-row">
             <code class="url">{{ mcpUrl }}</code>
@@ -47,6 +53,11 @@ function copyUrl() {
               @click="copyUrl"
             >{{ copied ? "Copied" : "Copy" }}</button>
           </div>
+          <p v-if="!reachable" class="local-note" data-test="onboarding-local-note">
+            This is a local address. Claude's and ChatGPT's web and mobile
+            apps connect from their own servers, so they can't reach it —
+            they need Almanac published at a public HTTPS domain.
+          </p>
         </div>
       </div>
       <div class="step">
@@ -63,13 +74,21 @@ function copyUrl() {
     </div>
 
     <div class="alt">
-      <p>
+      <p v-if="reachable">
         Using Claude Code or need a manual token?
         <button
           type="button"
           class="link-btn"
           @click="$emit('open-settings')"
         >Create a personal access token</button>
+      </p>
+      <p v-else>
+        <button
+          type="button"
+          class="link-btn"
+          @click="$emit('open-settings')"
+        >Create a personal access token</button>
+        to connect Claude Code.
       </p>
     </div>
 
@@ -163,6 +182,14 @@ function copyUrl() {
   font-family: monospace;
   flex: 1;
   user-select: all;
+}
+/* `.step p` sets margin:0 and is more specific than a bare `.local-note`,
+   so this note needs the same specificity to claim its own top spacing. */
+.step p.local-note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim, #9aa0ad);
 }
 .copy-btn {
   background: var(--accent, #4a7dff);

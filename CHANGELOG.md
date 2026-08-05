@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The `bootstrap_user` MCP tool and the `POST /v1/users` endpoint.** Both
+  created a user row with no email, but production looks accounts up *by* email
+  — so calling either before your first sign-in left you with two accounts: an
+  orphaned one holding your data and the admin flag, and the empty one you
+  actually logged into. Accounts have been provisioned automatically from your
+  verified email at sign-in for some time now; this was a leftover from before
+  auth existed, and nothing in the docs pointed at it. The MCP tool count goes
+  from 77 to 76.
+- **`ALMANAC_FIRST_LOGIN_EMAIL`.** Its only job was repairing the email-less row
+  the above could create. With that path gone there is nothing left to repair,
+  so the variable, its startup hook, and the "adopting a pre-auth database"
+  deploy section are all removed. Unset it in your `.env` if present; it is now
+  ignored.
+
+### Fixed
+
+- **Connect instructions no longer recommend a setup that can't work.** The
+  onboarding card and Settings both said "add this as a remote MCP server in
+  Claude or ChatGPT" and showed whatever address you were browsing from. On a
+  local or LAN install that's `http://localhost:.../mcp`, which Claude Code can
+  reach but Claude's and ChatGPT's web and mobile apps cannot — they connect
+  from the vendor's servers, so the connection just fails with nothing
+  explaining why. Both surfaces now detect a non-routable origin (localhost,
+  RFC1918, CGNAT, `.local`) and lead with the Claude Code + token path,
+  noting that web and mobile clients need a public HTTPS domain.
+- Local dev: `scripts/local-dev/up.sh` gave the API and MCP a one-address
+  allowlist while oauth2-proxy got the full `allowed-users.txt`, so a second
+  allowlisted person could sign in and then be rejected by the API on every
+  request — a blank UI with no visible cause. All three now read the same file,
+  matching prod.
+
+### Changed
+
+- The LLM docs now say what the AI surfaces **cost to run**: they bill against
+  your own Anthropic key, roughly 5–10¢ per active user on a day they use it,
+  held down by putting the high-volume work on the cheap model and serving the
+  stable prompt prefix from the 1-hour cache. The daily token and search caps
+  are described as the guardrails they are, including that leaving them unset
+  means no cap at all. Also states plainly that **Anthropic is the only
+  supported provider** today — `ALMANAC_LLM_PROVIDER` is a validated seam for a
+  future one, not a working switch.
+- Docs now warn that **connecting a custom MCP server is a paid-plan feature on
+  both Claude and ChatGPT**, and that the qualifying tiers change — so check
+  before assuming someone you invite can connect their own assistant. Anyone on
+  a free plan can still use the whole web dashboard, including the built-in AI
+  meal assistant and insights coach, which run on the server's API key.
+- Documentation now states plainly that Almanac supports **one user or several**.
+  Every email on the allowlist gets its own account and its own isolated data on
+  first sign-in, and the first account on a fresh instance becomes admin. This
+  has been true since the multi-user work landed, but the README, landing page,
+  and MCP server instructions all still described a single-user app.
+- Corrected two stale code comments claiming the first admin required a manual
+  `UPDATE users SET is_admin = 1`. The auth layer has granted it automatically
+  since auto-provisioning landed.
+
 ## [1.32.1] - 2026-08-02
 
 ### Internal

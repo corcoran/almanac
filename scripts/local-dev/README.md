@@ -115,7 +115,7 @@ docker stack. The recipe that works:
    ```bash
    env ALMANAC_DB_PATH=$PWD/data/almanac.sqlite ALMANAC_API_PORT=3001 \
        ALMANAC_TRUST_PROXY_HEADERS=true ALMANAC_ALLOWED_EMAILS=you@gmail.com \
-       ALMANAC_FIRST_LOGIN_EMAIL=you@gmail.com pnpm dev:api
+       pnpm dev:api
    ```
 3. **Mint a PAT** in that same DB (the MCP threads it to the API as its identity):
    ```bash

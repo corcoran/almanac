@@ -68,7 +68,7 @@ describe("MCP <-> API end-to-end", () => {
       const tools = (await client.listTools()) as {
         tools: Array<{ name: string }>;
       };
-      expect(tools.tools).toHaveLength(77);
+      expect(tools.tools).toHaveLength(76);
       const toolNames = tools.tools.map((t) => t.name);
       expect(toolNames).toContain("log_meal");
       expect(toolNames).toContain("define_exercise");
@@ -352,8 +352,7 @@ describe("MCP <-> API end-to-end", () => {
   it("exercises the round-2 surface against a pre-seeded user: aggregates, cardio steps, sleep night_of, planned_end_on, recommend-template (PAT-authed)", async () => {
     // Post-Task-5: with PAT-based auth, the user must exist BEFORE the bearer
     // can be minted. Seed a bare user (no phase) so the test can still
-    // exercise update_user_profile / bootstrap_user conflict + the rest of
-    // the round-2 surface.
+    // exercise update_user_profile + the rest of the round-2 surface.
     const app = buildApp({ dbPath: ":memory:", trustProxyHeaders: true });
     const { user_id } = seedUser(app.db, {
       name: "Jeff",
@@ -394,19 +393,7 @@ describe("MCP <-> API end-to-end", () => {
       expect(patched.user.id).toBe(1);
       expect(patched.user.timezone).toBe("America/Toronto");
 
-      // 2. Calling bootstrap_user returns 409 — the seeded user already
-      //    exists, so Gap 27 (refuse second-user creation) fires. The
-      //    high-level McpServer tool wrapper catches the thrown ApiHttpError
-      //    and surfaces it as an isError envelope (the API error text is
-      //    preserved verbatim).
-      const conflictResult = (await client.callTool({
-        name: "bootstrap_user",
-        arguments: { name: "Other" },
-      })) as { content: Array<{ type: string; text: string }>; isError?: boolean };
-      expect(conflictResult.isError).toBe(true);
-      expect(at(conflictResult.content, 0).text).toMatch(/409|conflict/i);
-
-      // 3. start_nutrition_phase with planned_end_on (Gap 25).
+      // 2. start_nutrition_phase with planned_end_on (Gap 25).
       // Use the user's tz to compute `today` so it matches what getTodayContext
       // sees server-side — UTC-slicing here would diverge by a day when UTC has
       // rolled over but the user's local date hasn't.
@@ -434,7 +421,7 @@ describe("MCP <-> API end-to-end", () => {
       yesterday.setUTCDate(yesterday.getUTCDate() - 1);
       const yIso = yesterday.toISOString().slice(0, 10);
 
-      // 4. log_cardio with steps (Gap 17). Logged on a COMPLETED day
+      // 3. log_cardio with steps (Gap 17). Logged on a COMPLETED day
       // (yesterday) so it lands in the week-to-date window — getTodayContext's
       // week-to-date aggregates exclude the in-progress day (today). 5pm UTC is
       // unambiguously that user-day for America/Toronto (well clear of the 4am
@@ -447,7 +434,7 @@ describe("MCP <-> API end-to-end", () => {
         est_kcal: 200,
       });
 
-      // 5. log_sleep via night_of alias (Gap 18 + 30).
+      // 4. log_sleep via night_of alias (Gap 18 + 30).
       const sleepResult = (await call("log_sleep", {
         night_of: yIso,
         hours: 7.5,
@@ -457,7 +444,7 @@ describe("MCP <-> API end-to-end", () => {
       expect(sleepResult.summary).toContain("night of");
       expect(sleepResult.summary).toContain(yIso);
 
-      // 6. Define a group + exercise + template for recommend_template.
+      // 5. Define a group + exercise + template for recommend_template.
       const group = (await call("define_exercise_group", {
         name: "Push",
         display_order: 0,
@@ -478,7 +465,7 @@ describe("MCP <-> API end-to-end", () => {
         ],
       });
 
-      // 7. get_recommended_template returns the only template (Gap 24).
+      // 6. get_recommended_template returns the only template (Gap 24).
       const recs = (await call("get_recommended_template", { top_n: 1 })) as {
         recommendations: Array<{ template_id: number; template_name: string }>;
       };

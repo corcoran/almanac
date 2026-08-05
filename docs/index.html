@@ -281,7 +281,7 @@
       <a class="btn btn-ghost" href="https://github.com/corcoran/almanac/blob/master/deploy/README.md">Self-host it</a>
     </div>
     <p class="meta-line">
-      <span><span class="dot"></span>Single-user</span>
+      <span><span class="dot"></span>One user or several</span>
       <span><span class="dot"></span>MCP + web dashboard</span>
       <span><span class="dot"></span>One SQLite file</span>
       <span><span class="dot"></span>BSD-2 licensed</span>
@@ -361,7 +361,8 @@
     <div class="section-head">
       <p class="eyebrow">Built in, if you don't run your own</p>
       <h2>No agent of your own? There's one built in.</h2>
-      <p>Two chat surfaces ship with the web app, so you don't have to wire anything up to get the same thing.</p>
+      <p>Two chat surfaces ship with the web app, so you don't have to wire anything up to get the same thing. Connecting your own assistant needs a paid Claude or ChatGPT plan; these don't — they run on the server's key, for everyone you've let in.</p>
+      <p style="margin-top:15px">That key is yours, so these cost you a few cents on a day someone uses them. Cheap model for parsing, cached prompts, and a per-user daily cap you set — the bill stays boring.</p>
     </div>
     <div class="two-up">
       <figure>
@@ -421,6 +422,7 @@
       <div>
         <p>It runs on your own hardware. Health data is about as personal as it gets, and years of it shouldn't have to sit on someone else's server just to be useful to an AI.</p>
         <p>It's a Docker Compose stack behind oauth2-proxy, so you sign in with Google, GitHub, or whatever OIDC you already run. Assistants connect with a token or the MCP OAuth flow. The deploy guide covers nginx and TLS end to end.</p>
+        <p>Run it for yourself or for a few people. An email allowlist decides who gets in; everyone on it signs in and gets their own account, their own history, and their own assistant connection. Nobody sees anyone else's numbers.</p>
         <div class="cta-row" style="margin-top:28px">
           <a class="btn btn-primary" href="https://github.com/corcoran/almanac">
             <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>

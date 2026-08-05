@@ -96,7 +96,6 @@ services:
       - ./allowed-users.txt:/emails/allowed-users.txt:ro
     environment:
       ALMANAC_TRUST_PROXY_HEADERS: "true"
-      ALMANAC_FIRST_LOGIN_EMAIL: "${ALMANAC_FIRST_LOGIN_EMAIL:-}"
       ALMANAC_ALLOWED_EMAILS: "/emails/allowed-users.txt"
       # Pino level override. Unset -> the code's own fallback wins (info in
       # prod, since NODE_ENV=production is baked into the Dockerfile). Set to

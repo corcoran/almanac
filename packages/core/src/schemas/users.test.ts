@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BootstrapUserInputSchema, sanitizeAboutMe, UserUpdateSchema } from "./users.js";
+import { sanitizeAboutMe, UserUpdateSchema } from "./users.js";
 
 describe("UserUpdateSchema", () => {
   it("rejects an invalid IANA timezone", () => {
@@ -13,20 +13,21 @@ describe("UserUpdateSchema", () => {
   });
 });
 
-describe("BootstrapUserInputSchema", () => {
-  it("accepts activity_level at creation (regression: it was silently dropped)", () => {
-    const parsed = BootstrapUserInputSchema.parse({ name: "Jeff", activity_level: "moderate" });
+describe("UserUpdateSchema activity_level", () => {
+  // Kept from the removed BootstrapUserInputSchema suite: account creation no
+  // longer takes a body (the auth layer provisions from the verified email),
+  // so PATCH /v1/users/me is the only path that sets activity_level.
+  it("accepts a valid activity_level", () => {
+    const parsed = UserUpdateSchema.parse({ activity_level: "moderate" });
     expect(parsed.activity_level).toBe("moderate");
   });
 
   it("rejects an invalid activity_level", () => {
-    expect(() =>
-      BootstrapUserInputSchema.parse({ name: "Jeff", activity_level: "athlete" }),
-    ).toThrow();
+    expect(() => UserUpdateSchema.parse({ activity_level: "athlete" })).toThrow();
   });
 
   it("leaves activity_level undefined when omitted (still optional)", () => {
-    const parsed = BootstrapUserInputSchema.parse({ name: "Jeff" });
+    const parsed = UserUpdateSchema.parse({ name: "Jeff" });
     expect(parsed.activity_level).toBeUndefined();
   });
 });

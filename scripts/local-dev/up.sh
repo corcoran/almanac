@@ -37,6 +37,13 @@ if [ ! -f allowed-users.txt ]; then
   exit 1
 fi
 
+# The API and MCP read the SAME allowlist file oauth2-proxy is mounted, so all
+# three layers agree — matching what docker-compose.yml does in prod. Passing
+# only $ALMANAC_DEV_EMAIL here (the old behavior) let any OTHER allowlisted
+# person clear the OAuth gate and then get 403'd by the API on every request,
+# which renders as a signed-in-but-empty UI with no explanation.
+ALLOWED_EMAILS_SRC="$REPO_ROOT/allowed-users.txt"
+
 PIDFILE=/tmp/almanac-dev-pids
 > "$PIDFILE"
 
@@ -59,7 +66,7 @@ MCP_PORT="${ALMANAC_MCP_PORT:-3030}"
 echo "==> starting almanac-api on :${API_PORT}"
 ALMANAC_API_HOST=0.0.0.0 \
 ALMANAC_TRUST_PROXY_HEADERS=true \
-ALMANAC_ALLOWED_EMAILS="${ALMANAC_DEV_EMAIL}" \
+ALMANAC_ALLOWED_EMAILS="$ALLOWED_EMAILS_SRC" \
   pnpm --filter @almanac/api dev > /tmp/almanac-api.log 2>&1 &
 echo "api:$!" >> "$PIDFILE"
 
@@ -77,7 +84,7 @@ ALMANAC_API_URL="http://127.0.0.1:${API_PORT}" \
 ALMANAC_MCP_OAUTH_CLIENT_ID="${OAUTH2_PROXY_CLIENT_ID:-}" \
 ALMANAC_MCP_OAUTH_CLIENT_SECRET="${OAUTH2_PROXY_CLIENT_SECRET:-}" \
 ALMANAC_MCP_PUBLIC_URL="http://localhost:4180" \
-ALMANAC_ALLOWED_EMAILS="${ALMANAC_DEV_EMAIL}" \
+ALMANAC_ALLOWED_EMAILS="$ALLOWED_EMAILS_SRC" \
   pnpm --filter @almanac/mcp dev > /tmp/almanac-mcp.log 2>&1 &
 echo "mcp:$!" >> "$PIDFILE"
 

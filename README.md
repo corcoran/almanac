@@ -3,7 +3,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/corcoran/almanac/ci.yml?branch=master&label=ci)](https://github.com/corcoran/almanac/actions/workflows/ci.yml)
 [![Latest tag](https://img.shields.io/github/v/tag/corcoran/almanac?label=release&color=c8871f)](https://github.com/corcoran/almanac/tags)
 [![License](https://img.shields.io/github/license/corcoran/almanac?color=4a7a5f)](LICENSE)
-![MCP](https://img.shields.io/badge/MCP-77_tools-c8871f)
+![MCP](https://img.shields.io/badge/MCP-70%2B_tools-c8871f)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-4a7a5f)
 
 **A precise, self-hosted fitness record your own AI agent can read.**
@@ -53,7 +53,7 @@ Browser ──► nginx ──► oauth2-proxy ──► almanac-web   (Vue 3 SP
                           │
                           ├──► almanac-api   (Fastify + SQLite)
                           │
-Claude / ChatGPT ─────────┴──► almanac-mcp   (77 tools, 5 resources)
+Claude / ChatGPT ─────────┴──► almanac-mcp   (70+ tools, 5 resources)
                                     │
                                     └──► almanac-api
 ```
@@ -115,14 +115,15 @@ See [reference/mcp-auth.md](reference/mcp-auth.md) for the full authentication a
 
 ### MCP integration
 
-- **77 tools, 5 resources** — full CRUD for every entity (including stored meals and `log_meal_from_stored`), plus derived signals (stim state, TDEE, sleep debt, day status, calendar), `get_next_best_action` for onboarding/next-step guidance, and `get_accomplishments` so an assistant can surface your earned wins in chat.
-- **Works with Claude (mobile, Desktop, Code) and ChatGPT** — say "log a 350 kcal breakfast" and it shows up in the web UI.
+- **70+ tools, 5 resources** — full CRUD for every entity (including stored meals and `log_meal_from_stored`), plus derived signals (stim state, TDEE, sleep debt, day status, calendar), `get_next_best_action` for onboarding/next-step guidance, and `get_accomplishments` so an assistant can surface your earned wins in chat.
+- **Works with Claude (mobile, Desktop, Code) and ChatGPT** — say "two eggs, toast and butter, and a flat white" and the assistant works out the calories and macros, then logs it; it shows up in the web UI. Note that adding a custom MCP server is a paid-plan feature on both, so check the current terms before counting on it for everyone you invite; the web dashboard and its built-in AI surfaces work on any account.
 - **OAuth 2.1** — Claude mobile and ChatGPT connect through the standard MCP OAuth flow, using whichever SSO provider you configured. No manual token setup.
 - **PAT auth** — personal access tokens for Claude Code or any HTTP client.
 - **Idempotent logging** — safe to retry meal, weight, and sleep log calls.
 
 ### Auth
 
+- **One user or several** — the allowlist decides. Each allowlisted email gets its own account, provisioned automatically on first sign-in; there's no separate account-creation step. The first account on a fresh instance is bootstrapped as admin, so you're never locked out of the admin tooling.
 - **Three-layer allowlist** — oauth2-proxy (browser SSO), API (account provisioning), and MCP (OAuth flow) all enforce the same `allowed-users.txt` file.
 - **OAuth tokens are real PATs** — minted via the API, stored in SQLite, visible and revocable in the web Settings panel.
 - **Per-user data isolation** — every record is scoped to its owner. Reads and writes are enforced against the authenticated user at the data layer, so one account never sees or touches another's data.
@@ -244,9 +245,26 @@ Register the MCP server by URL:
 
 For local dev with a PAT, point at `http://localhost:4180/mcp`. For OAuth-capable clients (Claude mobile, ChatGPT), just use the public URL — the OAuth flow handles everything automatically.
 
+> **A local URL only works for local clients.** Claude Code (and anything else
+> running on the same machine) can reach `localhost` or a LAN address. Claude's
+> and ChatGPT's web and mobile apps cannot: they connect from the vendor's
+> servers, so `localhost` is *their* localhost and a `192.168.x` address isn't
+> routable from outside your network. Those clients need Almanac published at a
+> public HTTPS domain — see the [deploy runbook](deploy/README.md). The app
+> detects this and adjusts the connect instructions it shows you.
+
+> **Connecting a custom MCP server is a paid feature on both Claude and
+> ChatGPT.** Adding your own remote MCP server is gated behind their paid
+> plans, and which plans qualify has changed more than once — check the current
+> terms before assuming someone can connect. This bites hardest when adding
+> other people: a free-plan account cannot add Almanac as an MCP server no
+> matter how the server is deployed. They can still use Almanac fully through
+> the web dashboard, including the built-in AI meal assistant and insights
+> coach, which run on the server's own API key and need nothing from the user.
+
 ### 5. Verify
 
-Open Claude Code. The `almanac` tools should show up under the `almanac` server. Ask Claude to "log a 350 kcal breakfast" — the meal should appear in the web UI and via `get_macros_today`.
+Open Claude Code. The `almanac` tools should show up under the `almanac` server. Tell Claude what you ate in plain language — "two eggs, toast and butter, and a flat white" — and it should estimate the calories and macros itself, log them, and show you what it recorded. The meal then appears in the web UI and via `get_macros_today`.
 
 ## `.env` reference
 
@@ -284,17 +302,6 @@ The stack ships configured for Google as the SSO provider, so the variables belo
 | `ALMANAC_MCP_OAUTH_CLIENT_ID` | Google client ID for MCP OAuth (typically `${OAUTH2_PROXY_CLIENT_ID}`) | MCP OAuth mode |
 | `ALMANAC_MCP_OAUTH_CLIENT_SECRET` | Google client secret for MCP OAuth | MCP OAuth mode |
 | `ALMANAC_MCP_PUBLIC_URL` | Public URL for MCP OAuth issuer (`https://domain`) | MCP OAuth mode |
-| `ALMANAC_FIRST_LOGIN_EMAIL` | One-shot: binds an existing email-less `users.id = 1` to this email on first boot | only when adopting a pre-auth database |
-
-> **When do you need `ALMANAC_FIRST_LOGIN_EMAIL`?** Almost never. When you sign in
-> through OAuth or oauth2-proxy, the API provisions your account from your verified
-> email automatically — no setup. This variable only matters when a `users.id = 1`
-> row already exists *without* an email, which happens if data was created before
-> going through the auth flow: a local-dev database, or records written directly via
-> the API/MCP during early setup. Setting it links that orphaned row to your real
-> email on the next boot, so signing in resolves to your existing data instead of
-> creating a fresh, empty account. On a clean database, or if you only ever use
-> OAuth, you never set it. It's a one-shot: confirm the binding, then remove the var.
 
 ### Watchtower auto-deploy notifications (deploy-only, optional)
 
@@ -313,6 +320,31 @@ The `watchtower` compose service emails on container updates/errors via shoutrrr
 Read by the API only. Both AI surfaces — the **AI Meal Assistant** and the **AI insights coach** — are gated behind the same `ALMANAC_LLM_ENABLED` switch (off by default), so they stay dark until explicitly turned on. The prod `docker-compose.yml` already forwards these from the host `.env` to the `almanac-api` service.
 
 The two surfaces use **separate models**: meal parsing is a cheap extraction task and stays on Haiku, while the coach does harder multi-signal reasoning and defaults to Sonnet.
+
+**Anthropic is currently the only supported provider.** `ALMANAC_LLM_PROVIDER`
+exists as a seam and is validated at boot, but `anthropic` is the only accepted
+value — anything else fails fast rather than silently misbehaving. Adding
+another provider means implementing one branch behind that seam; it's a
+plausible future change, not something that works today.
+
+**This runs on your own API key, so the AI surfaces cost real money per use.**
+Two things keep that small. The cheaper model does the high-volume work (meal
+parsing on Haiku; only the coach reaches for Sonnet), and the system prompts are
+split so the large stable part is served from Anthropic's 1-hour prompt cache
+instead of being re-billed on every turn.
+
+In practice, dogfooding over a couple of months, **an active user costs roughly
+5–10¢ on a day they use it** — nothing on days they don't. Your mileage will
+vary with usage and current model pricing, so treat that as an order of
+magnitude, not a quote.
+
+If you'd rather not find out the hard way, the limits below are the guardrails:
+`ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` drives the visible "~N logs left"
+counter, `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` is a real circuit breaker that
+starts returning 429s, and `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` bounds web
+searches specifically. All three are per-user-per-day, and an admin can override
+the limit for one person with `admin_set_user_daily_limit`. Left unset, there is
+**no cap** — deliberate, but worth knowing before you invite other people.
 
 | Variable | Purpose | Default |
 |---|---|---|

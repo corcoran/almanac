@@ -91,33 +91,24 @@ describe("/api/v1/users", () => {
     expect(r.statusCode).toBe(401);
   });
 
-  it("POST /api/v1/users 409s once the proxy has auto-provisioned a user", async () => {
-    // Under the new auth shape, an X-Forwarded-Email request auto-provisions
-    // a user during the preHandler. By the time POST /api/v1/users runs its
-    // body, that user already exists — so the explicit bootstrap path
-    // returns 409. (Auto-provision replaces this route in proxied
-    // deployments; the route remains for backward compat.)
+  it("POST /api/v1/users no longer exists — auth-layer provisioning is the only path", async () => {
+    // The bootstrap route was removed: it inserted an EMAIL-LESS users row,
+    // so signing in afterwards provisioned a SECOND account and stranded the
+    // first one's data (admin included). Account creation now happens only in
+    // resolveEmailToUserId, which always sets the verified email.
     app = buildApp({ dbPath: ":memory:", trustProxyHeaders: true });
     const r = await app.inject({
       method: "POST",
       url: "/api/v1/users",
       headers: auth,
-      payload: {
-        name: "Jeff",
-        dob: "1981-07-16",
-        height_cm: 183,
-        sex: "male",
-        timezone: "America/Toronto",
-      },
+      payload: { name: "Jeff" },
     });
-    expect(r.statusCode).toBe(409);
-    expect(r.json().error.code).toBe("conflict");
+    expect(r.statusCode).toBe(404);
   });
 
   it("X-Forwarded-Email auto-provision creates a user with sensible defaults", async () => {
-    // Replaces the old "POST /api/v1/users accepts minimal payload" — the
-    // auto-provision path is now the canonical bootstrap; assert its
-    // shape directly via GET /api/v1/users/me on a fresh DB.
+    // The canonical (and only) account-creation path; assert its shape
+    // directly via GET /api/v1/users/me on a fresh DB.
     app = buildApp({ dbPath: ":memory:", trustProxyHeaders: true });
     const r = await app.inject({
       method: "GET",
@@ -134,26 +125,26 @@ describe("/api/v1/users", () => {
     expect(body.sex).toBeNull();
   });
 
-  it("POST /api/v1/users returns 409 when a user already exists", async () => {
-    app = setup(); // setup() already inserted a user
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/v1/users",
-      headers: auth,
-      payload: { name: "Second" },
-    });
-    expect(r.statusCode).toBe(409);
-    expect(r.json().error.code).toBe("conflict");
-  });
-
-  it("POST /api/v1/users rejects unknown timezone (422)", async () => {
+  it("a second allowlisted email provisions its own separate account", async () => {
+    // Multi-user: every allowlisted email gets its own row. The first sign-in
+    // on an empty table is bootstrapped as admin; subsequent ones are not.
     app = buildApp({ dbPath: ":memory:", trustProxyHeaders: true });
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/v1/users",
-      headers: auth,
-      payload: { name: "TZ", timezone: "Mars/Olympus_Mons" },
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/v1/users/me",
+      headers: { "x-forwarded-email": "first@example.com" },
     });
-    expect(r.statusCode).toBe(422);
+    const second = await app.inject({
+      method: "GET",
+      url: "/api/v1/users/me",
+      headers: { "x-forwarded-email": "second@example.com" },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(first.json().id).not.toBe(second.json().id);
+    expect(first.json().email).toBe("first@example.com");
+    expect(second.json().email).toBe("second@example.com");
   });
 });

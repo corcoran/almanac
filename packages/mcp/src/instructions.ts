@@ -17,7 +17,7 @@
  *     covered by tool descriptions — don't duplicate them here.
  */
 export const ALMANAC_MCP_INSTRUCTIONS = `\
-Almanac is a personal nutrition/training tracker. Single user. Their profile is server-side; \`get_user_profile\` rather than asking.
+Almanac is a personal nutrition/training tracker. Every call is scoped to the account you authenticated as. Their profile is server-side; \`get_user_profile\` rather than asking.
 
 # Conventions
 
