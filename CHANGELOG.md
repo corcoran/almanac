@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-08-05
+
 ### Removed
 
 - **The `bootstrap_user` MCP tool and the `POST /v1/users` endpoint.** Both
