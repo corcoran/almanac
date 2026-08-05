@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Almanac — a precise fitness record your AI agent can read</title>
-<meta name="description" content="A self-hosted record of your training, nutrition, weight, and sleep, kept accurate enough for your own AI assistant to reason over. Ask how your cut is going and get an answer from your real numbers.">
-<meta property="og:title" content="Almanac — a precise fitness record your AI agent can read">
-<meta property="og:description" content="Almanac keeps an accurate record of your training and nutrition, then hands it to the assistant you already use. The answers come from your own numbers, not a guess.">
+<title>Almanac — a precise fitness log your AI agent can actually read</title>
+<meta name="description" content="A self-hosted log of your training, nutrition, weight and sleep, kept in one SQLite file your own AI assistant can read and write over MCP. Ask how the cut is going, get an answer off your real numbers.">
+<meta property="og:title" content="Almanac — a precise fitness log your AI agent can actually read">
+<meta property="og:description" content="Most trackers hand you a number and explain nothing. Almanac keeps the log and hands it to whatever assistant you already use, so the answers come off your own numbers.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -133,6 +133,8 @@
   /* ---- section rhythm ---- */
   section { padding: 68px 0; border-top: 1px solid var(--line); }
   .section-head { max-width: 62ch; margin-bottom: 40px; }
+  /* text-only sections: the head IS the content, so drop its trailing gap */
+  .section-head:only-child { margin-bottom: 0; }
   h2 {
     font-family: var(--font-display);
     font-weight: 500;
@@ -142,6 +144,7 @@
     margin: 0 0 16px;
   }
   .section-head p { font-size: 18px; color: var(--ink-soft); margin: 0; max-width: 56ch; }
+  .section-head p + p { margin-top: 15px; }
 
   /* ---- screenshot frame ---- */
   figure { margin: 0; }
@@ -268,8 +271,8 @@
 <header>
   <div class="wrap">
     <p class="brand"><b>Almanac</b> · self-hosted fitness record</p>
-    <h1>A precise record of your training and nutrition, ready for your <em>AI agent</em> to read.</h1>
-    <p class="lede">Almanac keeps an accurate account of what you eat, lift, weigh, and sleep, then hands it to the assistant you already use. Ask how your cut is going or what to train today, and the answer comes from your own numbers instead of a guess.</p>
+    <h1>A precise log of what you eat and lift, written for your <em>AI agent</em> to read.</h1>
+    <p class="lede">Almanac keeps your meals, workouts, weight and sleep in one accurate log, and puts an MCP server in front of it so whatever assistant you already use can read and write the whole thing. Ask how the cut is going and the answer comes off your actual numbers instead of a guess.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/corcoran/almanac">
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
@@ -290,8 +293,8 @@
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">One record, two ways in</p>
-      <h2>Reach the same data from your assistant or the dashboard.</h2>
-      <p>Your assistant reads and writes it over MCP; the dashboard does everything too. One API, one SQLite file, so both sides see the same numbers.</p>
+      <h2>Same data from your assistant or from the browser.</h2>
+      <p>The assistant reads and writes over MCP. The dashboard does all of it too. One API, one SQLite file, so the two sides can't drift apart.</p>
     </div>
     <figure>
       <div class="shot"><img src="screenshots/demo-dashboard.png" alt="The Almanac web dashboard: nutrition phase and TDEE, today's macros and meals, a 7-day macro grid, weight trend, sleep, and the training panel." loading="lazy"></div>
@@ -305,7 +308,7 @@
     <div class="section-head">
       <p class="eyebrow">Answers from your own numbers</p>
       <h2>The point isn't that it talks back. It's that it's right.</h2>
-      <p>Any chatbot can guess. Yours counts what you actually logged, so it knows what's recovered and where the cut stands.</p>
+      <p>Every answer comes out of what you logged, so it knows what's recovered and where the cut actually stands.</p>
     </div>
     <div class="transcripts">
 
@@ -342,12 +345,23 @@
   </div>
 </section>
 
+<section id="calibration">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Precision where it counts</p>
+      <h2>It tells you which numbers actually mattered.</h2>
+      <p>Hand it a recipe, a label, or a weight in grams and the arithmetic is done for you. The built-in meal assistant looks up whatever it doesn't already know, and asks about portion size when that's the part that changes the answer.</p>
+      <p>What comes back is the assumptions behind the total, and which parts of it carried the weight. A tablespoon of rice vinegar is noise; "a bit less than half" of the pan is a 150 calorie decision. Knowing which is which keeps logging from turning into busywork, and it's why an honest estimate on the nights you can't measure still leaves the trend intact.</p>
+    </div>
+  </div>
+</section>
+
 <section id="ai-web">
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">Built in, if you don't run your own</p>
-      <h2>No assistant of your own? The web app has one.</h2>
-      <p>Two chat surfaces are built in, so the AI is there even if you never connect an outside agent.</p>
+      <h2>No agent of your own? There's one built in.</h2>
+      <p>Two chat surfaces ship with the web app, so you don't have to wire anything up to get the same thing.</p>
     </div>
     <div class="two-up">
       <figure>
@@ -371,27 +385,27 @@
     <div class="features">
       <div class="feature">
         <h3>Nutrition and TDEE</h3>
-        <p>Meals, macros, and alcohol. Once it has enough data, your TDEE is back-calculated from what you actually ate and how your weight moved, not a formula.</p>
+        <p>Meals, macros, alcohol. Once there's enough data it back-calculates your TDEE from what you actually ate and how your weight actually moved, instead of a formula that's never met you.</p>
       </div>
       <div class="feature">
         <h3>Weight trend</h3>
-        <p>A smoothed trend that sees through day-to-day water swings, with a usable read on direction after just a couple of weigh-ins.</p>
+        <p>A smoothed trend, so a salty dinner doesn't read as fat gain. You get a usable direction after a couple of weigh-ins.</p>
       </div>
       <div class="feature">
         <h3>Training and recovery</h3>
-        <p>Workout templates, per-muscle recovery timing, strength PRs, and a suggested next session based on what has actually recovered.</p>
+        <p>Templates, per-muscle recovery timing, strength PRs, and a suggested next session based on what's actually recovered rather than what day of the week it is.</p>
       </div>
       <div class="feature">
         <h3>Sleep and steps</h3>
-        <p>Sleep hours, quality, and a running debt. Daily steps count toward your energy balance as everyday movement.</p>
+        <p>Hours, quality, and a running sleep debt. Steps count toward the energy balance as everyday movement.</p>
       </div>
       <div class="feature">
         <h3>Nutrition phases</h3>
-        <p>Run a cut, bulk, or maintenance phase with targets and adherence. Mark time off so a vacation doesn't drag your averages.</p>
+        <p>Run a cut, bulk or maintenance with its own targets and adherence. Mark time off so a week at the cottage doesn't drag your averages down.</p>
       </div>
       <div class="feature">
         <h3>Calendar and history</h3>
-        <p>Open any past day to review or fix it, on a month view that flips between workouts and intake.</p>
+        <p>Open any past day and fix it. Month view flips between workouts and intake.</p>
       </div>
     </div>
   </div>
@@ -401,12 +415,12 @@
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">Self-hosted by design</p>
-      <h2>Why the data is yours to trust.</h2>
+      <h2>Why the data stays yours.</h2>
     </div>
     <div class="host-grid">
       <div>
-        <p>It runs on your own hardware. Your health data stays on a machine you control, which is what makes it safe to point an assistant at.</p>
-        <p>It's a Docker Compose stack behind oauth2-proxy, so you can sign in with Google, GitHub, or any OIDC provider. Assistants connect with a token or the MCP OAuth flow. The deploy guide covers nginx, TLS, and the stack end to end.</p>
+        <p>It runs on your own hardware. Health data is about as personal as it gets, and years of it shouldn't have to sit on someone else's server just to be useful to an AI.</p>
+        <p>It's a Docker Compose stack behind oauth2-proxy, so you sign in with Google, GitHub, or whatever OIDC you already run. Assistants connect with a token or the MCP OAuth flow. The deploy guide covers nginx and TLS end to end.</p>
         <div class="cta-row" style="margin-top:28px">
           <a class="btn btn-primary" href="https://github.com/corcoran/almanac">
             <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
@@ -433,7 +447,7 @@
 
 <footer>
   <div class="wrap footer-row">
-    <span>Almanac — built with Claude Code.</span>
+    <span>Almanac · self-hosted fitness record</span>
     <span class="foot-links">
       <a href="https://github.com/corcoran/almanac">GitHub</a>
       <a href="https://github.com/corcoran/almanac/blob/master/CHANGELOG.md">Changelog</a>
