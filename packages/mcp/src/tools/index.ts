@@ -172,8 +172,18 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     makeAdminSetUserLlmAccessTool(deps) as Tool<unknown>,
   ];
 
-  const getUserTz = makeUserTzResolver(deps);
+  const userTz = makeUserTzResolver(deps);
   for (const tool of tools) {
+    // update_user_profile can change the timezone, which the _meta envelope
+    // caches. Drop the cache after that write so the next tool result stamps
+    // the new zone instead of the one resolved at connect time.
+    const getUserTz =
+      tool.name === "update_user_profile"
+        ? async () => {
+            userTz.invalidate();
+            return userTz.get();
+          }
+        : userTz.get;
     registerOneTool(server, tool, getUserTz);
   }
 }

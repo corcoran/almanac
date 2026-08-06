@@ -23,7 +23,7 @@ function deps(): ToolDeps {
 function build(tool: Tool<unknown>) {
   const server = new McpServer({ name: "t", version: "0.0.0" }, { capabilities: { tools: {} } });
   const d = deps();
-  registerOneTool(server, tool, makeUserTzResolver(d));
+  registerOneTool(server, tool, makeUserTzResolver(d).get);
   return server;
 }
 
@@ -89,5 +89,52 @@ describe("registerOneTool", () => {
     };
     expect(payload.result).toBe("hello");
     expect(payload._meta.user_tz).toBe("America/Toronto");
+  });
+});
+
+function depsWithTimezones(timezones: readonly string[]) {
+  let call = 0;
+  const fetchImpl = vi.fn(async () => {
+    const tz = timezones[Math.min(call, timezones.length - 1)] ?? "UTC";
+    call += 1;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ timezone: tz }),
+    };
+  }) as unknown as typeof fetch;
+  const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
+  const d: ToolDeps = { api, currentUserId: async () => 1, currentToken: () => "alm_test" };
+  return { deps: d, fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn> };
+}
+
+describe("makeUserTzResolver", () => {
+  it("caches across calls so every tool result does not re-fetch", async () => {
+    const { deps: d, fetchImpl } = depsWithTimezones(["America/New_York"]);
+    const resolver = makeUserTzResolver(d);
+    expect(await resolver.get()).toBe("America/New_York");
+    expect(await resolver.get()).toBe("America/New_York");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches after invalidate() so a profile write is not stale", async () => {
+    // Regression: the cache had NO expiry, so _meta.user_tz served the first
+    // value for the whole process lifetime — a timezone change stayed stale
+    // until the client reconnected.
+    const { deps: d, fetchImpl } = depsWithTimezones(["UTC", "America/New_York"]);
+    const resolver = makeUserTzResolver(d);
+    expect(await resolver.get()).toBe("UTC");
+    resolver.invalidate();
+    expect(await resolver.get()).toBe("America/New_York");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to UTC when the profile fetch fails", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("network");
+    }) as unknown as typeof fetch;
+    const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
+    const d: ToolDeps = { api, currentUserId: async () => 1, currentToken: () => "alm_test" };
+    expect(await makeUserTzResolver(d).get()).toBe("UTC");
   });
 });

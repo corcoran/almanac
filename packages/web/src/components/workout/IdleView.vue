@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import type { ApiClient } from "../../api/client.js";
 import type { AddableExercise } from "../../composables/useTemplateForm.js";
+import { reloadNudge } from "../../lib/reload-nudge.js";
 import type { UnitSystem } from "../../lib/units.js";
 import { nowNaiveLocal } from "../../lib/user-day.js";
 import { useExerciseGroupsStore } from "../../stores/exercise-groups.js";
@@ -267,6 +268,10 @@ async function onSaved() {
     templatesStore.reload(props.client),
     exercisesStore.load(props.client),
     groupsStore.load(props.client),
+    // Creating the first template clears the `create_workout_templates`
+    // onboarding nudge, which is served by a SEPARATE store from the template
+    // list — without this the nudge lingers until a full page reload.
+    reloadNudge(nextBestActionStore, props.client),
   ]);
   // Advance the walk-through if more preset templates remain.
   const next = programQueue.value.shift();

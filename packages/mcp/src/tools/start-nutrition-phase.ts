@@ -14,7 +14,7 @@ import { type Tool, type ToolDeps, ToolError } from "../tool.js";
  * `source` it emits. When computeTDEE can't produce a usable value (no weight
  * has ever been logged), the API returns a structured 422 `tdee_unavailable`
  * envelope, which this tool forwards verbatim as an MCP `isError: true`
- * response so the AI consumer can guide the user toward providing an override.
+ * response so the AI consumer can log a weight and retry.
  */
 export const StartNutritionPhaseInputSchema = z
   .object({
@@ -72,7 +72,7 @@ export function makeStartNutritionPhaseTool(deps: ToolDeps): Tool<StartNutrition
   return {
     name: "start_nutrition_phase",
     description:
-      "Start a new nutrition phase. Automatically closes any currently-active phase (sets its `ended_on` to the day before `started_on`) — only one phase can be active at a time. Provide `phase_type` (cut/bulk/maintenance), exactly one of `deficit_kcal` or `daily_kcal_target` (the server derives the other from TDEE), and macro split. If the server can't compute TDEE (no weight logged), the tool returns an `isError: true` envelope with `error: 'tdee_unavailable'` and a `hints.suggestion` for what to ask the user before retrying with `tdee_override`. After starting a phase, call get_next_best_action — if no workout templates exist yet, it will prompt to set them up.",
+      "Start a new nutrition phase. Automatically closes any currently-active phase (sets its `ended_on` to the day before `started_on`) — only one phase can be active at a time. Provide `phase_type` (cut/bulk/maintenance), exactly one of `deficit_kcal` or `daily_kcal_target` (the server derives the other from TDEE), and macro split. If no weight has been logged yet, the tool returns an `isError: true` envelope with `error: 'tdee_unavailable'` — log a weight first, then retry; the server computes TDEE itself. After starting a phase, call get_next_best_action — if no workout templates exist yet, it will prompt to set them up.",
     inputSchema: StartNutritionPhaseInputSchema,
     annotations: {
       readOnlyHint: false,
@@ -89,7 +89,7 @@ export function makeStartNutritionPhaseTool(deps: ToolDeps): Tool<StartNutrition
         // Pass-through for the structured `tdee_unavailable` 422 envelope
         // (spec §"start_nutrition_phase error contract for incomplete
         // profiles"). The AI consumer reads the envelope and uses
-        // `hints.suggestion` to drive the conversation toward an override.
+        // `hints.suggestion` to guide the user toward logging a weight.
         // Also pass-through for 400 `validation_failed` (phase-invariant or
         // deficit/target consistency) so the AI gets the same actionable
         // message the API produces.

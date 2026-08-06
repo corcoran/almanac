@@ -9,6 +9,9 @@ data/*.sqlite-journal
 data/*.sqlite-shm
 data/*.sqlite-wal
 .superpowers/
+# Design specs and implementation plans are working notes, not product docs —
+# kept local rather than published with the repo.
+docs/superpowers/
 .DS_Store
 .worktrees/
 data/backups/

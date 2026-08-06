@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Starting a nutrition phase no longer mislabels who chose your TDEE.**
+  Opening a phase before logging a weigh-in returned an error blaming missing
+  *measured* data and telling your assistant to pass an explicit TDEE override
+  — which recorded the resulting number as something you had asserted, even
+  though Almanac had calculated it. The error now names the real prerequisite
+  (log a weight) and points at the right tool, and a phase opened afterwards is
+  correctly recorded as formula-derived. Phases created from the web dashboard
+  get the same treatment: the override is only sent when you actually type your
+  own TDEE, instead of on every save.
+- **Today's weigh-in now counts when you start a phase.** The check for whether
+  you had ever logged a weight only looked as far back as yesterday, so logging
+  your weight and starting a phase in the same sitting — exactly what a new
+  account does — was refused, and retrying could not help. Your latest weigh-in
+  now also anchors the starting estimate, so a phase opened on your first day
+  reflects your actual body weight rather than a placeholder.
+- **Onboarding now asks for your activity level.** It is the single biggest
+  lever on your starting TDEE estimate — the gap between "moderate" and
+  "active" is roughly 300 kcal a day — but nothing prompted for it, so it was
+  easy to never set. Existing profiles are untouched and no existing estimate
+  moves.
+- **The "set up workout templates" prompt now clears as soon as you create one.**
+  Saving a template refreshed the template list but not the next-steps panel, so
+  the prompt sat there telling you to do something you had just done until you
+  reloaded the page.
+- **A timezone change now takes effect immediately over MCP.** The timezone
+  stamped on tool results was resolved once per connection and cached for the
+  life of the process, so updating your profile left assistants seeing the old
+  zone until they reconnected.
+
+### Changed
+
+- **The MCP server's instructions speak plainly.** They previously handed
+  assistants Almanac's internal field names when explaining TDEE calibration,
+  which made repeating that jargon back at you the path of least resistance.
+  They now describe the behavior in ordinary language and explicitly tell
+  assistants not to surface field names, tool names, or error codes unless you
+  ask how something works.
+
 ## [1.33.0] - 2026-08-05
 
 ### Removed

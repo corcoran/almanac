@@ -487,10 +487,47 @@ describe("PhaseFormModal submit (create)", () => {
       phase_type: "cut",
       intent: "cut",
       daily_kcal_target: 1900,
-      tdee_override: 2400,
     });
     expect(wrapper.emitted("saved")).toHaveLength(1);
     expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+
+  it("omits tdee_override when the user accepts the server's estimate", async () => {
+    // Regression: the modal sent tdee_override unconditionally, so every
+    // web-created phase recorded tdee_source: "user_asserted" for a number
+    // the server had computed. Omitting it lets the server stamp "formula".
+    //
+    // tdeeBasis is "profile_baseline", not "measured_intake": this is the
+    // cold-start branch (hasWeight: false), and a measured basis would imply
+    // weigh-ins already exist. The combination also matters mechanically —
+    // buildProfilePatch only sets activity_level on a profile_baseline phase,
+    // so a measured basis skipped the cold-start path this test is named for.
+    const client = stubClient({}, { height_cm: 180, sex: "male", dob: "1990-01-01" });
+    const wrapper = mount(PhaseFormModal, {
+      props: {
+        client,
+        mode: "create" as const,
+        hasWeight: false,
+        tdeeBasis: "profile_baseline" as const,
+      },
+    });
+    await flushPromises();
+    await wrapper.find('[data-test="current-weight"]').setValue("80");
+    await wrapper.find('[data-test="phase-name"]').setValue("Cut A");
+    await wrapper.find('[data-test="target-kcal"]').setValue("1900");
+    await wrapper.find('[data-test="protein"]').setValue("160");
+    await wrapper.find('[data-test="carb"]').setValue("180");
+    await wrapper.find('[data-test="fat"]').setValue("55");
+    await wrapper.find('[data-test="submit"]').trigger("click");
+    await flushPromises();
+
+    const c = client as unknown as { post: ReturnType<typeof vi.fn> };
+    const phaseCall = c.post.mock.calls.find((args) => args[0] === "/v1/nutrition-phases");
+    expect(phaseCall).toBeDefined();
+    const payload = phaseCall?.[1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("tdee_override");
+    // The target still goes over the wire — the route derives deficit_kcal.
+    expect(payload.daily_kcal_target).toBe(1900);
   });
 
   it("persists the chosen activity_level to the user profile on a cold-start create", async () => {
@@ -523,6 +560,56 @@ describe("PhaseFormModal submit (create)", () => {
     const profilePatch = c.patch.mock.calls.find((args) => args[0] === "/v1/users/me");
     expect(profilePatch).toBeDefined();
     expect(profilePatch?.[1]).toMatchObject({ activity_level: "very_active" });
+  });
+
+  it("saves activity_level BEFORE creating the phase so the server agrees with the preview", async () => {
+    // Ordering guard for the invariant-check divergence. /v1/phase-estimate
+    // honors the typed activity level (very_active = 1.9x), but the phase route
+    // reads the STORED profile — a null activity_level there falls back to
+    // seedActivityMultiplier (1.4x). That gap exceeds the +/-5% maintenance
+    // band, so if the phase POST beat the profile PATCH the server would reject
+    // a maintenance target the form had just shown as valid. The API-side test
+    // "diverges from the preview when previewed profile fields were never saved"
+    // pins the failure; this pins the ordering that prevents it.
+    const client = stubClient({}, { height_cm: 180, sex: "male", dob: "1990-01-01" });
+    const wrapper = mount(PhaseFormModal, {
+      props: {
+        client,
+        mode: "create" as const,
+        hasWeight: false,
+        tdeeBasis: "profile_baseline" as const,
+      },
+    });
+    await flushPromises();
+    await wrapper.find('[data-test="phase-type"]').setValue("maintenance");
+    await wrapper.find('[data-test="activity-level"]').setValue("very_active");
+    await wrapper.find('[data-test="current-weight"]').setValue("80");
+    await wrapper.find('[data-test="phase-name"]').setValue("Maintain");
+    await wrapper.find('[data-test="tdee"]').setValue("2400");
+    await wrapper.find('[data-test="target-kcal"]').setValue("2400");
+    await wrapper.find('[data-test="protein"]').setValue("160");
+    await wrapper.find('[data-test="carb"]').setValue("180");
+    await wrapper.find('[data-test="fat"]').setValue("55");
+    await wrapper.find('[data-test="submit"]').trigger("click");
+    await flushPromises();
+
+    const c = client as unknown as {
+      patch: ReturnType<typeof vi.fn>;
+      post: ReturnType<typeof vi.fn>;
+    };
+    const patchOrder =
+      c.patch.mock.invocationCallOrder[
+        c.patch.mock.calls.findIndex((args) => args[0] === "/v1/users/me")
+      ];
+    const phaseOrder =
+      c.post.mock.invocationCallOrder[
+        c.post.mock.calls.findIndex((args) => args[0] === "/v1/nutrition-phases")
+      ];
+    expect(patchOrder).toBeDefined();
+    expect(phaseOrder).toBeDefined();
+    if (patchOrder !== undefined && phaseOrder !== undefined) {
+      expect(patchOrder).toBeLessThan(phaseOrder);
+    }
   });
 });
 

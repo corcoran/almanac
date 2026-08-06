@@ -26,7 +26,12 @@ function bareUser() {
 }
 
 function completeProfile(db: ReturnType<typeof freshDb>, userId: number) {
-  updateUser(db, userId, { dob: "1982-01-01", height_cm: 183, sex: "male" });
+  updateUser(db, userId, {
+    dob: "1982-01-01",
+    height_cm: 183,
+    sex: "male",
+    activity_level: "moderate",
+  });
 }
 
 function startMaintenancePhase(db: ReturnType<typeof freshDb>, userId: number) {
@@ -54,6 +59,24 @@ describe("computeNextBestAction — onboarding tier", () => {
     expect(res.headline?.code).toBe("complete_profile");
     expect(res.headline?.tier).toBe("onboarding");
     expect(res.as_of).toBe("2026-06-03");
+  });
+
+  it("still headlines complete_profile when only activity_level is missing", () => {
+    // activity_level is the largest cold-start TDEE lever (moderate 1.55 vs
+    // active 1.725 is a ~300 kcal swing on a typical profile), but nothing
+    // prompted for it before this. Null is NOT a safe skip — it silently
+    // falls back to seedActivityMultiplier.
+    const { db, userId } = bareUser();
+    updateUser(db, userId, {
+      dob: "1982-01-01",
+      height_cm: 183,
+      sex: "male",
+      activity_level: null,
+    });
+    const res = computeNextBestAction(db, userId, NOW);
+    expect(res.onboarding_complete).toBe(false);
+    expect(res.headline?.code).toBe("complete_profile");
+    expect(res.headline?.detail).toContain("activity level");
   });
 
   it("headlines log_initial_weight once profile is complete but no weight exists", () => {

@@ -105,14 +105,18 @@ export function computeNextBestAction(
   // --- Tier 1: onboarding gates (dependency order) ------------------------
   const onboarding: NextBestAction[] = [];
 
-  const profileIncomplete = user.dob === null || user.height_cm === null || user.sex === null;
+  const profileIncomplete =
+    user.dob === null ||
+    user.height_cm === null ||
+    user.sex === null ||
+    user.activity_level === null;
   if (profileIncomplete) {
     onboarding.push({
       code: "complete_profile",
       tier: "onboarding",
       title: "Complete your profile",
       detail:
-        "Confirm timezone, date of birth, height, sex, and preferred units. Date of birth, height, and sex are needed for the BMR/TDEE baseline.",
+        "Confirm timezone, date of birth, height, sex, preferred units, and activity level. Date of birth, height, and sex drive the BMR baseline; activity level scales it and is the largest single lever on the starting estimate.",
       suggested_tool: "update_user_profile",
     });
   }

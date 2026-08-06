@@ -39,8 +39,10 @@ import { IdParamsSchema } from "../params.js";
  * `tdee_source: 'user_asserted'`) — without it, the route falls back to
  * `computeTDEE` and snapshots whatever it returns with its `source`. If
  * computeTDEE can't produce a usable value (no weight yet logged), the route
- * fails with a structured 422 `tdee_unavailable` error so an AI consumer can
- * surface the missing prerequisites and re-call with an override.
+ * fails with a structured 422 `tdee_unavailable` error naming the missing
+ * prerequisite (a body weight). Once one weigh-in exists the formula path
+ * resolves TDEE and stamps `tdee_source: 'formula'`; `tdee_override`
+ * short-circuits that with `tdee_source: 'user_asserted'`.
  */
 const StartPhaseRequestSchema = z
   .object({
@@ -106,14 +108,46 @@ function validatePhaseInvariant(phase_type: PhaseType, deficit_kcal: number, tde
 }
 
 /**
- * Per spec §"start_nutrition_phase error contract for incomplete profiles":
- * minimal hint list for `tdee_unavailable`. Spec 1 only requires `weight_kg`
- * — height/sex/dob are not required until the Mifflin formula path lands in
- * Spec 2. The check is "has the user ever logged a body weight" (matches
- * `profile_complete` semantics in getTodayContext).
+ * Hint list for the `tdee_unavailable` envelope. The only blocker this route
+ * reports is a missing body weight — height/sex/dob have Mifflin fallbacks,
+ * but mass does not. Matches `profile_complete` semantics in getTodayContext.
+ *
+ * This is EXISTENCE-scoped ("has any weigh-in ever been recorded"), and it is
+ * fed by the same `latestWeightUpTo` lookup that gates the refusal in
+ * `resolveTdeeFromDb` — so the envelope can never claim `weight_required`
+ * while reporting nothing missing. See the note on `latestWeightUpTo`.
  */
 function getMissingProfileFields(hasAnyBodyWeight: boolean): string[] {
   return hasAnyBodyWeight ? [] : ["weight_kg"];
+}
+
+/**
+ * The user's most recent weigh-in on or before `onOrBefore` (a user-local
+ * `YYYY-MM-DD`; `measured_on` is already stored user-local, so a direct string
+ * compare is correct — no UTC bucketing involved).
+ *
+ * This is deliberately SEPARATE from the back-calc window below. The back-calc
+ * excludes the in-progress day (`asOf = today - 1`) because today's intake is
+ * incomplete — sound for the *measured* math, but not a reason to make a
+ * today-dated weigh-in invisible to the *existence* check that gates phase
+ * creation. Passing `onOrBefore = today` here lets a weight logged minutes ago
+ * (what both the web modal and an MCP agent record) satisfy the gate and anchor
+ * Mifflin, while `computeTDEE` still receives only `[asOf-60, asOf]` weights —
+ * so no existing user's computed TDEE moves.
+ */
+function latestWeightUpTo(
+  db: Parameters<typeof findUserById>[0],
+  userId: number,
+  onOrBefore: string,
+): number | null {
+  const row = db
+    .prepare(
+      `SELECT weight_kg FROM body_weights
+       WHERE user_id = ? AND measured_on <= ?
+       ORDER BY measured_on DESC LIMIT 1`,
+    )
+    .get(userId, onOrBefore) as { weight_kg: number } | undefined;
+  return row?.weight_kg ?? null;
 }
 
 function addDaysIso(iso: string, n: number): string {
@@ -274,10 +308,12 @@ export const registerNutritionPhasesRoutes: FastifyPluginAsyncZod = async (app) 
       } else {
         const resolved = resolveTdeeFromDb(app.db, user);
         if (!resolved) {
+          // Same predicate the gate in resolveTdeeFromDb uses, so the envelope
+          // can't say `weight_required` while reporting nothing missing. A
+          // FUTURE-dated weigh-in is the one row this deliberately ignores: it
+          // can't anchor today's TDEE, so `weight_kg` is genuinely still needed.
           const hasAnyBodyWeight =
-            (app.db
-              .prepare("SELECT 1 FROM body_weights WHERE user_id = ? LIMIT 1")
-              .get(user.id) as unknown) != null;
+            latestWeightUpTo(app.db, user.id, currentUserDate(new Date(), user.timezone)) !== null;
           // Structured error envelope per spec §"start_nutrition_phase error
           // contract for incomplete profiles". The envelope shape is declared in
           // TdeeUnavailableErrorSchema and validated here to ensure the contract
@@ -286,12 +322,12 @@ export const registerNutritionPhasesRoutes: FastifyPluginAsyncZod = async (app) 
           // so the typed reply accepts it without a cast.
           const envelope = TdeeUnavailableErrorSchema.parse({
             error: "tdee_unavailable",
-            reason: "no_measured_tdee_yet",
-            required_action: "provide_tdee_override",
+            reason: "weight_required",
+            required_action: "log_weight",
             hints: {
               missing_profile_fields: getMissingProfileFields(hasAnyBodyWeight),
               suggestion:
-                "Discuss the user's stats, activity level, and goals to land on a TDEE estimate, then call start_nutrition_phase with tdee_override set.",
+                "Ask the user for their current body weight and record it with log_weight, then retry — the server computes the TDEE estimate itself.",
             },
           });
           return reply.code(422).send(envelope);
@@ -384,6 +420,13 @@ export const registerNutritionPhasesRoutes: FastifyPluginAsyncZod = async (app) 
  * a number. We'd rather return null and let the handler surface the
  * `tdee_unavailable` error than silently snapshot a wrong TDEE that locks
  * in the wrong target for the entire phase.
+ *
+ * Note the two DIFFERENT weight lookups, which is the point of this shape:
+ *  - the GATE + Mifflin anchor use `latestWeightUpTo(..., today)`, so a
+ *    weigh-in dated today (the common case — both the web modal and an MCP
+ *    agent stamp today) counts;
+ *  - the back-calc still sees only `[asOf-60, asOf]` with `asOf = today - 1`,
+ *    preserving its exclusion of the incomplete in-progress day.
  */
 function resolveTdeeFromDb(
   db: Parameters<typeof findUserById>[0],
@@ -391,6 +434,15 @@ function resolveTdeeFromDb(
 ): { tdee: number; source: TdeeSource } | null {
   const today = currentUserDate(new Date(), user.timezone);
   const asOf = addDaysIso(today, -1);
+  // Existence gate. A today-dated weigh-in satisfies it even though the
+  // back-calc window below stops at yesterday.
+  const latestWeightKg = latestWeightUpTo(db, user.id, today);
+  if (latestWeightKg === null) {
+    // No weights at all → no usable TDEE. Spec 1 requires at least one
+    // weight to be logged before a phase can be opened without override.
+    return null;
+  }
+
   const bodyWeights = db
     .prepare(
       `SELECT measured_on, weight_kg FROM body_weights
@@ -401,11 +453,6 @@ function resolveTdeeFromDb(
     measured_on: string;
     weight_kg: number;
   }>;
-  if (bodyWeights.length === 0) {
-    // No weights at all → no usable TDEE. Spec 1 requires at least one
-    // weight to be logged before a phase can be opened without override.
-    return null;
-  }
 
   const meals = db
     .prepare(
@@ -436,7 +483,13 @@ function resolveTdeeFromDb(
       height_cm: user.height_cm,
       sex: user.sex,
       activity_level: user.activity_level,
-      latestWeightKg: bodyWeights[bodyWeights.length - 1]?.weight_kg ?? null,
+      // The gate's weight, not `bodyWeights`' last row — when the ONLY weigh-in
+      // is today's, `bodyWeights` is empty and this would otherwise fall back to
+      // computeTDEE's fabricated 80kg default. For every user with an in-window
+      // weigh-in this resolves to the same value as before (the latest weigh-in
+      // up to today is the latest one up to yesterday unless one was logged
+      // today, in which case the fresher number is the honest anchor).
+      latestWeightKg,
     },
     // Honor untracked periods so vacation days don't skew the phase-start snapshot.
     untrackedDays: getUntrackedDays(db, user.id, addDaysIso(asOf, -60), asOf),

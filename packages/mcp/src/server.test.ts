@@ -37,6 +37,16 @@ describe("buildMcpServer", () => {
     // accidentally trims the wrong section, this catches it.
     expect(ALMANAC_MCP_INSTRUCTIONS).toMatch(/estimate_warning/);
     expect(ALMANAC_MCP_INSTRUCTIONS).toMatch(/nudges/);
-    expect(ALMANAC_MCP_INSTRUCTIONS).toMatch(/profile_baseline/);
+    expect(ALMANAC_MCP_INSTRUCTIONS).toMatch(/calibrates over ~14 days/);
+  });
+
+  it("speaks plainly and names no internal state", () => {
+    // The old TDEE line handed agents internal state names, making it the
+    // path of least resistance to repeat them at the user. Assert both halves
+    // so a future edit can't silently regress while still passing the size
+    // guard.
+    expect(ALMANAC_MCP_INSTRUCTIONS).toContain("Speak plainly");
+    expect(ALMANAC_MCP_INSTRUCTIONS).not.toContain("measured_intake");
+    expect(ALMANAC_MCP_INSTRUCTIONS).not.toContain("profile_baseline");
   });
 });

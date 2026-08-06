@@ -155,15 +155,20 @@ export const StoredMealResponseSchema = z.object({
 });
 
 /**
- * Per spec §"start_nutrition_phase error contract for incomplete profiles":
- * Structured 422 envelope when TDEE cannot be resolved (no body weight logged
- * and no tdee_override provided). Allows AI consumers to surface missing
- * prerequisites and guide the user toward re-calling with an override.
+ * Structured 422 envelope for `start_nutrition_phase` when TDEE cannot be
+ * resolved. There is exactly one cause: no body weight has ever been logged.
+ * Mifflin needs a mass term, so without a weigh-in any number would be
+ * invented and then frozen into `tdee_at_phase_start` for the whole phase.
+ *
+ * The fix is to LOG A WEIGHT, not to supply `tdee_override` — one weigh-in
+ * unlocks the formula path, which stamps `tdee_source: "formula"` honestly.
+ * `tdee_override` remains for genuine user assertions ("my dietitian says
+ * 2800"), which is what `user_asserted` is meant to record.
  */
 export const TdeeUnavailableErrorSchema = z.object({
   error: z.literal("tdee_unavailable"),
-  reason: z.literal("no_measured_tdee_yet"),
-  required_action: z.literal("provide_tdee_override"),
+  reason: z.literal("weight_required"),
+  required_action: z.literal("log_weight"),
   hints: z.object({
     missing_profile_fields: z.array(z.string()),
     suggestion: z.string(),

@@ -198,6 +198,46 @@ Visit `https://almanac.example.com/` and sign in through your SSO provider. You
 land on the SPA with a blank slate. Your first sign-in auto-provisions your
 user account from your verified email.
 
+> **The first account created on a fresh instance becomes the admin** — that is
+> how you get the admin tooling without a bootstrap step. It is decided by
+> whoever signs in first, not by who owns the server, so make sure that is you.
+>
+> The easy way to get this wrong is a browser already signed in to a different
+> Google account, or a leftover session cookie from earlier testing: you land on
+> the app as *that* identity and it takes the admin flag. If your provider
+> doesn't prompt you to pick an account, sign in from a private window.
+>
+> To check who got it, and to fix it if the wrong account did:
+>
+> ```bash
+> sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
+>   "SELECT id, email, is_admin FROM users;"
+> sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
+>   "UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';"
+> ```
+>
+> Admin is not exclusive — promoting yourself doesn't demote anyone. Nothing is
+> lost either way: every account keeps its own data, and only the admin-only
+> tools (listing users, setting per-user AI access and token limits) are gated.
+>
+> The same mix-up has a second, more confusing symptom. A PAT belongs to the
+> account that minted it, so if you created the token while signed in as the
+> wrong identity, your assistant writes to that account while the dashboard
+> shows yours. Everything works — the data just isn't where you're looking, and
+> onboarding prompts you thought you'd finished keep reappearing. If that
+> happens, check which account owns the data before assuming something is
+> broken:
+>
+> ```bash
+> sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
+>   "SELECT u.email, COUNT(t.id) AS templates
+>      FROM users u LEFT JOIN workout_templates t ON t.user_id = u.id
+>     GROUP BY u.id;"
+> ```
+>
+> The fix is to mint a fresh PAT while signed in as the right account and
+> repoint your MCP client at it.
+
 ## Step 10: Mint your first PAT
 
 Click the user icon (top-right) -> Settings -> Tokens -> "Create token." Name it

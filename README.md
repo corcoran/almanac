@@ -123,7 +123,7 @@ See [reference/mcp-auth.md](reference/mcp-auth.md) for the full authentication a
 
 ### Auth
 
-- **One user or several** — the allowlist decides. Each allowlisted email gets its own account, provisioned automatically on first sign-in; there's no separate account-creation step. The first account on a fresh instance is bootstrapped as admin, so you're never locked out of the admin tooling.
+- **One user or several** — the allowlist decides. Each allowlisted email gets its own account, provisioned automatically on first sign-in; there's no separate account-creation step. The first account on a fresh instance is bootstrapped as admin, so you're never locked out of the admin tooling — make sure that first sign-in is *you* (see the [deploy runbook](deploy/README.md), Step 9, for the cached-session gotcha and how to reassign it).
 - **Three-layer allowlist** — oauth2-proxy (browser SSO), API (account provisioning), and MCP (OAuth flow) all enforce the same `allowed-users.txt` file.
 - **OAuth tokens are real PATs** — minted via the API, stored in SQLite, visible and revocable in the web Settings panel.
 - **Per-user data isolation** — every record is scoped to its owner. Reads and writes are enforced against the authenticated user at the data layer, so one account never sees or touches another's data.

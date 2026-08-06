@@ -411,6 +411,10 @@ async function onSubmit(): Promise<void> {
         );
       }
       // 3) Phase.
+      // Send tdee_override ONLY when the user typed their own TDEE. When they
+      // accept the displayed estimate, let the server compute it so the row
+      // records tdee_source: "formula" instead of falsely claiming the user
+      // asserted a number the server produced.
       const payload: Record<string, unknown> = {
         name: nameStr.value.trim(),
         intent: phaseType.value,
@@ -420,8 +424,8 @@ async function onSubmit(): Promise<void> {
         base_carb_g: parseMacro(carbStr.value),
         base_fat_g: parseMacro(fatStr.value),
         started_on: startedOn.value,
-        tdee_override: tdeeVal,
       };
+      if (tdeeUserEdited.value) payload.tdee_override = tdeeVal;
       if (plannedEndOn.value.trim() !== "") payload.planned_end_on = plannedEndOn.value.trim();
       if (notesStr.value.trim() !== "") payload.notes = notesStr.value.trim();
       await props.client.post("/v1/nutrition-phases", payload, NutritionPhaseResponseSchema);

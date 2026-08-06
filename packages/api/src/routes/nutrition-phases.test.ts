@@ -250,10 +250,15 @@ describe("/api/v1/nutrition-phases", () => {
     const body = r.json();
     // Structured envelope per spec — NOT the platform-standard {error:{code,...}}.
     expect(body.error).toBe("tdee_unavailable");
-    expect(body.reason).toBe("no_measured_tdee_yet");
-    expect(body.required_action).toBe("provide_tdee_override");
+    expect(body.reason).toBe("weight_required");
+    expect(body.required_action).toBe("log_weight");
     expect(body.hints.missing_profile_fields).toEqual(["weight_kg"]);
     expect(typeof body.hints.suggestion).toBe("string");
+    // The suggestion must point at log_weight, not route around the block via
+    // tdee_override (which would persist tdee_source: "user_asserted" for a
+    // number the server computed itself).
+    expect(body.hints.suggestion).not.toContain("tdee_override");
+    expect(body.hints.suggestion).toContain("log_weight");
   });
 
   it("succeeds with computed TDEE (no override) once body weight is logged", async () => {
@@ -290,6 +295,90 @@ describe("/api/v1/nutrition-phases", () => {
     expect(body.daily_kcal_target).toBe(1700);
     // deficit_kcal = 1700 − tdee_at_phase_start (signed)
     expect(body.deficit_kcal).toBe(1700 - body.tdee_at_phase_start);
+  });
+
+  it("accepts a weigh-in dated TODAY as satisfying the weight gate", async () => {
+    // Regression (the onboarding dead-end): the weight gate used to read the
+    // back-calc window [asOf-60, asOf] with asOf = today-1, so a weigh-in dated
+    // TODAY fell outside it and could not lift the gate. Both real callers stamp
+    // today — the web modal posts measured_on = started_on (defaults to today),
+    // and an MCP agent asked for "your current weight" passes today. The user
+    // logged a weight, hit 422 `weight_required`, logged again, and looped
+    // forever. The existence check is now scoped to "any weigh-in on or before
+    // today", while the back-calc still stops at yesterday.
+    app = setup();
+    const today = currentUserDate(new Date(), "UTC");
+    app.db
+      .prepare("INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, ?, 82.0)")
+      .run(today);
+    const { tdee_override: _t, deficit_kcal: _d, ...partial } = validCutBody;
+    void _t;
+    void _d;
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/v1/nutrition-phases",
+      headers: auth,
+      payload: { ...partial, daily_kcal_target: 1700 },
+    });
+    expect(r.statusCode).toBe(201);
+    const body = r.json();
+    // Server-computed, NOT user_asserted — the whole point of dropping the
+    // tdee_override workaround the old envelope used to recommend.
+    expect(body.tdee_source).toBe("formula");
+    expect(body.tdee_at_phase_start).toBeGreaterThan(0);
+  });
+
+  it("anchors Mifflin to a today-only weigh-in instead of the default body", async () => {
+    // With the ONLY weigh-in dated today, the back-calc window (which stops at
+    // yesterday) is empty. The Mifflin anchor must still come from that weigh-in
+    // rather than computeTDEE's fabricated 80kg fallback — otherwise the gate
+    // would pass but snapshot a TDEE for a body the user doesn't have.
+    const today = currentUserDate(new Date(), "UTC");
+    const tdeeFor = async (weightKg: number): Promise<number> => {
+      if (app) await app.close();
+      app = setup();
+      app.db
+        .prepare("INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, ?, ?)")
+        .run(today, weightKg);
+      const { tdee_override: _t, deficit_kcal: _d, ...partial } = validCutBody;
+      void _t;
+      void _d;
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/nutrition-phases",
+        headers: auth,
+        payload: { ...partial, daily_kcal_target: 1500 },
+      });
+      expect(r.statusCode).toBe(201);
+      return r.json().tdee_at_phase_start as number;
+    };
+    // A 60kg and a 110kg user must not snapshot the same TDEE. If the anchor
+    // fell back to the 80kg default these would be identical.
+    expect(await tdeeFor(60)).not.toBe(await tdeeFor(110));
+  });
+
+  it("reports no missing profile fields once a weigh-in exists (envelope self-consistency)", async () => {
+    // The refusal branch and getMissingProfileFields must agree. Previously the
+    // hint list was existence-scoped while the refusal was window-scoped, so a
+    // today-only weigh-in produced the self-contradicting envelope
+    // `reason: "weight_required"` + `missing_profile_fields: []`. With the two
+    // predicates unified, a user who reaches the refusal ALWAYS has weight_kg
+    // listed, and a user with a weigh-in never reaches the refusal at all.
+    app = setup();
+    const today = currentUserDate(new Date(), "UTC");
+    app.db
+      .prepare("INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, ?, 82.0)")
+      .run(today);
+    const { tdee_override: _t, deficit_kcal: _d, ...partial } = validCutBody;
+    void _t;
+    void _d;
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/v1/nutrition-phases",
+      headers: auth,
+      payload: { ...partial, daily_kcal_target: 1700 },
+    });
+    expect(r.statusCode).not.toBe(422);
   });
 
   // ---- Phase invariant violations ----------------------------------------
@@ -481,6 +570,107 @@ describe("/api/v1/nutrition-phases", () => {
       expect(body.suggested_macros).not.toBeNull();
       // 80 kg * 2.4 g/kg (cut) = 192 g protein.
       expect(body.suggested_macros.protein_g).toBe(192);
+    });
+
+    // ---- preview vs. server agreement (the invariant-check divergence) ------
+    //
+    // The web enables Save against /v1/phase-estimate, but the invariant check
+    // runs against resolveTdeeFromDb. If those two disagree, a maintenance phase
+    // sitting just inside the +/-5% band against the preview lands OUTSIDE it
+    // against the server, producing a 400 on a form that showed a valid state.
+    // The pair below pins exactly when they agree and when they don't.
+
+    it("agrees with the phase-created TDEE once the profile is saved and a weigh-in exists", async () => {
+      // This is the web modal's real ordering: PATCH the profile, POST the
+      // weigh-in, THEN POST the phase. By phase time every value the preview
+      // used is persisted, so both sides read identical inputs and a
+      // maintenance phase targeting exactly the previewed TDEE succeeds.
+      app = setup();
+      const today = currentUserDate(new Date(), "UTC");
+      app.db
+        .prepare("INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, ?, 80.0)")
+        .run(today);
+      app.db.prepare("UPDATE users SET activity_level = 'moderate' WHERE id = 1").run();
+
+      const est = await app.inject({
+        method: "GET",
+        url: "/api/v1/phase-estimate?activity=moderate&phase_type=maintenance",
+        headers: auth,
+      });
+      const previewTdee = est.json().tdee as number;
+
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/nutrition-phases",
+        headers: auth,
+        payload: {
+          name: "Maintain",
+          intent: "maintenance",
+          phase_type: "maintenance",
+          daily_kcal_target: previewTdee,
+          base_protein_g: 160,
+          base_carb_g: 180,
+          base_fat_g: 55,
+          started_on: today,
+        },
+      });
+      expect(r.statusCode).toBe(201);
+      // Exact agreement — not merely "within the band". deficit_kcal = 0 proves
+      // the server resolved the very number the preview displayed.
+      expect(r.json().tdee_at_phase_start).toBe(previewTdee);
+      expect(r.json().deficit_kcal).toBe(0);
+    });
+
+    it("diverges from the preview when previewed profile fields were never saved", async () => {
+      // The reachable failure mode: /v1/phase-estimate honors typed height/sex/
+      // dob/activity, but resolveTdeeFromDb reads ONLY the stored profile. If a
+      // caller previews profile values and then creates a phase WITHOUT
+      // persisting them, the two numbers differ and the invariant check can
+      // reject a target the preview endorsed.
+      //
+      // The web modal does not hit this — buildProfilePatch persists exactly the
+      // fields estimateUrl previews, and it PATCHes before the phase POST (see
+      // the sibling test above). This documents the contract that ordering
+      // depends on: any future caller that previews a profile field MUST save it
+      // before creating the phase.
+      app = setup();
+      const today = currentUserDate(new Date(), "UTC");
+      app.db
+        .prepare("INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, ?, 80.0)")
+        .run(today);
+      // activity_level stays NULL server-side, so resolveTdeeFromDb falls back
+      // to seedActivityMultiplier (1.4) while the preview honors the typed
+      // "very_active" (1.9). That ~36% multiplier gap dwarfs the 5% band — it is
+      // the largest single driver of preview/server divergence, which is exactly
+      // why the modal PATCHes activity_level before creating the phase.
+      const est = await app.inject({
+        method: "GET",
+        url: "/api/v1/phase-estimate?activity=very_active&phase_type=maintenance",
+        headers: auth,
+      });
+      const previewTdee = est.json().tdee as number;
+
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/nutrition-phases",
+        headers: auth,
+        payload: {
+          name: "Maintain",
+          intent: "maintenance",
+          phase_type: "maintenance",
+          daily_kcal_target: previewTdee,
+          base_protein_g: 160,
+          base_carb_g: 180,
+          base_fat_g: 55,
+          started_on: today,
+        },
+      });
+      // Previewed 1.9 vs stored-null 1.4 puts the target outside the band.
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error.message).toMatch(/maintenance requires/);
+      // Pin the direction: the preview was the HIGHER number, so a user who
+      // accepted it would be told their own maintenance target is invalid.
+      expect(previewTdee).toBeGreaterThan(2448);
     });
 
     it("previews height/sex/dob into the TDEE estimate without persisting them", async () => {

@@ -55,32 +55,41 @@ export function formatServerNow(tz: string, now: Date = new Date()): string {
 }
 
 /**
- * Build a cached resolver for the user's IANA timezone, defaulting to "UTC"
- * if the profile field is unset or the API fetch fails. The cache lives for
- * the lifetime of the MCP server (single-user v1; timezone changes are rare).
- * `update_user_profile` callers wanting a fresh value can restart the server.
+ * Resolves the user's IANA timezone for the `_meta` envelope, memoized.
  *
- * Used by the dispatcher to build the `_meta` envelope — we never fail a
- * tool call just because timezone lookup hiccuped, so this layer always
- * resolves with a string.
+ * The cache has no TTL by design: a timezone changes only when the user
+ * writes their profile, and that write calls `invalidate()`. A TTL would
+ * leave a stale window for no benefit. Without invalidation this cached for
+ * the entire process lifetime, so `_meta.user_tz` served the first value
+ * ever resolved until the client reconnected.
  */
-export function makeUserTzResolver(deps: ToolDeps): () => Promise<string> {
+export type UserTzResolver = {
+  get: () => Promise<string>;
+  invalidate: () => void;
+};
+
+export function makeUserTzResolver(deps: ToolDeps): UserTzResolver {
   let cached: string | undefined;
-  return async () => {
-    if (cached !== undefined) return cached;
-    try {
-      const user = await deps.api.request<{ timezone?: string | null }>(
-        "GET",
-        "/api/v1/users/me",
-        undefined,
-        { bearer: deps.currentToken() },
-      );
-      const tz = user?.timezone;
-      cached = typeof tz === "string" && tz.length > 0 ? tz : "UTC";
-    } catch {
-      cached = "UTC";
-    }
-    return cached;
+  return {
+    get: async () => {
+      if (cached !== undefined) return cached;
+      try {
+        const user = await deps.api.request<{ timezone?: string | null }>(
+          "GET",
+          "/api/v1/users/me",
+          undefined,
+          { bearer: deps.currentToken() },
+        );
+        const tz = user?.timezone;
+        cached = typeof tz === "string" && tz.length > 0 ? tz : "UTC";
+      } catch {
+        cached = "UTC";
+      }
+      return cached;
+    },
+    invalidate: () => {
+      cached = undefined;
+    },
   };
 }
 

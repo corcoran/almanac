@@ -100,12 +100,12 @@ describe("start_nutrition_phase", () => {
   it("cold-start: surfaces the structured 422 tdee_unavailable envelope as a ToolError (isError content)", async () => {
     const envelope = {
       error: "tdee_unavailable",
-      reason: "no_measured_tdee_yet",
-      required_action: "provide_tdee_override",
+      reason: "weight_required",
+      required_action: "log_weight",
       hints: {
         missing_profile_fields: ["weight_kg"],
         suggestion:
-          "Discuss the user's stats, activity level, and goals to land on a TDEE estimate, then call start_nutrition_phase with tdee_override set.",
+          "Ask the user for their current body weight and record it with log_weight, then retry — the server computes the TDEE estimate itself.",
       },
     };
     const fetchImpl = vi.fn().mockResolvedValueOnce(mockJsonResponse(422, envelope));

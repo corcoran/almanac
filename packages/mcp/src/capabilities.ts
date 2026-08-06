@@ -307,7 +307,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
       when: "A brand-new user, or get_next_best_action reports onboarding_complete=false.",
       steps: [
         "Call get_next_best_action — it names the first unmet gate as the headline.",
-        "complete_profile: confirm timezone, dob, height_cm, sex, preferred_unit_system via update_user_profile. The account itself already exists — it was provisioned at sign-in.",
+        "complete_profile: confirm timezone, dob, height_cm, sex, preferred_unit_system, and activity_level via update_user_profile. The account itself already exists — it was provisioned at sign-in.",
         "log_initial_weight: log the user's current weight so TDEE can move off the formula baseline.",
         "start_nutrition_phase: if no goal stated, start a provisional maintenance phase off formula-based TDEE; note it recalibrates over ~14 days.",
         "create_workout_templates: ask the user's training split, then define_workout_template for each day.",
@@ -365,7 +365,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
         "Confirm timezone first — naked-local timestamps depend on it.",
         "Confirm dob, height_cm, sex (required for TDEE math). Update via update_user_profile.",
         "Confirm preferred_unit_system (metric/imperial).",
-        "Suggest start_nutrition_phase with phase_type + either deficit_kcal or daily_kcal_target once the basics land. If TDEE can't be computed yet (no weight logged), the tool returns a `tdee_unavailable` envelope — ask the user about activity level/goals and call again with `tdee_override` set.",
+        "Suggest start_nutrition_phase with phase_type + either deficit_kcal or daily_kcal_target once the basics land. start_nutrition_phase returns a `tdee_unavailable` envelope when no body weight has been logged. Log a weight, then retry — the server computes the estimate. Pass tdee_override only when the user asserts a specific TDEE.",
         "Explain that TDEE confidence climbs over ~14 days of weigh-ins.",
       ],
     },
