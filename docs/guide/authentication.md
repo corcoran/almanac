@@ -314,6 +314,14 @@ The two client pairs may be the same client (Google's model) or two distinct
 ones (Keycloak's). Compose defaults the `ALMANAC_MCP_OAUTH_*` pair to the
 `OAUTH2_PROXY_*` values, so set them explicitly only when they differ.
 
+Set `OAUTH2_PROXY_BACKEND_LOGOUT_URL` to the issuer's `end_session_endpoint`
+as well, or signing out of Almanac leaves the provider session running and the
+next request signs you straight back in:
+
+```bash
+OAUTH2_PROXY_BACKEND_LOGOUT_URL=https://idp.example.com/realms/almanac/protocol/openid-connect/logout?id_token_hint={id_token}
+```
+
 Register `https://almanac.example.com/oauth/callback` as a redirect URI on the
 MCP client. Almanac verifies the `id_token` signature against the issuer's JWKS
 and requires `email_verified` to be true, so the provider must issue a verified
