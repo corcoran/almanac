@@ -22,10 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **MCP OAuth callback is now `/oauth/callback`** (was `/oauth/google/callback`).
-  Add the new redirect URI to your OAuth client before updating, or sign-in
-  fails with `redirect_uri_mismatch`. `ALMANAC_MCP_OAUTH_CALLBACK_PATH` keeps
-  the old value if you prefer.
+- **MCP OAuth callback is now `/oauth/callback`**, configurable via
+  `ALMANAC_MCP_OAUTH_CALLBACK_PATH`.
 - **Partial MCP OAuth config now fails at boot** instead of silently falling
   back to token-only mode, which looked identical to disabling the feature.
 - **Browser sign-in skips the provider-picker page.** Only one provider is ever

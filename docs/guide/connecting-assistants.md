@@ -173,10 +173,6 @@ toast and butter, and a flat white". It should estimate the calories and macros,
 log them, and show you what it recorded. The meal then appears in the web UI and
 via `get_macros_today`.
 
-If a token authenticates as the wrong account, or sign-in works but Almanac
-returns 403, see
-[Authentication → Verifying and failure modes](/guide/authentication#verifying-and-failure-modes).
-
 ## Next steps
 
 - [Architecture](/guide/architecture) — what happens after a tool call arrives

@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * Resolved, validated LLM configuration. Read once at boot. The provider is a
- * reserved seam — only "anthropic" is valid in Spec 1; a non-anthropic value
- * fails fast so the name is reserved without a multi-provider implementation.
+ * reserved seam — only "anthropic" is valid; a non-anthropic value fails fast
+ * so the name is reserved without a multi-provider implementation.
  */
 export type LlmConfig = {
   enabled: boolean;

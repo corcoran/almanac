@@ -31,8 +31,8 @@ const FullWorkoutShape = z.object({
   exercises: z.array(ExerciseInstanceInputSchema),
 });
 
-// `display_order` on `add` deviations is intentionally optional — the
-// resolver auto-assigns max+1 when omitted (per Task 13 deviation rules).
+// `display_order` on `add` deviations is optional — the resolver auto-assigns
+// max+1 when omitted.
 const DeviationSkipSchema = z.object({
   op: z.literal("skip"),
   exercise_id: IdSchema,

@@ -17,9 +17,8 @@ export interface ViewedDayStores {
  *   IS today so it hits the live `/v1/signals/today` (matches the canonical
  *   "today" view rather than `?date=today`).
  * - `mealsStore`: `/v1/meals?from_date=X&to_date=X` resolves to a single
- *   user-day window, so load `(date, date)` for the viewed day. This is the
- *   regression fix — the meals store was previously only loaded once at boot
- *   (pinned to today) and never reloaded on date change.
+ *   user-day window, so load `(date, date)` for the viewed day. It must be
+ *   reloaded on every date change, not just at boot.
  */
 export async function reloadForViewedDate(
   stores: ViewedDayStores,

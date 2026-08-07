@@ -8,16 +8,9 @@ which copies the file to a temp dir and substitutes the
 generated at runtime via `openssl rand -hex 32`. **Never put a real secret in
 the tracked JSON.**
 
-> **Why is this prose in a README and not `"_comment"` keys in the JSON?**
-> JSON has no comment syntax, and the brief's original plan was to carry
-> explanatory prose in `"_comment"` / `"_comment_<topic>"` top-level keys,
-> since Keycloak's admin REST API generally ignores unknown fields on most
-> resources. **It doesn't for realm import.** Verified live against
-> `quay.io/keycloak/keycloak:26.7.1`: `--import-realm` deserializes the file
-> with Jackson in strict mode, and it rejects **any** unrecognized field —
-> not just top-level ones, at every nesting level (client objects, IdP
-> configs, etc) — with `UnrecognizedPropertyException` and a failed
-> container boot. So all the "why" lives here instead.
+> **Why is this prose in a README and not in the JSON?** Keycloak's
+> `--import-realm` deserializes strictly and rejects any unrecognized field at
+> any nesting level, so the realm file can carry no comments of its own.
 
 ## Session lifetimes
 
@@ -53,7 +46,7 @@ same underlying reason even though they front different things:
 
 Both set `"directAccessGrantsEnabled": true`, which enables the OAuth2
 Resource Owner Password Credentials grant. This exists **for the local
-integration suite** (Task 6): it lets a test obtain a genuinely-signed
+integration suite**: it lets a test obtain a genuinely-signed
 `id_token` by POSTing a username/password directly to the token endpoint,
 without driving a real browser through a redirect. It is a **test
 convenience**, not how real users sign in — production user-facing flows go

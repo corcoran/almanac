@@ -100,14 +100,6 @@ web SSO (`/oauth2/callback`) and one for the MCP OAuth flow
 (`/oauth/callback`). The walkthrough is in
 [Authentication → Creating the Google OAuth client](/guide/authentication#creating-the-google-oauth-client).
 
-::: danger The MCP callback path changed
-It was `/oauth/google/callback`; the default is now `/oauth/callback`. On an
-existing deployment, add the new URI to your provider's authorized redirect
-list — or set `ALMANAC_MCP_OAUTH_CALLBACK_PATH=/oauth/google/callback` to keep
-the old one. Nothing warns you: the mismatch surfaces as `redirect_uri_mismatch`
-on the next MCP sign-in.
-:::
-
 ## Deploy-only
 
 Read by `docker-compose.yml`, not by application code.

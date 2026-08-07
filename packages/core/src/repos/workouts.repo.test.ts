@@ -178,8 +178,8 @@ describe("workouts.repo — createWorkout / findWorkoutById", () => {
   });
 
   it("findWorkoutById orders nested exercise_instances by display_order and sets by set_number", () => {
-    // Insert exercises in REVERSE display_order to verify ORDER BY actually orders
-    // them — see the "Ordering-correctness test pattern" note in Task 10.
+    // Insert in REVERSE display_order so the assertion fails if ORDER BY is
+    // dropped — insertion order would otherwise mask it.
     const { db, userId, push, incline, tpl } = setup();
     const w = createWorkout(db, {
       user_id: userId,

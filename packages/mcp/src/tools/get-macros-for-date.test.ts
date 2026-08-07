@@ -47,7 +47,7 @@ describe("get_macros_for_date", () => {
       summary: string;
     };
     expect(r.day_totals.kcal).toBe(1798);
-    // Full P/C/F totals pass through (was previously undocumented).
+    // Full P/C/F totals pass through.
     expect(r.day_totals.protein_g).toBe(142);
     expect(r.day_totals.carb_g).toBe(180);
     expect(r.day_totals.fat_g).toBe(65);

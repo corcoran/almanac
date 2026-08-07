@@ -192,7 +192,7 @@ function makeSecondDetailFixture() {
 }
 
 function makeWorkoutListFixture() {
-  // List endpoint omits nested exercises[] (per Task 0.4 shape contract).
+  // The list endpoint omits nested exercises[].
   return [
     {
       id: 42,

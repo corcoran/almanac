@@ -169,14 +169,6 @@ Throughout, replace `almanac.example.com` with your own domain.
    port, path, and trailing slash. `http` vs `https`, or a trailing `/`, is a
    mismatch.
 
-   ::: warning Upgrading an instance built before the callback path changed
-   The MCP callback used to be `/oauth/google/callback`. If your client still
-   has only that URI registered, either add `/oauth/callback` alongside it, or
-   set `ALMANAC_MCP_OAUTH_CALLBACK_PATH=/oauth/google/callback` in `.env` to
-   keep the old value. A mismatch shows up as `redirect_uri_mismatch` the next
-   time an assistant signs in.
-   :::
-
    ::: tip Rehearsing locally
    `scripts/local-dev/up.sh` runs oauth2-proxy on `http://localhost:4180`. To use
    the real Google flow locally, also register
@@ -346,10 +338,9 @@ Almanac ──> Keycloak ──┬──> Google      (you, with the account you
                        └──> local users (a family member with no Google account)
 ```
 
-Because Almanac keys on email, brokering Google yields **the same email address
-as signing in with Google directly** — so existing user rows, PATs, and logged
-data all still match. Moving an existing instance behind Keycloak is a
-configuration change, not a migration.
+Because Almanac keys on email, brokering Google yields the same address as
+signing in with Google directly, so accounts, PATs, and logged data all still
+match.
 
 #### Try it locally first
 
@@ -474,104 +465,6 @@ are covered by tests and manual verification, and the Keycloak path has an
 integration suite against a real Keycloak — but they see less mileage. Report
 anything that looks wrong.
 :::
-
-## Verifying and failure modes
-
-After `docker compose up -d`, visit `https://almanac.example.com/` in a browser.
-A correct setup redirects you to Google, then lands you on the Almanac SPA. The
-sections below cover what happens when it doesn't.
-
-### Google shows `redirect_uri_mismatch`
-
-**Symptom:** Google's error page appears instead of the account chooser, naming
-`redirect_uri_mismatch` (often with `Error 400`).
-
-**Cause:** the redirect URI oauth2-proxy sent does not exactly match any URI
-registered on the OAuth client. oauth2-proxy sends whatever is in
-`OAUTH2_PROXY_REDIRECT_URL`.
-
-**Fix:** compare the two strings character by character. Check scheme (`https`,
-not `http`), the hostname, the absence of a port, the `/oauth2/callback` path,
-and the absence of a trailing slash. Google's error page shows the URI it
-received — copy it into the console's Authorized redirect URIs rather than
-retyping it. After editing `.env`, recreate the container:
-
-```bash
-docker compose up -d oauth2-proxy
-```
-
-Console changes can take a minute or two to take effect on Google's side.
-
-### Sign-in works but Almanac returns 403
-
-**Symptom:** Google sign-in completes, then you get a 403 or an "email is not in
-the allowed users list" response rather than the SPA.
-
-**Cause:** the address is not in `allowed-users.txt`. Which layer rejected it
-tells you where: oauth2-proxy rejects before you ever reach Almanac, while the
-API's 403 (`Email is not in the allowed users list`) happens after the proxy let
-you through.
-
-**Fix:** add the address, one per line, to `$ALMANAC_DIR/allowed-users.txt`.
-oauth2-proxy watches the file and reloads it without a restart. The API and MCP
-server read it once at startup, so restart them to pick up the change:
-
-```bash
-docker compose restart almanac-api almanac-mcp
-```
-
-Also check for the mundane causes: a typo, a stray trailing space, a
-`#`-commented line, or a Google account whose primary address differs from the
-one you expected.
-
-### A cached SSO session claims the first admin
-
-**Symptom:** you sign in on a fresh instance and don't have admin tooling, or
-`is_admin` belongs to an address you didn't intend.
-
-**Cause:** the first account created on an empty `users` table is bootstrapped as
-admin. It's decided by whoever signs in first, not by who owns the server. A
-browser holding a Google session from a previous deployment, a test instance, or
-a different account will sail through sign-in and claim admin without ever
-prompting you to choose an account.
-
-**Fix:** before the first login on a fresh install, sign out of Google entirely
-or use a private window, so you're forced to pick the account deliberately. To
-check who got it, and repair it if needed:
-
-```bash
-sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
-  "SELECT id, email, is_admin FROM users;"
-sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
-  "UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';"
-```
-
-Admin is not exclusive — promoting yourself demotes no one, and no data is lost
-either way. Only the admin-only tools (listing users, per-user AI access and
-token limits) are gated.
-
-### A PAT owns the wrong account
-
-**Symptom:** everything appears to work, but your assistant's writes never show
-up in the dashboard, and onboarding prompts you thought you'd completed keep
-coming back.
-
-**Cause:** a PAT is bound to whichever account minted it. If you created the
-token while the browser was signed in as a different identity — the same mix-up
-as above — your MCP client writes to that account while the SPA shows yours.
-Nothing errors, because both accounts are legitimate.
-
-**Fix:** find out which account owns the data:
-
-```bash
-sqlite3 "$ALMANAC_DIR/data/almanac.sqlite" \
-  "SELECT u.email, COUNT(t.id) AS templates
-     FROM users u LEFT JOIN workout_templates t ON t.user_id = u.id
-    GROUP BY u.id;"
-```
-
-Then mint a fresh PAT while signed in as the right account and repoint the MCP
-client at it. Revoke the stray token from Settings → Tokens.
 
 ## Next steps
 

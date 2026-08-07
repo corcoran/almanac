@@ -383,10 +383,10 @@ https://almanac.example.com/oauth/callback
 ```
 
 **[Authentication](/guide/authentication) is the full walkthrough** — creating
-the project, configuring the consent screen, the test-users trap, which console
-value maps to which environment variable, and how to diagnose
-`redirect_uri_mismatch`. Read it now if you haven't set up an OAuth client
-before; you need the client ID and secret in hand before Step 6.
+the project, configuring the consent screen, the test-users trap, and which
+console value maps to which environment variable. Read it now if you haven't
+set up an OAuth client before; you need the client ID and secret in hand
+before Step 6.
 
 ::: tip Verify
 You have three values written down: the client ID (ends in
@@ -656,11 +656,8 @@ the link above — rather than after you've logged a month of data.
 :::
 
 **If the browser never reaches Google**, or reaches it and comes back with an
-error, the failure is in the OAuth configuration rather than the deploy. The
-three common cases — `redirect_uri_mismatch`, a 403 after a successful Google
-sign-in, and a login loop — are diagnosed in
-[Authentication](/guide/authentication#verifying-and-failure-modes). Check the
-proxy's own log first; it names the reason:
+error, the failure is in the OAuth configuration rather than the deploy. Check
+the proxy's own log first; it names the reason:
 
 ```bash
 docker compose logs --tail=100 oauth2-proxy
