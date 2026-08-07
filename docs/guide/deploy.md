@@ -436,13 +436,6 @@ Those four (issuer, client ID, client secret, public URL) must be set together
 or all left blank. All blank is PAT-only mode; a partial set fails at boot
 naming what is missing.
 
-::: warning Upgrading: the MCP callback path changed
-The MCP OAuth callback was `/oauth/google/callback` and now defaults to
-`/oauth/callback`. Register the new URI on your OAuth client, or set
-`ALMANAC_MCP_OAUTH_CALLBACK_PATH=/oauth/google/callback` to keep the old one.
-Browser SSO (`/oauth2/callback`) is unaffected.
-:::
-
 Leave the LLM variables unset unless you want the AI surfaces; see
 [Configuration](/guide/configuration) and `.env.example`.
 

@@ -87,8 +87,7 @@ lets Compose pass `${…:-}` safely.
 
 ::: warning All four, or none
 Setting some but not all of those four is a boot error, not a silent fallback to
-PAT-only. A half-configured deployment used to look identical to a deliberate
-PAT-only one; now it names the missing variables and refuses to start.
+PAT-only. It names the missing variables and refuses to start.
 :::
 
 The issuer is validated at boot as a well-formed URL, but not fetched — the
