@@ -7,10 +7,17 @@ export default defineConfig({
   base: "/",
   lang: "en-US",
   cleanUrls: true,
+  // VitePress only sitemaps rendered pages; the landing page is a static file
+  // in public/ that it never renders, so the root URL needs adding by hand.
+  sitemap: {
+    hostname: "https://almanac-fitness.com",
+    transformItems: (items) => [...items, { url: "/" }],
+  },
   // Specs and plans under docs/superpowers/ are gitignored working notes, not
-  // product docs. VitePress treats every .md under docs/ as a page, so without
-  // this a local build renders them into the site.
-  srcExclude: ["superpowers/**"],
+  // product docs. `_*.md` files are include-partials, not pages. VitePress
+  // treats every .md under docs/ as a page, so without this a local build
+  // renders both into the site.
+  srcExclude: ["superpowers/**", "**/_*.md"],
   head: [
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
@@ -24,19 +31,18 @@ export default defineConfig({
   ],
   themeConfig: {
     search: { provider: "local" },
-    // The nav-bar title links to the landing page, which is a static file in
-    // public/ rather than a VitePress page — so it needs a real browser
-    // navigation, same as the "Overview" entry below. Note this link is used
-    // verbatim (VPNavBarTitle skips normalizeLink when logoLink is set), so it
-    // carries the `base` prefix itself.
+    // The landing page is deliberately a hand-authored static file in public/,
+    // not a VitePress page. That keeps it outside the SPA route map, so links
+    // to it need a real browser navigation. Note this link is used verbatim
+    // (VPNavBarTitle skips normalizeLink when logoLink is set), so it carries
+    // the `base` prefix itself.
     logoLink: { link: "/", target: "_self" },
     nav: [
       { text: "Guide", link: "/guide/" },
       { text: "Deploy", link: "/guide/deploy" },
-      // The landing page is a static file in public/, NOT a VitePress page, so
-      // it isn't in the SPA route map. `target: "_self"` forces a real browser
-      // navigation — a plain internal link 404s in the router without ever
-      // reaching the server.
+      // Same deliberate static landing page as logoLink above: not in the SPA
+      // route map, so `target: "_self"` forces a real browser navigation. A
+      // plain internal link 404s in the router without reaching the server.
       { text: "Overview", link: "/", target: "_self" },
     ],
     sidebar: [
