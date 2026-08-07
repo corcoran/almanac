@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ALMANAC_LLM_INSIGHTS_MODEL` now works on a Docker deployment.** The
+  variable that picks the model behind the insights coach was read by the
+  application and documented in `.env.example`, but Compose never passed it into
+  the API container — so setting it changed nothing and the coach stayed on its
+  default model no matter what you configured. If you have been setting it and
+  wondering why nothing moved, it takes effect now, which means your coach may
+  switch models on the next restart.
+
 ## [1.34.0] - 2026-08-06
 
 ### Added

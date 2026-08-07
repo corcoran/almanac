@@ -101,13 +101,17 @@ services:
       # prod, since NODE_ENV=production is baked into the Dockerfile). Set to
       # debug to surface the quietLog health/version probes when diagnosing.
       ALMANAC_LOG_LEVEL: "${ALMANAC_LOG_LEVEL:-}"
-      # --- AI Meal Assistant (LLM meal-chat + web search). Read by the API only.
+      # --- AI surfaces (meal assistant + insights coach, incl. web search).
+      # Read by the API only.
       # All gated by ALMANAC_LLM_ENABLED (default off) AND a per-user flag, so
       # the feature stays dark until explicitly turned on in the host .env. See
       # .env.example for the full description of each var.
       ALMANAC_LLM_ENABLED: "${ALMANAC_LLM_ENABLED:-false}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # Meal assistant (cheap parser) and insights coach (harder reasoning) run
+      # on separate models.
       ALMANAC_LLM_MODEL: "${ALMANAC_LLM_MODEL:-claude-haiku-4-5}"
+      ALMANAC_LLM_INSIGHTS_MODEL: "${ALMANAC_LLM_INSIGHTS_MODEL:-claude-sonnet-4-6}"
       # Soft daily token limit (advisory; "~N logs left"; never blocks).
       ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT: "${ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT:-}"
       # Hard daily token ceiling (429 circuit-breaker). Unset = no hard cap.
