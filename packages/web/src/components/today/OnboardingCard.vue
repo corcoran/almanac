@@ -38,7 +38,7 @@ function copyUrl() {
           <strong>Add the MCP server</strong>
           <p v-if="reachable">
             In Claude or ChatGPT, add this as a remote MCP server.
-            You'll sign in with Google when prompted.
+            You'll be asked to sign in when prompted.
           </p>
           <p v-else>
             Add this in Claude Code, or any assistant running on this

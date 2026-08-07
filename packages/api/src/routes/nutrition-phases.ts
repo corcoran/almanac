@@ -438,8 +438,8 @@ function resolveTdeeFromDb(
   // back-calc window below stops at yesterday.
   const latestWeightKg = latestWeightUpTo(db, user.id, today);
   if (latestWeightKg === null) {
-    // No weights at all → no usable TDEE. Spec 1 requires at least one
-    // weight to be logged before a phase can be opened without override.
+    // No weights at all → no usable TDEE. A phase needs at least one logged
+    // weight unless it carries an override.
     return null;
   }
 

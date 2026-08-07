@@ -19,6 +19,48 @@ Two caveats specific to this repo:
   list its `api`/`web` call sites. For an **exhaustive monorepo-wide sweep, pair
   LSP with a `grep` on the imported name** (as the release-removal work needed).
 
+## Prose: comments, changelog, docs
+
+**One operator, one deployment — nobody else has installed this.** Write for
+someone who wants to get on with the task, not for a stressed stranger
+migrating a fleet. Verbosity is the default failure mode here — every pass has
+needed cutting, never expanding.
+
+**There is no installed base, so there are no upgrade notes.** Never write "on
+an existing deployment…", "before updating, add…", or a migration path for a
+change that shipped in the same release. If a change needs an action, the user
+takes it once, at deploy time, from the release notes — not from a permanent
+warning box aimed at operators who do not exist. Document the *current* state
+of things; the fact that it used to be different is git history.
+
+**The filter: does this help the next reader do their job?** Not "is it true"
+or "was it hard to work out". If it doesn't help, it's noise.
+
+**Debugging a thing is not documenting it.** Errors hit while building a
+feature — a mistyped redirect URI, a config that had to be tried twice — are
+session detail, not permanent hazards. Write the setup step ("register this
+callback"), not the failure you happened to see getting there. Existing
+troubleshooting sections are a separate, deliberate thing; do not confuse
+adding to them with narrating your own session.
+
+- **Never explain WHY something was changed.** That's what git history is for.
+  A comment saying what a line replaced, what bug it fixed, or which version
+  it was verified against is noise — it goes in the commit message.
+- **Do explain what is non-obvious right now.** A load-bearing invariant, a
+  footgun that will bite, an ordering that looks arbitrary but isn't. Keep it
+  to the fact and its consequence.
+- **Comments go stale.** Anything naming a current default, a pinned version,
+  or "we do X for now" will be wrong within months and nobody will notice.
+- **Changelog entries: what changed, why it matters, one or two sentences.**
+  Skip migration playbooks and risk framing — say the upgrade action only when
+  there genuinely is one (e.g. "add this redirect URI first").
+- **Docs: no stacked admonition boxes.** Three warnings restating the same
+  caveat is worse than one sentence. Prefer a table to a paragraph.
+
+Rough smell test: a comment longer than the function it describes, or a
+changelog bullet longer than three lines, is probably explaining itself
+rather than the code.
+
 ## Null safety
 
 This codebase compiles with `noUncheckedIndexedAccess` (see `tsconfig.base.json`),
@@ -295,6 +337,25 @@ The flow, once the user approves each step:
    launcher, kill the port-bound node procs, `rm` the temp `/tmp/almanac-test.sqlite*`,
    restore any `.claude/launch.json` change). Skip only for changes with no
    user-facing surface (pure refactors/docs) — and say so when you skip.
+0.5. **Rebase the branch into clean commits (REQUIRED before the merge).** This
+   repo is public, so the pushed history is the history people read. A branch
+   that accumulated fix-ups, review responses and typo commits gets rebuilt
+   into a handful grouped by concern — each one independently understandable
+   and revertable.
+
+   ```bash
+   git branch backup-pre-rebase        # safety net
+   git reset --soft <base>             # keep every change, drop the commits
+   git reset -q                        # unstage, then re-add by concern
+   ```
+
+   Non-negotiable checks before dropping the safety branch:
+   - **The tree hash must be unchanged** (`git rev-parse HEAD^{tree}` before
+     and after). A rebase that alters content is a bug, not a cleanup.
+   - **Every commit must typecheck and test standalone**, or it isn't
+     revertable. Mutually-dependent files belong in the same commit — a rename
+     and its caller cannot be split, and trying will fail this check.
+
 1. **Merge** the reviewed feature branch into `master` with `--no-ff`.
 2. **Verify the merged result** — `pnpm typecheck && pnpm lint && pnpm test` must
    all pass on `master` *before* pushing. Don't push a red merge.

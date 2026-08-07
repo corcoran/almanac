@@ -58,29 +58,46 @@ Compose pins the MCP service to `ALMANAC_MCP_TRANSPORT=http`,
 
 ## OAuth 2.1 (MCP + browser SSO)
 
-The stack ships configured for Google as the SSO provider, so the variables
-below name Google credentials. oauth2-proxy also supports GitHub, GitLab, and
-any generic OIDC provider — swap `--provider` in `docker-compose.yml` and supply
-that provider's client ID and secret in the same variables. See
+The stack defaults to Google as the SSO provider, so the examples below use
+Google values — but nothing here is Google-specific. Browser SSO takes any
+provider oauth2-proxy supports, and the MCP OAuth server takes any OpenID
+Connect issuer. See
 [Authentication → Using a different provider](/guide/authentication#using-a-different-provider).
 
 | Variable | Purpose | Required when |
 | --- | --- | --- |
-| `OAUTH2_PROXY_CLIENT_ID` | OAuth client ID, shared by oauth2-proxy and MCP | production |
-| `OAUTH2_PROXY_CLIENT_SECRET` | OAuth client secret | production |
+| `OAUTH2_PROXY_PROVIDER` | oauth2-proxy provider for browser SSO. Defaults to `google`. `github` needs no issuer URL; `oidc` (or `keycloak-oidc`) does. | optional |
+| `OAUTH2_PROXY_OIDC_ISSUER_URL` | Issuer URL when `OAUTH2_PROXY_PROVIDER=oidc`. Ignored by `google` and `github`, and safe to leave blank for them. | `oidc` provider |
+| `OAUTH2_PROXY_SKIP_PROVIDER_BUTTON` | Skip oauth2-proxy's "Sign in with X" interstitial and go straight to the provider. Defaults to `true` — Almanac only ever configures one provider, so the page is an extra click. Set `false` to restore it. | optional |
+| `OAUTH2_PROXY_CLIENT_ID` | OAuth client ID for browser SSO. Also the default for the MCP OAuth client. | production |
+| `OAUTH2_PROXY_CLIENT_SECRET` | OAuth client secret for browser SSO | production |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy session cookie encryption key. Generate fresh; never reuse one across deployments. | production |
 | `OAUTH2_PROXY_REDIRECT_URL` | oauth2-proxy callback URL (`https://<domain>/oauth2/callback`) | production |
+| `ALMANAC_MCP_OIDC_ISSUER` | OIDC issuer the MCP OAuth server delegates sign-in to, e.g. `https://accounts.google.com`. Discovery supplies the authorization, token and JWKS endpoints. | MCP OAuth mode |
+| `ALMANAC_MCP_OAUTH_CALLBACK_PATH` | Path the provider redirects back to, appended to `ALMANAC_MCP_PUBLIC_URL`. Defaults to `/oauth/callback`. | optional |
 | `ALMANAC_MCP_OAUTH_CLIENT_ID` | Client ID for the MCP OAuth flow. Compose defaults it to `${OAUTH2_PROXY_CLIENT_ID}`. | MCP OAuth mode |
 | `ALMANAC_MCP_OAUTH_CLIENT_SECRET` | Client secret for the MCP OAuth flow. Compose defaults it to `${OAUTH2_PROXY_CLIENT_SECRET}`. | MCP OAuth mode |
 | `ALMANAC_MCP_PUBLIC_URL` | Public origin for the MCP OAuth issuer (`https://<domain>`), also used to build the provider redirect URI | MCP OAuth mode |
 
-Leave the three `ALMANAC_MCP_OAUTH_*` / `ALMANAC_MCP_PUBLIC_URL` values blank to
-run the MCP server in **PAT-only mode** — no OAuth discovery endpoints, manual
-token required. A blank `ALMANAC_MCP_PUBLIC_URL` is treated as unset rather than
-failing URL validation, which is what lets Compose pass `${…:-}` safely.
+Leave the four `ALMANAC_MCP_OIDC_ISSUER` / `ALMANAC_MCP_OAUTH_CLIENT_ID` /
+`ALMANAC_MCP_OAUTH_CLIENT_SECRET` / `ALMANAC_MCP_PUBLIC_URL` values blank to run
+the MCP server in **PAT-only mode** — no OAuth discovery endpoints, manual token
+required. Blank is treated as unset rather than failing validation, which is what
+lets Compose pass `${…:-}` safely.
+
+::: warning All four, or none
+Setting some but not all of those four is a boot error, not a silent fallback to
+PAT-only. A half-configured deployment used to look identical to a deliberate
+PAT-only one; now it names the missing variables and refuses to start.
+:::
+
+The issuer is validated at boot as a well-formed URL, but not fetched — the
+discovery document is retrieved lazily on first use and cached, so your identity
+provider does not have to be reachable when the container starts.
 
 Two redirect URIs must be registered with the provider: one for oauth2-proxy's
-web SSO and one for the MCP OAuth flow. The walkthrough is in
+web SSO (`/oauth2/callback`) and one for the MCP OAuth flow
+(`/oauth/callback`). The walkthrough is in
 [Authentication → Creating the Google OAuth client](/guide/authentication#creating-the-google-oauth-client).
 
 ## Deploy-only

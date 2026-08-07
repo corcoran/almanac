@@ -23,7 +23,13 @@ services:
     restart: unless-stopped
     command:
       - "--http-address=0.0.0.0:4180"
-      - "--provider=google"
+      - "--provider=${OAUTH2_PROXY_PROVIDER:-google}"
+      - "--oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-}"
+      # Almanac only ever configures ONE provider, so oauth2-proxy's
+      # "Sign in with X" interstitial is a pointless extra click on every
+      # session. Skip straight to the provider. Set
+      # OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=false to get the page back.
+      - "--skip-provider-button=${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:-true}"
       - "--cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}"
       - "--cookie-secure=true"
       - "--cookie-samesite=lax"
@@ -50,7 +56,7 @@ services:
       - "--skip-auth-route=^/token"
       - "--skip-auth-route=^/register"
       - "--skip-auth-route=^/revoke"
-      - "--skip-auth-route=^/oauth/google/"
+      - "--skip-auth-route=^/oauth/"
       # Public health probe.
       - "--skip-auth-route=^/api/v1/health$"
       # Upstreams routed by path prefix. MCP OAuth paths route to the
@@ -156,10 +162,19 @@ services:
       ALMANAC_MCP_TRANSPORT: "http"
       ALMANAC_MCP_HOST: "0.0.0.0"
       ALMANAC_MCP_PORT: "3030"
-      # OAuth 2.1 for Claude mobile / ChatGPT. Reuses the same Google
-      # OAuth credentials. Leave blank to disable (PAT-only mode).
-      ALMANAC_MCP_OAUTH_CLIENT_ID: "${OAUTH2_PROXY_CLIENT_ID:-}"
-      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "${OAUTH2_PROXY_CLIENT_SECRET:-}"
+      # OAuth 2.1 for Claude mobile / ChatGPT. Drives against the configured
+      # OIDC issuer (Google by default, or any OIDC provider — e.g. a
+      # self-hosted Keycloak — via ALMANAC_MCP_OIDC_ISSUER). Client
+      # id/secret default to the same credentials as oauth2-proxy (Google's
+      # single-client model), but can be set independently — required for
+      # Keycloak, whose fixture deliberately mints two distinct clients
+      # (almanac-web for oauth2-proxy, almanac-mcp for MCP OAuth), which the
+      # shared OAUTH2_PROXY_CLIENT_* vars can't express. Leave everything
+      # blank to disable (PAT-only mode).
+      ALMANAC_MCP_OIDC_ISSUER: "${ALMANAC_MCP_OIDC_ISSUER:-}"
+      ALMANAC_MCP_OAUTH_CALLBACK_PATH: "${ALMANAC_MCP_OAUTH_CALLBACK_PATH:-/oauth/callback}"
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "${ALMANAC_MCP_OAUTH_CLIENT_ID:-${OAUTH2_PROXY_CLIENT_ID:-}}"
+      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "${ALMANAC_MCP_OAUTH_CLIENT_SECRET:-${OAUTH2_PROXY_CLIENT_SECRET:-}}"
       ALMANAC_MCP_PUBLIC_URL: "${ALMANAC_MCP_PUBLIC_URL:-}"
       ALMANAC_ALLOWED_EMAILS: "/emails/allowed-users.txt"
     expose:
@@ -211,7 +226,7 @@ services:
   #
   # Scope is opt-in via --label-enable: only the three services carrying the
   # `com.centurylinklabs.watchtower.enable=true` label are watched. oauth2-proxy
-  # is deliberately NOT labelled — its image is pinned (v7.6.0) and must not move.
+  # is deliberately NOT labelled — its image is pinned (v7.15.3) and must not move.
   #
   # Auth: the almanac images are private, so watchtower reads the deploying
   # user's docker creds (the same ~/.docker/config.json that `docker login
@@ -240,6 +255,90 @@ services:
     networks:
       - default
 
+  # Optional self-hosted OIDC provider, for operators who want to run their
+  # own identity provider instead of Google (e.g. no Google Workspace, or a
+  # preference to keep auth off a third party). Opt-in via a compose
+  # profile — `docker compose up -d` never starts this; you must explicitly
+  # request it:
+  #
+  #   docker compose --profile keycloak up -d
+  #
+  # This is a PRODUCTION-shaped Keycloak, not the local-dev fixture
+  # (scripts/local-dev/keycloak.sh, which uses ephemeral H2 and start-dev).
+  # Running this for real additionally requires, none of which compose can
+  # do for you:
+  #   - A real hostname + TLS termination in front of it (KC_HOSTNAME below
+  #     must be the public HTTPS URL operators will authenticate against —
+  #     Keycloak in `start` mode enforces hostname/TLS strictness, unlike
+  #     the dev fixture's `start-dev`).
+  #   - A realm + clients created (or imported) for this deployment —
+  #     mirror almanac-web (public, used by oauth2-proxy) and almanac-mcp
+  #     (confidential, used by MCP OAuth) from scripts/local-dev/almanac-realm.json,
+  #     but with your own hostname and freshly generated client secrets.
+  #   - The resulting issuer URL / client credentials fed into
+  #     OAUTH2_PROXY_PROVIDER=oidc, OAUTH2_PROXY_OIDC_ISSUER_URL,
+  #     ALMANAC_MCP_OIDC_ISSUER, and the ALMANAC_MCP_OAUTH_CLIENT_*
+  #     /OAUTH2_PROXY_CLIENT_* vars above.
+  keycloak:
+    profiles: ["keycloak"]
+    image: quay.io/keycloak/keycloak:26.7.1
+    container_name: almanac-keycloak
+    restart: unless-stopped
+    command: start
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USER:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://keycloak-db/keycloak"
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: "${KEYCLOAK_DB_PASSWORD}"
+      # Public HTTPS URL operators authenticate against. `start` (unlike the
+      # dev fixture's `start-dev`) enforces hostname/TLS strictness, so this
+      # MUST match the real domain + scheme once TLS is terminated in front
+      # (host nginx, like the rest of this stack).
+      KC_HOSTNAME: "${KEYCLOAK_HOSTNAME:-https://keycloak.yourdomain.com}"
+      KC_PROXY_HEADERS: xforwarded
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - default
+
+  keycloak-db:
+    profiles: ["keycloak"]
+    image: postgres:16-alpine
+    container_name: almanac-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: "${KEYCLOAK_DB_PASSWORD}"
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
 networks:
   default:
     driver: bridge
+
+volumes:
+  # Only created/used when --profile keycloak is passed.
+  keycloak-db-data:
