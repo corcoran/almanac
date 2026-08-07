@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-08-06
+
 ### Added
 
 - **Documentation site at [almanac-fitness.com](https://almanac-fitness.com).**
@@ -24,26 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verification block showing what healthy output looks like, failure modes now
   sit at the step where they happen, and nginx settings that vary by host are
   called out with the errors they produce.
-
-### Fixed
-
-- **Corrected the MCP OAuth callback path in `.env.example`.** It documented a
-  URL that Google would never redirect to, so following it produced a
-  `redirect_uri_mismatch` with nothing to explain it.
-- **The first-boot instructions no longer describe log lines that do not
-  exist.** The runbook told you to watch for two specific messages during the
-  first `docker compose up`; neither string has ever been in the codebase, so a
-  patient operator could wait indefinitely and conclude the deploy had failed.
-  Verification now points at the health endpoint instead.
-- **Corrected the MCP URL handed out for assistant setup.** It carried a
-  trailing slash that the PAT-only listener rejects, so the copy-paste config
-  returned a 404 for anyone who had not enabled MCP OAuth.
-- **Documented the per-user flag that gates the AI surfaces.** Setting the
-  environment variables is not enough — each user also needs
-  `llm_logging_enabled`, which has no toggle in the web UI, so the chat buttons
-  simply never appeared with nothing to indicate why.
-
-## [1.34.0] - 2026-08-06
 
 ### Fixed
 
@@ -75,6 +57,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stamped on tool results was resolved once per connection and cached for the
   life of the process, so updating your profile left assistants seeing the old
   zone until they reconnected.
+- **Corrected the MCP OAuth callback path in `.env.example`.** It documented a
+  URL that Google would never redirect to, so following it produced a
+  `redirect_uri_mismatch` with nothing to explain it.
+- **The first-boot instructions no longer describe log lines that do not
+  exist.** The runbook told you to watch for two specific messages during the
+  first `docker compose up`; neither string has ever been in the codebase, so a
+  patient operator could wait indefinitely and conclude the deploy had failed.
+  Verification now points at the health endpoint instead.
+- **Corrected the MCP URL handed out for assistant setup.** It carried a
+  trailing slash that the PAT-only listener rejects, so the copy-paste config
+  returned a 404 for anyone who had not enabled MCP OAuth.
+- **Documented the per-user flag that gates the AI surfaces.** Setting the
+  environment variables is not enough — each user also needs
+  `llm_logging_enabled`, which has no toggle in the web UI, so the chat buttons
+  simply never appeared with nothing to indicate why.
 
 ### Changed
 
