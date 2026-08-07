@@ -150,12 +150,13 @@ plausible future change, not something that works today.
 | `ALMANAC_LLM_TOKENS_PER_SEARCH` | Flat token charge per web search when there's no recent search history to average | `2500` |
 | `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day. At the cap, search is disabled for the turn but meals still log. | unset (uncapped) |
 
-::: warning `ALMANAC_LLM_INSIGHTS_MODEL` and `ALMANAC_LLM_PROVIDER` have no effect under Compose
-Both are read by the application (`packages/core/src/llm/config.ts`), but
-`docker-compose.yml` does not forward them into the `almanac-api` container, so
-setting either in `.env` changes nothing on a Compose deployment — the insights
-coach stays on its default model. Adding them to the `almanac-api` `environment:`
-block alongside `ALMANAC_LLM_MODEL` is what makes them live.
+::: warning `ALMANAC_LLM_PROVIDER` has no effect under Compose
+It is read by the application (`packages/core/src/llm/config.ts`) but
+`docker-compose.yml` does not forward it into the `almanac-api` container, so
+setting it in `.env` changes nothing on a Compose deployment. That is harmless
+today — `anthropic` is the only accepted value, and it is already the default.
+The variable becomes live if a second provider is ever implemented behind the
+seam.
 :::
 
 ### What it costs
