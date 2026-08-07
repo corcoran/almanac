@@ -4,6 +4,7 @@ import {
   createBodyWeight,
   deleteBodyWeight,
   findBodyWeightById,
+  findLatestWeightKgUpTo,
   listBodyWeights,
   updateBodyWeight,
 } from "./body-weights.repo.js";
@@ -266,5 +267,31 @@ describe("body-weights.repo", () => {
     expect(second.notes).toBe("afternoon");
     // Exactly one row exists for this user.
     expect(listBodyWeights(db, userId).length).toBe(1);
+  });
+
+  it("findLatestWeightKgUpTo returns the latest row at or before the bound (inclusive)", () => {
+    const db = freshDb();
+    const userId = seedUser(db);
+    createBodyWeight(db, { user_id: userId, measured_on: "2026-08-05", weight_kg: 74.5 });
+    createBodyWeight(db, { user_id: userId, measured_on: "2026-08-07", weight_kg: 73.94 });
+    // Bound equals the latest row's date — inclusive, so it wins.
+    expect(findLatestWeightKgUpTo(db, userId, "2026-08-07")).toBe(73.94);
+    // Bound between the two rows — the earlier one wins.
+    expect(findLatestWeightKgUpTo(db, userId, "2026-08-06")).toBe(74.5);
+  });
+
+  it("findLatestWeightKgUpTo ignores future-dated rows", () => {
+    const db = freshDb();
+    const userId = seedUser(db);
+    createBodyWeight(db, { user_id: userId, measured_on: "2026-08-09", weight_kg: 90 });
+    expect(findLatestWeightKgUpTo(db, userId, "2026-08-07")).toBeNull();
+  });
+
+  it("findLatestWeightKgUpTo returns null with no weights and ignores other users' rows", () => {
+    const db = freshDb();
+    const userId = seedUser(db);
+    const otherId = seedUser(db, { name: "other" });
+    createBodyWeight(db, { user_id: otherId, measured_on: "2026-08-07", weight_kg: 60 });
+    expect(findLatestWeightKgUpTo(db, userId, "2026-08-07")).toBeNull();
   });
 });

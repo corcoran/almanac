@@ -77,6 +77,27 @@ describe("computeTdeeForUser", () => {
     expect(() => computeTdeeForUser(db, 9999, new Date("2026-05-21T20:00:00Z"))).toThrow();
   });
 
+  it("anchors Mifflin on a today-dated weigh-in even though the back-calc window ends yesterday", () => {
+    const { db, userId } = setup();
+    // 2026-08-07T16:00Z = 12:00 in Toronto → user-local today is 2026-08-07.
+    // The back-calc window ends 2026-08-06, so this weigh-in is outside it —
+    // but it must still anchor the profile-baseline formula.
+    createBodyWeight(db, { user_id: userId, measured_on: "2026-08-07", weight_kg: 60 });
+    const tdee = computeTdeeForUser(db, userId, new Date("2026-08-07T16:00:00Z"));
+    expect(tdee.basis).toBe("profile_baseline");
+    // BMR(60kg, 180cm, 36y, male) = 600 + 1125 − 180 + 5 = 1550; ×1.4 seed
+    // multiplier = 2170. The fabricated-80kg fallback would read 2450.
+    expect(tdee.kcal).toBe(2170);
+  });
+
+  it("ignores a future-dated weigh-in for the Mifflin anchor", () => {
+    const { db, userId } = setup();
+    createBodyWeight(db, { user_id: userId, measured_on: "2026-08-09", weight_kg: 60 });
+    const tdee = computeTdeeForUser(db, userId, new Date("2026-08-07T16:00:00Z"));
+    // No usable anchor → the 80kg baseline, unchanged: BMR(80) = 1750 × 1.4.
+    expect(tdee.kcal).toBe(2450);
+  });
+
   it("excludes the in-progress day from the intake window (ends on the last completed day)", () => {
     const { db, userId } = setup();
     // 20 completed days of flat ~2000-kcal intake + daily weigh-ins, ending the

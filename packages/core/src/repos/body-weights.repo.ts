@@ -63,6 +63,27 @@ export function findBodyWeightById(db: Connection, userId: number, id: number): 
   return row ?? null;
 }
 
+/**
+ * The user's most recent weight at or before `onOrBefore` (inclusive — unlike
+ * `listBodyWeights`, whose `to` bound is exclusive). This is the Mifflin
+ * anchor for cold-start TDEE: pass user-local today so a weigh-in logged
+ * minutes ago still counts, while future-dated rows never do.
+ */
+export function findLatestWeightKgUpTo(
+  db: Connection,
+  userId: number,
+  onOrBefore: string,
+): number | null {
+  const row = db
+    .prepare(
+      `SELECT weight_kg FROM body_weights
+       WHERE user_id = ? AND measured_on <= ?
+       ORDER BY measured_on DESC LIMIT 1`,
+    )
+    .get(userId, onOrBefore) as { weight_kg: number } | undefined;
+  return row?.weight_kg ?? null;
+}
+
 export function listBodyWeights(
   db: Connection,
   userId: number,

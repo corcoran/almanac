@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Day-one TDEE now uses your logged weight.** When the only weigh-in was
+  dated today, the TDEE estimate fell back to a built-in 80 kg body instead of
+  the weight just logged — inflating or deflating the number until the next
+  day. The dashboard's "est" chip and the MCP `get_tdee` tool now anchor on it
+  immediately, matching what starting a phase already snapshots.
+
 - **Signing out now ends the provider's session, not just Almanac's.** Sign-out
   cleared Almanac's cookie and left the identity provider's session running, so
   the next request signed you straight back in. Set

@@ -1,6 +1,7 @@
 import type { Connection } from "../db/connection.js";
 import type { NutritionPhase, PhaseType, TdeeSource } from "../domain/nutrition.js";
 import { addDaysIso, currentUserDate, userDayWindow } from "../domain/user-day.js";
+import { findLatestWeightKgUpTo } from "../repos/body-weights.repo.js";
 import { findActivePhase } from "../repos/nutrition-phases.repo.js";
 import { findStepLogByDate } from "../repos/step-logs.repo.js";
 import { getUntrackedDays } from "../repos/untracked-periods.repo.js";
@@ -70,7 +71,11 @@ export function computeTdeeForUser(db: Connection, userId: number, now: Date): T
       dob: user.dob,
       height_cm: user.height_cm,
       sex: user.sex,
-      latestWeightKg: bodyWeights[bodyWeights.length - 1]?.weight_kg ?? null,
+      // Anchored up to TODAY, not the window tail: when the only weigh-in is
+      // today's, `bodyWeights` (which ends at asOf = today − 1) is empty and
+      // the tail would fall back to computeTDEE's fabricated 80kg default.
+      // Same pattern as the phase route's resolveTdeeFromDb.
+      latestWeightKg: findLatestWeightKgUpTo(db, userId, today),
       activity_level: user.activity_level,
     },
     untrackedDays: getUntrackedDays(db, userId, addDaysIso(asOf, -60), asOf),

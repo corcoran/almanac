@@ -2,6 +2,7 @@ import {
   closeAndStartPhase,
   deletePhase,
   findActivePhase,
+  findLatestWeightKgUpTo,
   findPhaseById,
   type findUserById,
   getUntrackedDays,
@@ -113,41 +114,12 @@ function validatePhaseInvariant(phase_type: PhaseType, deficit_kcal: number, tde
  * but mass does not. Matches `profile_complete` semantics in getTodayContext.
  *
  * This is EXISTENCE-scoped ("has any weigh-in ever been recorded"), and it is
- * fed by the same `latestWeightUpTo` lookup that gates the refusal in
+ * fed by the same `findLatestWeightKgUpTo` lookup that gates the refusal in
  * `resolveTdeeFromDb` — so the envelope can never claim `weight_required`
- * while reporting nothing missing. See the note on `latestWeightUpTo`.
+ * while reporting nothing missing. See the note on `findLatestWeightKgUpTo`.
  */
 function getMissingProfileFields(hasAnyBodyWeight: boolean): string[] {
   return hasAnyBodyWeight ? [] : ["weight_kg"];
-}
-
-/**
- * The user's most recent weigh-in on or before `onOrBefore` (a user-local
- * `YYYY-MM-DD`; `measured_on` is already stored user-local, so a direct string
- * compare is correct — no UTC bucketing involved).
- *
- * This is deliberately SEPARATE from the back-calc window below. The back-calc
- * excludes the in-progress day (`asOf = today - 1`) because today's intake is
- * incomplete — sound for the *measured* math, but not a reason to make a
- * today-dated weigh-in invisible to the *existence* check that gates phase
- * creation. Passing `onOrBefore = today` here lets a weight logged minutes ago
- * (what both the web modal and an MCP agent record) satisfy the gate and anchor
- * Mifflin, while `computeTDEE` still receives only `[asOf-60, asOf]` weights —
- * so no existing user's computed TDEE moves.
- */
-function latestWeightUpTo(
-  db: Parameters<typeof findUserById>[0],
-  userId: number,
-  onOrBefore: string,
-): number | null {
-  const row = db
-    .prepare(
-      `SELECT weight_kg FROM body_weights
-       WHERE user_id = ? AND measured_on <= ?
-       ORDER BY measured_on DESC LIMIT 1`,
-    )
-    .get(userId, onOrBefore) as { weight_kg: number } | undefined;
-  return row?.weight_kg ?? null;
 }
 
 function addDaysIso(iso: string, n: number): string {
@@ -313,7 +285,8 @@ export const registerNutritionPhasesRoutes: FastifyPluginAsyncZod = async (app) 
           // FUTURE-dated weigh-in is the one row this deliberately ignores: it
           // can't anchor today's TDEE, so `weight_kg` is genuinely still needed.
           const hasAnyBodyWeight =
-            latestWeightUpTo(app.db, user.id, currentUserDate(new Date(), user.timezone)) !== null;
+            findLatestWeightKgUpTo(app.db, user.id, currentUserDate(new Date(), user.timezone)) !==
+            null;
           // Structured error envelope per spec §"start_nutrition_phase error
           // contract for incomplete profiles". The envelope shape is declared in
           // TdeeUnavailableErrorSchema and validated here to ensure the contract
@@ -422,7 +395,7 @@ export const registerNutritionPhasesRoutes: FastifyPluginAsyncZod = async (app) 
  * in the wrong target for the entire phase.
  *
  * Note the two DIFFERENT weight lookups, which is the point of this shape:
- *  - the GATE + Mifflin anchor use `latestWeightUpTo(..., today)`, so a
+ *  - the GATE + Mifflin anchor use `findLatestWeightKgUpTo(..., today)`, so a
  *    weigh-in dated today (the common case — both the web modal and an MCP
  *    agent stamp today) counts;
  *  - the back-calc still sees only `[asOf-60, asOf]` with `asOf = today - 1`,
@@ -436,7 +409,7 @@ function resolveTdeeFromDb(
   const asOf = addDaysIso(today, -1);
   // Existence gate. A today-dated weigh-in satisfies it even though the
   // back-calc window below stops at yesterday.
-  const latestWeightKg = latestWeightUpTo(db, user.id, today);
+  const latestWeightKg = findLatestWeightKgUpTo(db, user.id, today);
   if (latestWeightKg === null) {
     // No weights at all → no usable TDEE. A phase needs at least one logged
     // weight unless it carries an override.

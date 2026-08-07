@@ -78,6 +78,9 @@ export function computeTdeeAsOf(db: Connection, userId: number, asOf: string, tz
       dob: user.dob,
       height_cm: user.height_cm,
       sex: user.sex,
+      // Deliberately the window tail, NOT findLatestWeightKgUpTo(today) like
+      // the live paths: a historical snapshot must never see a weigh-in logged
+      // after asOf, or past NET values stop being reproducible.
       latestWeightKg: bodyWeights[bodyWeights.length - 1]?.weight_kg ?? null,
       activity_level: user.activity_level,
     },
