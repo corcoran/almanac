@@ -379,7 +379,7 @@ the MCP endpoint by URL rather than by pasting a token, register the second
 callback as well:
 
 ```
-https://almanac.example.com/oauth/google/callback
+https://almanac.example.com/oauth/callback
 ```
 
 **[Authentication](/guide/authentication) is the full walkthrough** — creating
@@ -420,15 +420,28 @@ Required values for a deploy:
   server's API, where it's the PAT that stdio process uses.)
 
 If you want OAuth-capable MCP clients, also set the public origin the MCP
-server advertises as its OAuth issuer:
+server advertises as its OAuth issuer, plus the OIDC issuer it delegates
+sign-in to:
 
 ```bash
 ALMANAC_MCP_PUBLIC_URL=https://almanac.example.com
+ALMANAC_MCP_OIDC_ISSUER=https://accounts.google.com
 ```
 
 `ALMANAC_MCP_OAUTH_CLIENT_ID` and `ALMANAC_MCP_OAUTH_CLIENT_SECRET` default to
-the `OAUTH2_PROXY_*` values in `docker-compose.yml`, so setting the two
-`OAUTH2_PROXY_*` variables configures both consumers.
+the `OAUTH2_PROXY_*` values in `docker-compose.yml`, so with Google — one client
+serving both consumers — the two `OAUTH2_PROXY_*` variables are enough.
+
+Those four (issuer, client ID, client secret, public URL) must be set together
+or all left blank. All blank is PAT-only mode; a partial set fails at boot
+naming what is missing.
+
+::: warning Upgrading: the MCP callback path changed
+The MCP OAuth callback was `/oauth/google/callback` and now defaults to
+`/oauth/callback`. Register the new URI on your OAuth client, or set
+`ALMANAC_MCP_OAUTH_CALLBACK_PATH=/oauth/google/callback` to keep the old one.
+Browser SSO (`/oauth2/callback`) is unaffected.
+:::
 
 Leave the LLM variables unset unless you want the AI surfaces; see
 [Configuration](/guide/configuration) and `.env.example`.

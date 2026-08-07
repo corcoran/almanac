@@ -30,15 +30,16 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit `.env` and set the Google OAuth credentials and your dev email.
-`.env.example` documents each variable inline; [Configuration](/guide/configuration)
-is the full reference. The stack ships configured for Google — to use another
-provider, see [Authentication → Using a different provider](/guide/authentication#using-a-different-provider).
+Edit `.env` and set your OAuth credentials and dev email. `.env.example`
+documents each variable inline; [Configuration](/guide/configuration) is the
+full reference. The stack defaults to Google, but any provider works — GitHub
+needs only a client ID and secret, and any OpenID Connect issuer (Keycloak,
+Authentik, Zitadel) works by setting an issuer URL. See
+[Authentication](/guide/authentication) for the walkthrough.
 
 ::: tip Skipping OAuth entirely
-If you don't need the real Google sign-in path, you can skip this step and the
-whole Docker layer. Jump to [Without Docker](#without-docker-no-google-oauth)
-below.
+If you don't need a real sign-in path, you can skip this step and the whole
+Docker layer. Jump to [Without Docker](#without-docker-no-oauth) below.
 :::
 
 ## 3. Start everything
@@ -58,9 +59,9 @@ This starts:
 
 Stop everything with `scripts/local-dev/down.sh`.
 
-### Without Docker (no Google OAuth)
+### Without Docker (no OAuth)
 
-If you don't need the real Google sign-in path, skip `.env`, Docker, and
+If you don't need a real sign-in path, skip `.env`, Docker, and
 oauth2-proxy entirely:
 
 ```bash

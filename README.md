@@ -69,7 +69,7 @@ Full documentation is at **[almanac-fitness.com](https://almanac-fitness.com/)**
 
 - [Getting started](https://almanac-fitness.com/guide/getting-started) — install and run locally
 - [Deploy](https://almanac-fitness.com/guide/deploy) — production walkthrough
-- [Authentication](https://almanac-fitness.com/guide/authentication) — Google OAuth, step by step
+- [Authentication](https://almanac-fitness.com/guide/authentication) — Google, GitHub, or any OIDC provider, step by step
 - [Connecting assistants](https://almanac-fitness.com/guide/connecting-assistants) — MCP clients and PATs
 - [Configuration](https://almanac-fitness.com/guide/configuration) — every environment variable
 - [Operations](https://almanac-fitness.com/guide/operations) — updates, backups, recovery
@@ -165,7 +165,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit `.env` and set the required Google OAuth credentials and your dev email. See `.env.example` for documentation on each variable. The stack ships configured for Google; to use another provider, see the [oauth2-proxy provider docs](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/).
+Edit `.env` and set your OAuth credentials and dev email. See `.env.example` for documentation on each variable. The stack defaults to Google, but any provider works — GitHub needs nothing but a client ID and secret, and any OpenID Connect issuer (Keycloak, Authentik, Zitadel) works by setting an issuer URL. See [Authentication](https://almanac-fitness.com/guide/authentication) for the walkthrough.
 
 ### 3. Start everything
 
@@ -181,9 +181,9 @@ This starts:
 
 Stop everything with `scripts/local-dev/down.sh`.
 
-#### Without Docker (no Google OAuth)
+#### Without Docker (no OAuth)
 
-If you don't need the real Google sign-in path, skip `.env`, docker, and
+If you don't need the real OAuth sign-in path, skip `.env`, docker, and
 oauth2-proxy entirely:
 
 ```bash

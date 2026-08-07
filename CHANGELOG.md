@@ -7,14 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Sign in with any OAuth provider, not just Google.** Browser sign-in takes
+  anything oauth2-proxy supports; MCP OAuth takes any OpenID Connect issuer,
+  discovered from `/.well-known/openid-configuration`. Existing Google
+  deployments keep working unchanged.
+- **Optional self-hosted Keycloak**, behind a Compose profile so
+  `docker compose up -d` is unaffected. Useful if you want several users or
+  several sign-in methods — Keycloak brokers Google, GitHub, and local accounts
+  behind one issuer.
+- **`scripts/local-dev/keycloak.sh`** — throwaway Keycloak with a seeded realm,
+  for trying the non-Google path without registering an OAuth app.
+
+### Changed
+
+- **MCP OAuth callback is now `/oauth/callback`** (was `/oauth/google/callback`).
+  Add the new redirect URI to your OAuth client before updating, or sign-in
+  fails with `redirect_uri_mismatch`. `ALMANAC_MCP_OAUTH_CALLBACK_PATH` keeps
+  the old value if you prefer.
+- **Partial MCP OAuth config now fails at boot** instead of silently falling
+  back to token-only mode, which looked identical to disabling the feature.
+- **Browser sign-in skips the provider-picker page.** Only one provider is ever
+  configured, so it was a wasted click. `OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=false`
+  restores it.
+- Sign-in prompts no longer name Google.
+
 ### Fixed
 
-- **`ALMANAC_LLM_INSIGHTS_MODEL` now works on a Docker deployment.** The
-  variable that picks the model behind the insights coach was read by the
-  application and documented in `.env.example`, but Compose never passed it into
-  the API container — so setting it changed nothing and the coach stayed on its
-  default model no matter what you configured. If you have been setting it and
-  wondering why nothing moved, it takes effect now, which means your coach may
+- **Revoking an OAuth token now revokes it.** Revocation only cleared an
+  in-memory cache, so the next request re-validated against the database and
+  access came back. Revoking from Settings was always correct.
+- **ID tokens are now signature-verified** against the issuer's published keys,
+  with issuer and audience checked. They were previously decoded without
+  verification.
+- **`ALMANAC_LLM_INSIGHTS_MODEL` now works under Docker.** Compose never passed
+  it to the API container, so setting it did nothing. Your insights coach may
   switch models on the next restart.
 
 ## [1.34.0] - 2026-08-06
