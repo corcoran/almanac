@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-08-07
+
 ### Added
 
 - **Sign in with any OAuth provider, not just Google.** Browser sign-in takes
@@ -203,4 +205,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Almanac was developed privately before its public release at 1.31.2; earlier
 release notes are not included.
 
-[Unreleased]: https://github.com/corcoran/almanac/compare/v1.34.0...HEAD
+[Unreleased]: https://github.com/corcoran/almanac/compare/v1.35.0...HEAD
