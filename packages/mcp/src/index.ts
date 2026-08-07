@@ -182,6 +182,25 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
       return;
     }
 
+    // No session yet, so the only thing that can follow is an initialize —
+    // which is a POST. Clients that open the SSE stream first (GET) land here;
+    // handing that to a fresh transport gets "Server not initialized" (400),
+    // which reads as a broken server rather than "initialize first". 405 with
+    // Allow tells the client to POST instead.
+    if (req.method !== "POST") {
+      res.statusCode = 405;
+      res.setHeader("content-type", "application/json");
+      res.setHeader("allow", "POST");
+      res.end(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Method Not Allowed: initialize with POST first" },
+          id: null,
+        }),
+      );
+      return;
+    }
+
     // Determine the bearer token. OAuth-mode passes it via bearerOverride
     // (already verified by the auth middleware). PAT-mode extracts it from
     // the Authorization header directly.

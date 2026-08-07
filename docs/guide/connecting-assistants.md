@@ -68,13 +68,22 @@ from the same place.
 
 ## Connecting Claude Code
 
-Register the server by URL in `~/.claude.json` or your project config:
+```bash
+claude mcp add --transport http almanac https://almanac.example.com/mcp \
+  --header "Authorization: Bearer alm_XXXXX"
+```
+
+`/mcp` speaks **Streamable HTTP**, so the transport must be `http`. Registering
+it as `sse` — a different protocol that opens with a `GET` and posts to a
+separate endpoint — fails with `HTTP 405` however valid your token is.
+
+Or write the same thing into `~/.claude.json` (or your project config) by hand:
 
 ```json
 {
   "mcpServers": {
     "almanac": {
-      "type": "url",
+      "type": "http",
       "url": "https://almanac.example.com/mcp",
       "headers": {
         "Authorization": "Bearer alm_XXXXX"
