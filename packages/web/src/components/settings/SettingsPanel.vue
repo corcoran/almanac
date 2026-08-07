@@ -125,7 +125,7 @@ const buildVersion = __APP_VERSION__ === "dev" ? shortSha : __APP_VERSION__;
         <h3 class="subhead">Connect your assistant</h3>
         <p v-if="mcpReachable" class="mcp-lead">
           Add this as a remote MCP server in Claude or ChatGPT to log and review
-          your data by chat. You'll sign in with Google when prompted.
+          your data by chat. You'll be asked to sign in when prompted.
         </p>
         <p v-else class="mcp-lead">
           Add this as an MCP server in Claude Code, or any assistant running on
