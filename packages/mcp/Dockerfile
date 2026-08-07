@@ -45,6 +45,13 @@ ENV ALMANAC_MCP_TRANSPORT=http
 ENV ALMANAC_MCP_HOST=0.0.0.0
 ENV ALMANAC_MCP_PORT=3030
 
+# Stamped by release.yml from github.sha / github.ref_name. Defaults keep
+# locally-built images honest about being unstamped.
+ARG GIT_SHA=unknown
+ENV ALMANAC_GIT_SHA=$GIT_SHA
+ARG GIT_TAG=dev
+ENV ALMANAC_GIT_TAG=$GIT_TAG
+
 EXPOSE 3030
 ENTRYPOINT ["/usr/bin/tini", "--"]
 # --conditions=production selects the dist/*.js branch of @almanac/core's
