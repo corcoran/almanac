@@ -26,9 +26,9 @@ export type TemplateRecommendation = {
    * hits at least one prime / in_window / too_soon group, so the ranking means
    * something. `"low"` for the case where `score` is 0 because every hit group is overdue
    * (fading/detrained), untrained, or has no stim data: the *score* carries no
-   * timing signal. NOTE: this no longer demotes the template — ranking is
+   * timing signal. `"low"` does NOT demote the template — ranking is
    * recency-first (see the sort), so an overdue template still ranks by how
-   * overdue it is. `"low"` is purely an annotation a client can use to caveat
+   * overdue it is. It is purely an annotation a client can use to caveat
    * ("this is an overdue/layoff pick, not a timing-driven one"). The returning-
    * from-layoff case (everything overdue) still produces a defined order —
    * most-overdue first — rather than a meaningless tie.

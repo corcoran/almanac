@@ -220,9 +220,7 @@ export function computeTDEE(input: TdeeInput, config: TdeeConfig = DEFAULT_TDEE_
     });
   }
 
-  // Honest per-logged-day average. Used both for the math and the wrapper —
-  // they always agreed on the value, only disagreed on the denominator
-  // previously (window vs logged days).
+  // Per-logged-day average — the denominator is days with data, not the window.
   const avgKcalIn = kcalSum / daysWithData;
   const avgKcalInWrapper = makeAggregate(avgKcalIn, windowDays, daysWithData);
 

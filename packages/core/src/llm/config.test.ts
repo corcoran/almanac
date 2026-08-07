@@ -71,9 +71,8 @@ describe("loadLlmConfig", () => {
 
   // docker-compose maps optional caps as `"${VAR:-}"`, so an UNSET var arrives
   // as an empty string, not absent. z.coerce.number() turns "" into 0, and the
-  // `.positive()` guard then throws at boot — crashlooping the API and tripping
-  // a Watchtower rollback (observed in prod when HARD_DAILY_TOKEN_CAP was blank).
-  // An empty string must read as "unset", identical to the var being absent.
+  // `.positive()` guard then throws at boot, crashlooping the API. An empty
+  // string must read as "unset", identical to the var being absent.
   it("treats an empty-string optional numeric var as unset (no crash on a blank compose default)", () => {
     const cfg = loadLlmConfig({
       ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT: "",

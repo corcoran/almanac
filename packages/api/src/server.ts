@@ -135,11 +135,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   if (backupPath !== null) app.log.info({ backup: backupPath }, "pre-migration snapshot written");
   runMigrations(db);
 
-  // One-time recompute of frozen daily_net snapshots after the TDEE back-calc
-  // window/slope change (robust-slope release). backfillDailyNet re-snapshots
-  // every intake day via computeTdeeAsOf, inheriting the corrected estimator.
-  // Idempotent + run-once: skipped on every subsequent boot. The pre-migration
-  // backup above already snapshotted the DB before this point.
+  // Re-snapshots every intake day's frozen daily_net via computeTdeeAsOf.
+  // Idempotent + run-once: skipped on every subsequent boot.
   runOnce(db, "net_recompute_2026_06_robust_slope", (d) => backfillDailyNet(d));
 
   app.decorate("db", db);

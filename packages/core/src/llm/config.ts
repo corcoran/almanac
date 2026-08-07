@@ -23,9 +23,8 @@ export type LlmConfig = {
  * docker-compose maps optional vars as `"${VAR:-}"`, so an UNSET var arrives as
  * an empty string rather than absent. Coercing `""` straight through
  * `z.coerce.number()` yields 0, which then fails `.positive()` and throws at
- * boot — crashlooping the API (observed in prod: a blank HARD_DAILY_TOKEN_CAP
- * tripped a Watchtower rollback). Normalize empty/whitespace to `undefined`
- * first so an empty string reads identically to the var being absent.
+ * boot, crashlooping the API. Normalize empty/whitespace to `undefined` first
+ * so an empty string reads identically to the var being absent.
  */
 const emptyToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
 

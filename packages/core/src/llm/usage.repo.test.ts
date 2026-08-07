@@ -190,11 +190,9 @@ describe("usage.repo", () => {
   });
 
   it("perSearchPrice never compounds — search rows with huge input_tokens do not raise it", () => {
-    // Regression for the prod runaway: the old impl averaged (input+output)/
-    // searches over recent SEARCH calls, but a search's input_tokens carries the
-    // web-result bloat, so each search inflated the next one's price
-    // (observed: 2500 → 707 → 4268 → 13378, unbounded). The charge now derives
-    // ONLY from non-search rows, so search bloat can never feed it.
+    // The charge derives ONLY from non-search rows. Averaging over SEARCH calls
+    // would compound without bound — a search's input_tokens carries web-result
+    // bloat, so each search would inflate the next one's price.
     recordLlmUsage(db, {
       userId: 1,
       createdAt: "2026-06-22T12:00:00.000Z",
@@ -210,8 +208,8 @@ describe("usage.repo", () => {
       webSearchRequests: 0,
       billedTokens: 650,
     });
-    // Record several search calls with huge, varied input_tokens (the bloat that
-    // used to compound). The price must stay pinned to the non-search average.
+    // Record several search calls with huge, varied input_tokens. The price must
+    // stay pinned to the non-search average.
     for (const inputTokens of [11274, 7608, 20860]) {
       recordLlmUsage(db, {
         userId: 1,

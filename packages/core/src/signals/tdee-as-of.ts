@@ -8,9 +8,9 @@ import { computeTDEE, type TDEE } from "./tdee.js";
  * Faithful past-date TDEE: every input array is UPPER-bounded to `<= asOf`, so a
  * weigh-in or meal logged after the snapshot date can never leak into a
  * historical TDEE. `computeTDEE` itself only lower-bounds its trailing window —
- * it trusts the caller to pre-filter the future out. That's the bug this exists
- * to close: NET(day D) = intake(D) − computeTdeeAsOf(asOf = D−1) must be
- * reproducible regardless of what gets logged later.
+ * it trusts the caller to pre-filter the future out. That's what this closes:
+ * NET(day D) = intake(D) − computeTdeeAsOf(asOf = D−1) must be reproducible
+ * regardless of what gets logged later.
  *
  * The lower bound is a generous 60-day reach (the longest window computeTDEE
  * can consume, plus slack for the trend-weight ramp). Meals/alcohol are bucketed

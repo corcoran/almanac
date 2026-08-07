@@ -364,10 +364,9 @@ function buildProfilePatch(): Record<string, unknown> | null {
   if (showSexField.value && sexStr.value !== "") patch.sex = sexStr.value;
   if (showDobField.value && !blank(dobStr.value)) patch.dob = dobStr.value;
   if (unitSystem.value !== savedUnitSystem.value) patch.preferred_unit_system = unitSystem.value;
-  // Persist the activity level to the USER profile, not just the TDEE preview.
-  // The activity field is only shown/used on a cold-start (profile_baseline)
-  // phase; before this it seeded the TDEE estimate but was never saved, so the
-  // Settings page showed "Not set" after onboarding.
+  // Persist the activity level to the USER profile, not just the TDEE preview —
+  // the field is only shown on a cold-start (profile_baseline) phase, so this is
+  // the one chance to save it.
   if (props.tdeeBasis === "profile_baseline") patch.activity_level = activityLevel.value;
   return Object.keys(patch).length === 0 ? null : patch;
 }

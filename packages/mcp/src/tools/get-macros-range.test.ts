@@ -96,8 +96,8 @@ describe("get_macros_range", () => {
         // Tracked days at 2000 kcal — these define the expected mean.
         makeDay("2026-05-01", 2000, makeDayTarget(1900, 2000)),
         makeDay("2026-05-02", 2000, makeDayTarget(1900, 2000)),
-        // In-window untracked (vacation) day at a divergent 200 kcal. It has a
-        // day_target present, so the old null-only filter would have kept it.
+        // In-window untracked (vacation) day at a divergent 200 kcal. It carries
+        // a day_target, so filtering on a null target alone would not exclude it.
         makeDay("2026-05-03", 200, makeDayTarget(1900, 200), true),
         makeDay("2026-05-04", 2000, makeDayTarget(1900, 2000)),
       ],

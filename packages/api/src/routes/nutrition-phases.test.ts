@@ -298,14 +298,11 @@ describe("/api/v1/nutrition-phases", () => {
   });
 
   it("accepts a weigh-in dated TODAY as satisfying the weight gate", async () => {
-    // Regression (the onboarding dead-end): the weight gate used to read the
-    // back-calc window [asOf-60, asOf] with asOf = today-1, so a weigh-in dated
-    // TODAY fell outside it and could not lift the gate. Both real callers stamp
-    // today — the web modal posts measured_on = started_on (defaults to today),
-    // and an MCP agent asked for "your current weight" passes today. The user
-    // logged a weight, hit 422 `weight_required`, logged again, and looped
-    // forever. The existence check is now scoped to "any weigh-in on or before
-    // today", while the back-calc still stops at yesterday.
+    // The weight gate checks for any weigh-in on or before TODAY, while the
+    // back-calc window still stops at yesterday. Both real callers stamp today —
+    // the web modal posts measured_on = started_on (defaults to today), and an
+    // MCP agent asked for "your current weight" passes today — so a gate scoped
+    // to the back-calc window would reject the weight the user just logged.
     app = setup();
     const today = currentUserDate(new Date(), "UTC");
     app.db
@@ -322,8 +319,8 @@ describe("/api/v1/nutrition-phases", () => {
     });
     expect(r.statusCode).toBe(201);
     const body = r.json();
-    // Server-computed, NOT user_asserted — the whole point of dropping the
-    // tdee_override workaround the old envelope used to recommend.
+    // Server-computed, NOT user_asserted: a formula-derived TDEE must not be
+    // recorded as something the user asserted.
     expect(body.tdee_source).toBe("formula");
     expect(body.tdee_at_phase_start).toBeGreaterThan(0);
   });

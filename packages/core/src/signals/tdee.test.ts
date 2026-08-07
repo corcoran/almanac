@@ -723,7 +723,7 @@ describe("computeTDEE", () => {
     const out = computeTDEE(input);
     expect(out.basis).toBe("measured_intake");
     expect(out.window_days).toBe(28);
-    // Corrected ~2580, FAR below the old 21-day-window ~2857.
+    // ~2580 over the 28-day window.
     expect(out.kcal).toBeGreaterThan(2560);
     expect(out.kcal).toBeLessThan(2600);
   });

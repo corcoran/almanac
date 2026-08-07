@@ -160,12 +160,11 @@ export function getSearchesForDay(
  * keeps "logs left" honest: a search costs ≈ one log, like any other turn, and
  * the charge tracks real per-turn drift over time.
  *
- * Why not average past SEARCH calls (the original, broken approach): a search's
- * `input_tokens` carries the web-result bloat (10k–20k+), so averaging search
- * rows compounded — each search inflated the next one's price (observed in prod:
- * 2500 → 707 → 4268 → 13378, unbounded). And dividing a multi-search call's
- * fused lump by its search count mixed per-CALL tokens with a per-SEARCH count.
- * A search's true incremental cost is unobservable, so we price it as a normal
+ * Do NOT average past SEARCH calls: a search's `input_tokens` carries the
+ * web-result bloat (10k–20k+), so each search would inflate the next one's
+ * price, compounding without bound. And dividing a multi-search call's fused
+ * lump by its search count mixes per-CALL tokens with a per-SEARCH count. A
+ * search's true incremental cost is unobservable, so we price it as a normal
  * turn — the one cost we CAN measure cleanly (non-search rows).
  */
 export function perSearchPrice(db: Connection, userId: number, fallback: number): number {

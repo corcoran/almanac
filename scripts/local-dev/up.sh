@@ -39,9 +39,9 @@ fi
 
 # The API and MCP read the SAME allowlist file oauth2-proxy is mounted, so all
 # three layers agree — matching what docker-compose.yml does in prod. Passing
-# only $ALMANAC_DEV_EMAIL here (the old behavior) let any OTHER allowlisted
-# person clear the OAuth gate and then get 403'd by the API on every request,
-# which renders as a signed-in-but-empty UI with no explanation.
+# only $ALMANAC_DEV_EMAIL here would let any OTHER allowlisted person clear the
+# OAuth gate and then get 403'd by the API on every request, which renders as a
+# signed-in-but-empty UI with no explanation.
 ALLOWED_EMAILS_SRC="$REPO_ROOT/allowed-users.txt"
 
 PIDFILE=/tmp/almanac-dev-pids

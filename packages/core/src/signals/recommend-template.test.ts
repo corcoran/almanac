@@ -27,9 +27,8 @@ function mkStim(
 describe("recommendTemplate", () => {
   it("ranks the more-recovered template first; score breaks recovery ties", () => {
     // PULL hits Back+Biceps (both prime, avg 100h). PUSH hits Chest+Triceps
-    // (too_soon, avg 30h). Recency-first: PULL (100h) ranks above PUSH (30h).
-    // (Under the old score-first model PULL also won, but via score; here the
-    // reason is recovery.)
+    // (too_soon, avg 30h). Recency-first: PULL (100h) ranks above PUSH (30h) —
+    // the reason is recovery, not score.
     const stim = [
       mkStim(1, "Chest", "too_soon", 30),
       mkStim(2, "Back", "prime", 100),

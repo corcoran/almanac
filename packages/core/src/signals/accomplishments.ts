@@ -223,7 +223,7 @@ function detectWeighInTotal(
 /**
  * Lifetime volume (sum of reps × weight_kg over all weighted sets) milestones.
  * Sets carry no user_id — scoping is via the workouts.user_id parent join, the
- * same pattern the IDOR fix uses for nested entities. Bodyweight sets
+ * same pattern every nested entity uses. Bodyweight sets
  * (weight_kg IS NULL) are excluded. Walks sets in workout-started_at order,
  * accumulating; the tier's earned_on is the user-local day of the set that
  * first pushes the running total to/over the tier.

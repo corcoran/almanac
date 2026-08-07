@@ -21,8 +21,8 @@ import { getTodayContext } from "./today.js";
  * Defaults for the TDEE-refactor phase fields that every test phase needs.
  * Tests can spread + override (e.g. to set planned_end_on) without restating
  * the boilerplate. Mirrors the production "starting a cut at TDEE 2400 with a
- * 500-kcal deficit" shape so per-day numbers (1900 kcal target, 2400
- * maintenance) match what the old fixture asserted before the refactor.
+ * 500-kcal deficit" shape, giving per-day numbers of a 1900 kcal target against
+ * 2400 maintenance.
  */
 const DEFAULT_PHASE: Omit<StartPhaseInput, "user_id" | "started_on" | "name"> = {
   intent: "cut",
@@ -290,9 +290,8 @@ describe("getTodayContext", () => {
       // 21:00 ET on 2026-05-13 = 2026-05-14T01:00:00Z (EDT, UTC-4). User-day is
       // still 2026-05-13. Asking "today" at 2026-05-14T02:00:00Z (= 22:00 ET on
       // the 13th). The meal MUST be summed into today.kcal_in / protein_g_in /
-      // carb_g_in / fat_g_in. Regression guard: previously the helper's UTC-slice
-      // filter would drop this meal because "2026-05-14".slice(0,10) !==
-      // "2026-05-13".
+      // carb_g_in / fat_g_in — a UTC-slice filter would drop it, because
+      // "2026-05-14".slice(0,10) !== "2026-05-13".
       const { db, userId } = setupTzScenario("America/Toronto");
       createMeal(db, {
         user_id: userId,

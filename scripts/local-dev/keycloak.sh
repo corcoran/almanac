@@ -339,8 +339,7 @@ fi
 # requiredActions list (that stays empty) — instead, AuthenticationProcessor
 # .evaluateRequiredActionTriggers() detects the incomplete profile at LOGIN
 # time and the password grant fails with invalid_grant / "Account is not
-# fully set up" (verified live: this is exactly what happened before this
-# was added). Set them so the seeded user is actually usable end to end.
+# fully set up". Set them so the seeded user is actually usable end to end.
 echo "==> seeding user ${EMAIL}"
 USER_ID="$(kc_admin create users -r "$REALM" \
   -s "username=${EMAIL}" \

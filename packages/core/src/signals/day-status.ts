@@ -205,9 +205,8 @@ export function computeDayStatus(
   const baselineByDay = new Map<string, { d: string; k: number }>();
   for (const m of baselineMealRows) {
     const d = currentUserDate(new Date(m.eaten_at), tz);
-    // Restrict to the intended user-local window — replicates the old SQL
-    // `date(eaten_at) BETWEEN sevenDaysAgo AND yesterday` day bound after
-    // user-local bucketing, so the padded UTC pre-filter can't over-include.
+    // Re-apply the day bound after user-local bucketing: the SQL pre-filter
+    // pads the UTC range, so without this it would over-include.
     if (d < sevenDaysAgo || d > yesterday) continue;
     const cur = baselineByDay.get(d) ?? { d, k: 0 };
     cur.k += m.kcal;

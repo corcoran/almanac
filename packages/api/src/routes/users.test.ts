@@ -33,11 +33,9 @@ describe("/api/v1/users", () => {
 
   it("GET /api/v1/users/me returns 401 when no auth headers are present", async () => {
     app = buildApp({ dbPath: ":memory:", trustProxyHeaders: true });
-    // Note: with the new auth shape, a request with X-Forwarded-Email
-    // auto-provisions a user — so to assert 401, the request must carry
-    // neither a Bearer token NOR a forwarded email. The legacy
-    // "no users exist" wording no longer applies; the equivalent is
-    // "no credentials presented".
+    // A request with X-Forwarded-Email auto-provisions a user, so asserting 401
+    // means presenting no credentials at all — neither a Bearer token nor a
+    // forwarded email.
     const r = await app.inject({ method: "GET", url: "/api/v1/users/me" });
     expect(r.statusCode).toBe(401);
     expect(r.json().error.code).toBe("unauthorized");

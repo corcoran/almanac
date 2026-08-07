@@ -199,9 +199,9 @@ describe("runMealAgent", () => {
   });
 
   it("keeps a well-shaped meal and drops a wrong-shaped one (real-model regression)", async () => {
-    // Regression for the live bug: the model can emit a wrong-shaped meal
-    // (energy/macros{}/description) alongside a correct one. The agent must drop
-    // the malformed entry via ProposedMealSchema, not pass it through or crash.
+    // The model can emit a wrong-shaped meal (energy/macros{}/description)
+    // alongside a correct one. The agent must drop the malformed entry via
+    // ProposedMealSchema, not pass it through or crash.
     const createMessage = vi.fn().mockResolvedValue(
       fakeMessage(
         [
@@ -220,7 +220,7 @@ describe("runMealAgent", () => {
                   carb_g: 28,
                   fat_g: 16,
                 },
-                // wrong shape the model used to emit — must be dropped
+                // wrong shape — must be dropped
                 {
                   source: "estimated",
                   description: "beer",
@@ -355,9 +355,9 @@ describe("runMealAgent", () => {
   });
 
   it("forces a tool call (tool_choice: any) so the model can't answer in plain text", async () => {
-    // Regression for the live bug: with the default tool_choice the model
-    // replied in plain text (stop_reason 'end_turn', a text block, no tool_use),
-    // which the loop discarded and replaced with a canned question. Forcing
+    // With the default tool_choice the model can reply in plain text
+    // (stop_reason 'end_turn', a text block, no tool_use), which the loop
+    // discards in favor of a canned question. Forcing
     // tool_choice:any makes the model route every turn through a tool — a real
     // clarification goes via ask_clarification (returning the model's question),
     // a parseable meal via propose_log.
@@ -493,13 +493,11 @@ describe("runMealAgent", () => {
   });
 
   it("continues (not canned fallback) when a search turn ends in plain text, then proposes", async () => {
-    // Regression for a live dogfood bug: after web_search, Anthropic relaxes
-    // tool_choice:any, so the model can answer in PLAIN TEXT — stop_reason
-    // 'end_turn', blocks = [server_tool_use, web_search_tool_result, text...],
-    // NO tool_use. The loop used to hit the `!toolUse` branch and bail to the
-    // canned "Could you tell me what you ate?" — throwing away the search. It
-    // must instead push the turn back with a nudge and continue to a terminal
-    // tool.
+    // After web_search, Anthropic relaxes tool_choice:any, so the model can
+    // answer in PLAIN TEXT — stop_reason 'end_turn', blocks = [server_tool_use,
+    // web_search_tool_result, text...], NO tool_use. The loop must not bail to
+    // the canned "Could you tell me what you ate?", throwing away the search: it
+    // pushes the turn back with a nudge and continues to a terminal tool.
     const searchedThenText = {
       content: [
         {

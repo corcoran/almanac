@@ -583,16 +583,14 @@ export function getTodayContext(
   const currentTrend = rawTrend === null ? null : Number(rawTrend.toFixed(2));
   const weightChange = computeWeightChange(weights30);
 
-  // Energy balance for today. food_in is meals-only (no alcohol), alcohol_in
-  // is alcohol sessions only — the two were being conflated by consumers
-  // before this composite landed. cardio_out / workout_out / steps_out use the
-  // same pre-summed numbers daily-target reads (with the duration×6 fallback
-  // for workouts and the snapshotted step_logs.est_kcal for steps) so the
-  // composites can't disagree. net intentionally subtracts only TDEE, not
-  // TDEE+activity: TDEE already encompasses average cardio/workouts/steps via
-  // the back-calc, so adding today's activity a second time would
-  // double-count. steps_out
-  // follows the same rule as cardio_out / workout_out — display-only.
+  // Energy balance for today. food_in is meals-only (no alcohol), alcohol_in is
+  // alcohol sessions only — keep them separate. cardio_out / workout_out /
+  // steps_out use the same pre-summed numbers daily-target reads (with the
+  // duration×6 fallback for workouts and the snapshotted step_logs.est_kcal for
+  // steps) so the composites can't disagree, and all three are display-only.
+  // net intentionally subtracts only TDEE, not TDEE+activity: TDEE already
+  // encompasses average cardio/workouts/steps via the back-calc, so adding
+  // today's activity a second time would double-count.
   const foodIn = meals.reduce((sum, m) => sum + m.kcal, 0);
   const alcoholIn = alcoholToday.reduce((sum, a) => sum + a.est_kcal, 0);
   const energyBalance = {

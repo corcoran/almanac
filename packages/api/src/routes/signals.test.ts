@@ -155,8 +155,8 @@ describe("/api/v1/signals", () => {
   });
 
   it("GET /api/v1/signals/tdee excludes untracked days from the back-calc", async () => {
-    // Regression: the route previously passed `untrackedDays: new Set()`, so a
-    // vacation's inflated meals leaked into avg_kcal_in. Seed enough weight +
+    // The route must pass real untracked days through to the back-calc, or a
+    // vacation's inflated meals leak into avg_kcal_in. Seed enough weight +
     // meal history to flip to measured_intake, place 3 inflated meal-days inside
     // a marked untracked period, and assert they don't drag the average up.
     const a = setup();

@@ -4,9 +4,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 /**
  * Connect an SDK `Client` to an `McpServer` over a linked in-memory transport
- * pair. Replaces the old private-field access (`server._requestHandlers`) —
- * tests now drive tools/resources through the public client surface
- * (`listTools`, `callTool`, `listResources`, `readResource`, `getInstructions`).
+ * pair, so tests drive tools/resources through the public client surface
+ * (`listTools`, `callTool`, `listResources`, `readResource`, `getInstructions`)
+ * rather than reaching into private fields.
  *
  * Returns the connected client; the caller is responsible for nothing else —
  * the transports are GC'd with the client when the test ends.

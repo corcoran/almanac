@@ -171,11 +171,11 @@ describe("redirect_uri byte-identity invariant", () => {
 });
 
 describe("upstream PKCE is an independent leg", () => {
-  // The regression: the provider forwarded the DOWNSTREAM client's
-  // params.codeChallenge to the IdP, then exchanged the upstream code with
-  // no code_verifier at all. Almanac never holds the verifier matching the
-  // downstream challenge, so per RFC 7636 §4.6 an IdP that received a
-  // code_challenge MUST reject that exchange — breaking every OAuth login.
+  // The upstream leg must mint its OWN challenge/verifier pair, never forward
+  // the DOWNSTREAM client's params.codeChallenge. Almanac never holds the
+  // verifier matching the downstream challenge, so per RFC 7636 §4.6 an IdP
+  // that received that challenge MUST reject the exchange — breaking every
+  // OAuth login.
   //
   // Asserting merely "some verifier was passed" would NOT catch a
   // reintroduction that kept sending the downstream challenge upstream, so
@@ -429,8 +429,8 @@ describe("id_token verification gates the flow", () => {
 
 describe("revokeToken", () => {
   it("revokes the underlying PAT via the API, not just the in-memory map", async () => {
-    // The bug being fixed: deleting from the Map alone is undone by
-    // verifyAccessToken's API fallback on the very next request.
+    // Deleting from the Map alone is undone by verifyAccessToken's API fallback
+    // on the very next request.
     resetOidcStubState();
     const provider = makeProvider();
     const code = await mintCode(provider);
