@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The today snapshot dates the trend weight.** `trend_weight.as_of` is the
+  most recent weigh-in the EWMA reflects, so a value carried forward across a
+  gap can't read as current.
+- **Sitemap and social-card tags on the documentation site.**
+
 ### Fixed
 
 - **Day-one TDEE now uses your logged weight.** When the only weigh-in was
@@ -33,6 +40,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returned "Server not initialized", which reads as a broken server; it now
   returns `405` with `Allow: POST`. Connecting assistants documents the
   transport.
+- **Unlogged step days no longer count as zero in the dashboard average.**
+  They're excluded and shown as a dash, the way unlogged intake days already
+  were.
+- **A step count of zero is rejected everywhere** — API, MCP `log_steps` and
+  `update_steps`, and the web editor. A day without steps is an untracked day.
+- **The coach can tell an unlogged day from a zero-kcal one.**
+  `get_macros_range` reports `meals_logged` per day.
+- **The API and MCP server report the release tag they were built from**, not a
+  hand-maintained version string that had drifted from what's running.
 
 ## [1.35.0] - 2026-08-07
 
