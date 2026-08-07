@@ -3,7 +3,14 @@ import type { Tool, ToolDeps } from "../tool.js";
 
 export const UpdateStepsInputSchema = z.object({
   id: z.number().int().positive().describe("Step-log id."),
-  steps: z.number().int().nonnegative().optional(),
+  steps: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Whole-day step total, at least 1. There is no such thing as a zero-step day — a missing count means the day wasn't logged.",
+    ),
   est_kcal: z.number().int().nonnegative().nullish(),
   notes: z.string().nullish(),
 });

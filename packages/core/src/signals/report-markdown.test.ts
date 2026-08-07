@@ -133,6 +133,7 @@ function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
       },
       trend_weight: {
         current_kg: 82.4,
+        as_of: "2026-06-21",
         weight_change: { value_kg: -0.6, over_days: 14, confidence: "established" },
       },
       profile_complete: true,
@@ -925,7 +926,7 @@ describe("buildReportMarkdown", () => {
       makeReport({
         context: {
           ...base.context,
-          trend_weight: { current_kg: null, weight_change: null },
+          trend_weight: { current_kg: null, as_of: null, weight_change: null },
         },
       }),
     );
@@ -1071,6 +1072,36 @@ describe("buildReportMarkdown", () => {
     expect(md).toContain("Pull ×6");
     expect(md).toContain("Legs ×5");
     expect(md).toMatch(/\/ week/);
+  });
+
+  it("dashes the steps column when the day has no step log, but cardio still prints 0", () => {
+    // 06-07 fixture has cardio_kcal: 0, steps_kcal: 0 — null out only steps_kcal
+    // so the two columns can be told apart: not logging cardio genuinely means
+    // no cardio burn (0), but an absent step log says nothing about whether the
+    // user walked (dash).
+    const base = makeReport();
+    const history = base.history_14d.map((d) => {
+      if (d.date !== "2026-06-07" || d.day_target === null) return d;
+      return {
+        ...d,
+        day_target: {
+          ...d.day_target,
+          observed: { ...d.day_target.observed, steps_kcal: null },
+        },
+      };
+    });
+    const md = buildReportMarkdown(makeReport({ history_14d: history }));
+    const row = md.split("\n").find((l) => l.startsWith("| 06-07 |"));
+    if (row === undefined) throw new Error("06-07 row not found");
+    const cells = row.split("|").map((c) => c.trim());
+    // | Date | kcal | vs | P | C | F | cardio | workout | steps | net | status | trained | 🍺 | flag |
+    const cardioCol = cells[7];
+    const stepsCol = cells[9];
+    if (cardioCol === undefined || stepsCol === undefined) {
+      throw new Error("row did not split into the expected number of columns");
+    }
+    expect(cardioCol).toBe("0");
+    expect(stepsCol).toBe("—");
   });
 
   it("empty by_template replaces the by-type line", () => {

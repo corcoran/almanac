@@ -392,18 +392,7 @@ describe("MovementBlock steps editing", () => {
     expect(wrapper.emitted("changed")).toHaveLength(1);
   });
 
-  it("allows an explicit zero count", async () => {
-    const client = makeClient();
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client, date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    const save = wrapper.find('[data-test="steps-edit-save"]');
-    await wrapper.find('[data-test="steps-edit-input"]').setValue("0");
-    expect((save.element as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("disables save for empty or non-integer input", async () => {
+  it("disables save for empty, zero, or non-integer input", async () => {
     const wrapper = mount(MovementBlock, {
       props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
     });
@@ -414,6 +403,8 @@ describe("MovementBlock steps editing", () => {
     await input.setValue("12abc");
     expect((save.element as HTMLButtonElement).disabled).toBe(true);
     await input.setValue("-5");
+    expect((save.element as HTMLButtonElement).disabled).toBe(true);
+    await input.setValue("0");
     expect((save.element as HTMLButtonElement).disabled).toBe(true);
     await input.setValue("7500");
     expect((save.element as HTMLButtonElement).disabled).toBe(false);

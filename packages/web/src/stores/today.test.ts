@@ -196,6 +196,7 @@ function makeTodayFixture() {
     },
     trend_weight: {
       current_kg: 82.6,
+      as_of: "2026-06-21",
       weight_change: {
         value_kg: -0.4,
         over_days: 14,

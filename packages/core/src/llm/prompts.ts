@@ -106,6 +106,8 @@ export function buildMealSystemPrompt(ctx: MealContext): { stable: string; volat
     "  This applies to stored-meal matches too: if the user stated a time, set eaten_at",
     "  on the stored proposal as well (the time is honored even though macros are copied",
     "  from the library).",
+    "- Speak plainly. Don't surface field names, tool names, error codes, or internal",
+    "  values unless the user asks how it works.",
     "",
     `Units: ${ctx.unitSystem}. Macros are grams; energy is kcal.`,
     ctx.activePhaseTargets

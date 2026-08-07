@@ -8,8 +8,7 @@ export type StepsKcalEstimateInput = {
 
 /**
  * Estimate kcal burned from a daily step count. Linear in `steps × weight_kg`
- * with a single coefficient (`kcalPerStepPerKg`). Returns 0 for 0 steps to
- * keep the contract clean — callers can store the result without branching.
+ * with a single coefficient (`kcalPerStepPerKg`).
  *
  * The TDEE back-calculator MUST NOT add this output to its energy-balance
  * equation: that calc already includes NEAT via the trend-weight signal, so

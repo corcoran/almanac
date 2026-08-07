@@ -224,7 +224,12 @@ export const getMacrosRangeTool: ReadTool = {
           toolResult: { error: "from_date and to_date must be YYYY-MM-DD" },
         };
       }
-      const days: Array<{ date: string; day_totals: unknown; day_target: unknown }> = [];
+      const days: Array<{
+        date: string;
+        day_totals: unknown;
+        day_target: unknown;
+        meals_logged: boolean;
+      }> = [];
       // O(days × ~6 SQLite queries) — computeDailyTargetForDate runs several reads per
       // day. Don't raise MAX_MACROS_RANGE_DAYS without weighing that multiplier.
       let lastDate = from_date;
@@ -238,6 +243,9 @@ export const getMacrosRangeTool: ReadTool = {
           date: d,
           day_totals: dt.totals,
           day_target: dt.kind === "ready" ? dt.dayTarget : null,
+          // Without this, a zero-kcal day is indistinguishable from one the
+          // user never logged.
+          meals_logged: dt.mealCount > 0,
         });
         lastDate = d;
       }

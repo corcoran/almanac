@@ -411,11 +411,13 @@ export function buildReportMarkdown(report: ShareReport): string {
     const cCol = noData ? "—" : String(g(day.day_totals.carb_g));
     const fCol = noData ? "—" : String(g(day.day_totals.fat_g));
     // Activity kcal come from the day's observed breakdown (only present with a
-    // target); 0 is meaningful (logged, none burned) so only dash when absent.
+    // target). Cardio and workout print 0 on a logged day — no session means no
+    // burn. Steps are different: an absent step log says nothing about whether
+    // the user walked, so absence dashes rather than reading as sedentary.
     const obs = day.day_target?.observed;
     const cardioCol = obs ? fmt(obs.cardio_kcal) : "—";
     const workoutCol = obs ? fmt(obs.workout_kcal) : "—";
-    const stepsCol = obs ? fmt(obs.steps_kcal) : "—";
+    const stepsCol = obs && obs.steps_kcal !== null ? fmt(obs.steps_kcal) : "—";
     const netCol = !noData && day.net_kcal !== null ? signed(day.net_kcal) : "—";
     const statusCol = obs ? statusLabel(obs.status) : "—";
     const trainedCol = day.workout_name ?? "—";

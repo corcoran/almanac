@@ -181,6 +181,25 @@ describe("migrated insights read tools", () => {
     expect(result.days?.length).toBe(3);
     expect(MAX_MACROS_RANGE_DAYS).toBe(90);
   });
+
+  it("get_macros_range marks days with no meals logged", () => {
+    const db = seededDb();
+    createMeal(db, {
+      user_id: 1,
+      eaten_at: "2026-06-01T13:00:00Z",
+      name: "Oatmeal",
+      kcal: 300,
+      protein_g: 12,
+      carb_g: 50,
+      fat_g: 6,
+    });
+    const { dispatch } = buildReadDispatch([getMacrosRangeTool], CTX(db));
+    const out = dispatch("get_macros_range", { from_date: "2026-06-01", to_date: "2026-06-02" });
+    const days = (out as { toolResult: { days: Array<{ date: string; meals_logged: boolean }> } })
+      .toolResult.days;
+    expect(days.find((d) => d.date === "2026-06-01")?.meals_logged).toBe(true);
+    expect(days.find((d) => d.date === "2026-06-02")?.meals_logged).toBe(false);
+  });
 });
 
 describe("list_meals_for_day", () => {

@@ -1,7 +1,7 @@
 import { nthCall } from "@almanac/core/test-support";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../client.js";
-import { makeLogStepsTool } from "./log-steps.js";
+import { LogStepsInputSchema, makeLogStepsTool } from "./log-steps.js";
 
 function mockJsonResponse(status: number, body: unknown) {
   return { ok: status < 400, status, json: async () => body };
@@ -91,5 +91,35 @@ describe("log_steps", () => {
     const key = postCall[1].headers["idempotency-key"];
     expect(key).toBeDefined();
     expect(key).toMatch(/^steps:1:[a-f0-9]{64}$/);
+  });
+});
+
+describe("log_steps guidance", () => {
+  it("tells the model not to prompt for today's count before evening", () => {
+    const api = new ApiClient({ baseUrl: "http://x", fetchImpl: vi.fn() });
+    const tool = makeLogStepsTool({
+      api,
+      currentUserId: async () => 1,
+      currentToken: () => "alm_test",
+    });
+    expect(tool.description).toContain("before evening");
+    expect(tool.description).toContain("can be updated");
+  });
+});
+
+describe("LogStepsInputSchema bounds", () => {
+  it("rejects a zero step count", () => {
+    expect(LogStepsInputSchema.safeParse({ on_date: "2026-08-07", steps: 0 }).success).toBe(false);
+  });
+
+  it("accepts a one-step count", () => {
+    expect(LogStepsInputSchema.safeParse({ on_date: "2026-08-07", steps: 1 }).success).toBe(true);
+  });
+
+  it("describes the field in terms the model can act on", () => {
+    const desc = LogStepsInputSchema.shape.steps.description ?? "";
+    expect(desc).toContain("Whole-day step total");
+    expect(desc).toContain("zero-step day");
+    expect(desc).not.toContain("nonnegative");
   });
 });

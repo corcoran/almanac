@@ -39,7 +39,7 @@ export const EnergyBalanceSchema = z.object({
   tdee_baseline: z.number().int(),
   cardio_out: z.number().int(),
   workout_out: z.number().int(),
-  steps_out: z.number().int(),
+  steps_out: z.number().int().nullable(),
   net: z
     .number()
     .int()
@@ -151,7 +151,7 @@ export const MacrosSchema = z.object({
 export const ObservedSchema = z.object({
   cardio_kcal: z.number(),
   workout_kcal: z.number(),
-  steps_kcal: z.number(),
+  steps_kcal: z.number().nullable(),
   vs_target: z.number(),
   vs_maintenance: z.number(),
   status: z.enum(["on_track", "at_risk", "off_track"]),
@@ -387,13 +387,14 @@ export const TodayContextResponseSchema = z.object({
       })
       .nullable(),
     sleep: z.object({ hours: z.number(), quality: z.number().int().nullable() }).nullable(),
-    // Today's step log. `null` (no row) is distinct from `{ count: 0,
-    // est_kcal: 0 }` (explicit zero) — see today.ts for the rationale.
+    // `null` (no row) means the day wasn't logged. A logged row's `est_kcal`
+    // is separately nullable — the kcal estimate can be cleared without
+    // un-logging the day.
     steps: z
       .object({
         id: IdSchema,
         count: z.number().int(),
-        est_kcal: z.number().int(),
+        est_kcal: z.number().int().nullable(),
       })
       .nullable(),
     workouts: z.array(
@@ -446,6 +447,7 @@ export const TodayContextResponseSchema = z.object({
   tdee: TDEEResponseSchema,
   trend_weight: z.object({
     current_kg: z.number().nullable(),
+    as_of: IsoDateSchema.nullable(),
     weight_change: WeightChangeResponseSchema.nullable(),
   }),
   /**

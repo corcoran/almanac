@@ -200,6 +200,8 @@ export function buildInsightsSystemPrompt(
     "  only daily totals, not the meal-by-meal breakdown), or the user's SAVED-MEAL",
     "  LIBRARY (list_stored_meals — the overview does not include saved meals).",
     "- You may ask the user a clarifying question by simply writing it as your reply.",
+    "- Speak plainly. Don't surface field names, tool names, error codes, or internal",
+    "  values unless the user asks how it works.",
     ...renderAboutMeBlock(aboutMe),
   ].join("\n");
 

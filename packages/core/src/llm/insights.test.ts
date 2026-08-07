@@ -314,6 +314,11 @@ describe("insights core", () => {
     expect(volatile).toContain("=REPORT-BODY=");
   });
 
+  it("tells the model to speak plainly", () => {
+    const { stable } = buildInsightsSystemPrompt("## R");
+    expect(stable).toContain("Speak plainly");
+  });
+
   it("puts the prior-session takeaway in the volatile part, not the stable rules", () => {
     const { stable, volatile } = buildInsightsSystemPrompt(
       "body",

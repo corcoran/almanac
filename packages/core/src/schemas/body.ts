@@ -58,11 +58,14 @@ export const SleepLogResponseSchema = z.object({
 });
 export const ListSleepLogsQuerySchema = DateRangeQuerySchema;
 
-// Step logs (upsert; on_date NOT in UpdateSchema)
+// Step logs (upsert; on_date NOT in UpdateSchema). steps is positive, not
+// nonnegative: a zero-step day is not a thing a person records. A day that
+// shouldn't count is an untracked period, and an absent row already means
+// "not logged" everywhere downstream.
 export const StepLogInputSchema = z
   .object({
     on_date: IsoDateSchema,
-    steps: z.number().int().nonnegative(),
+    steps: z.number().int().positive(),
     est_kcal: z.number().int().nonnegative().nullish(),
     source: z.enum(["manual", "import"]).optional(),
     notes: z.string().nullish(),
@@ -70,7 +73,7 @@ export const StepLogInputSchema = z
   .strict();
 export const StepLogUpdateSchema = z
   .object({
-    steps: z.number().int().nonnegative().optional(),
+    steps: z.number().int().positive().optional(),
     est_kcal: z.number().int().nonnegative().nullish(),
     notes: z.string().nullish(),
   })
