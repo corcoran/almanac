@@ -48,9 +48,20 @@ describe("loadConfig", () => {
       ...baseEnv,
       ALMANAC_MCP_TRANSPORT: "http",
       ALMANAC_MCP_PUBLIC_URL: "https://almanac.example.com",
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "client-id",
+      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "secret",
+      ALMANAC_MCP_OIDC_ISSUER: "https://accounts.google.com",
     });
     expect(cfg.ALMANAC_MCP_PUBLIC_URL).toBe("https://almanac.example.com");
-    expect(() => loadConfig({ ...baseEnv, ALMANAC_MCP_PUBLIC_URL: "not-a-url" })).toThrow();
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        ALMANAC_MCP_PUBLIC_URL: "not-a-url",
+        ALMANAC_MCP_OAUTH_CLIENT_ID: "client-id",
+        ALMANAC_MCP_OAUTH_CLIENT_SECRET: "secret",
+        ALMANAC_MCP_OIDC_ISSUER: "https://accounts.google.com",
+      }),
+    ).toThrow();
   });
 
   it("sse with a short ALMANAC_MCP_CLIENT_TOKEN rejects via min(8)", () => {
@@ -93,5 +104,132 @@ describe("loadConfig", () => {
     });
     expect(cfg.ALMANAC_MCP_TRANSPORT).toBe("http");
     expect(cfg.ALMANAC_MCP_CLIENT_TOKEN).toBe("this-is-long-enough");
+  });
+});
+
+describe("OIDC config", () => {
+  const httpEnv = { ...baseEnv, ALMANAC_MCP_TRANSPORT: "http" as const };
+
+  it("defaults the callback path to /oauth/callback", () => {
+    const cfg = loadConfig(httpEnv);
+    expect(cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH).toBe("/oauth/callback");
+  });
+
+  it(`treats a blank issuer as undefined (compose passes \${VAR:-})`, () => {
+    const cfg = loadConfig({ ...httpEnv, ALMANAC_MCP_OIDC_ISSUER: "" });
+    expect(cfg.ALMANAC_MCP_OIDC_ISSUER).toBeUndefined();
+  });
+
+  it("rejects a callback path that does not start with /", () => {
+    expect(() =>
+      loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "oauth/callback" }),
+    ).toThrow();
+  });
+
+  it("rejects a callback path carrying a query string", () => {
+    expect(() =>
+      loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "/oauth/callback?x=1" }),
+    ).toThrow();
+  });
+
+  it("rejects a callback path with a trailing slash", () => {
+    expect(() =>
+      loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "/oauth/callback/" }),
+    ).toThrow();
+  });
+
+  it("rejects a callback path starting with // (protocol-relative, not a path)", () => {
+    expect(() =>
+      loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "//evil.com" }),
+    ).toThrow();
+  });
+
+  it("rejects a callback path containing a .. segment", () => {
+    // Express registers the literal string, but the browser normalizes the
+    // IdP's redirect target to /x — so the callback route 404s at login.
+    expect(() =>
+      loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "/oauth/../../x" }),
+    ).toThrow();
+  });
+
+  it("still accepts a legitimate nested callback path", () => {
+    const cfg = loadConfig({
+      ...httpEnv,
+      ALMANAC_MCP_OAUTH_CALLBACK_PATH: "/oauth/keycloak/callback",
+    });
+    expect(cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH).toBe("/oauth/keycloak/callback");
+  });
+
+  it("accepts a path segment containing dots that is not a .. segment", () => {
+    const cfg = loadConfig({ ...httpEnv, ALMANAC_MCP_OAUTH_CALLBACK_PATH: "/oauth/v1.0/cb" });
+    expect(cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH).toBe("/oauth/v1.0/cb");
+  });
+
+  it("rejects partial OAuth configuration — client id set but issuer missing", () => {
+    // Half-configured must fail loudly at boot, not silently degrade to
+    // PAT-only, which looks identical to an intentional PAT-only deploy.
+    expect(() =>
+      loadConfig({
+        ...httpEnv,
+        ALMANAC_MCP_OAUTH_CLIENT_ID: "almanac-mcp",
+        ALMANAC_MCP_OAUTH_CLIENT_SECRET: "s3cret",
+        ALMANAC_MCP_PUBLIC_URL: "https://almanac.example.com",
+      }),
+    ).toThrow(/ALMANAC_MCP_OIDC_ISSUER/);
+  });
+
+  it("accepts a fully-specified OAuth configuration", () => {
+    const cfg = loadConfig({
+      ...httpEnv,
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "almanac-mcp",
+      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "s3cret",
+      ALMANAC_MCP_PUBLIC_URL: "https://almanac.example.com",
+      ALMANAC_MCP_OIDC_ISSUER: "https://accounts.google.com",
+    });
+    expect(cfg.ALMANAC_MCP_OIDC_ISSUER).toBe("https://accounts.google.com");
+  });
+
+  it("accepts all four OAuth vars absent (PAT-only mode)", () => {
+    expect(() => loadConfig(httpEnv)).not.toThrow();
+  });
+
+  it("accepts all four OAuth vars as blank strings (compose unset case — PAT-only)", () => {
+    const cfg = loadConfig({
+      ...httpEnv,
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "",
+      ALMANAC_MCP_OAUTH_CLIENT_SECRET: "",
+      ALMANAC_MCP_PUBLIC_URL: "",
+      ALMANAC_MCP_OIDC_ISSUER: "",
+    });
+    expect(cfg.ALMANAC_MCP_OAUTH_CLIENT_ID).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_OAUTH_CLIENT_SECRET).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_PUBLIC_URL).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_OIDC_ISSUER).toBeUndefined();
+  });
+
+  it("accepts mixed blank and absent OAuth vars (still PAT-only)", () => {
+    const cfg = loadConfig({
+      ...httpEnv,
+      ALMANAC_MCP_OAUTH_CLIENT_ID: "",
+      // CLIENT_SECRET intentionally omitted
+      ALMANAC_MCP_PUBLIC_URL: "",
+      // ISSUER intentionally omitted
+    });
+    expect(cfg.ALMANAC_MCP_OAUTH_CLIENT_ID).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_OAUTH_CLIENT_SECRET).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_PUBLIC_URL).toBeUndefined();
+    expect(cfg.ALMANAC_MCP_OIDC_ISSUER).toBeUndefined();
+  });
+
+  it("rejects blank CLIENT_ID alongside three real OAuth values", () => {
+    expect(() =>
+      loadConfig({
+        ...httpEnv,
+        ALMANAC_MCP_OAUTH_CLIENT_ID: "",
+        ALMANAC_MCP_OAUTH_CLIENT_SECRET: "s3cret",
+        ALMANAC_MCP_PUBLIC_URL: "https://almanac.example.com",
+        ALMANAC_MCP_OIDC_ISSUER: "https://accounts.google.com",
+      }),
+    ).toThrow(/ALMANAC_MCP_OAUTH_CLIENT_ID/);
   });
 });

@@ -1,22 +1,19 @@
 /**
- * POC OAuth 2.1 provider for MCP — lets Claude mobile / ChatGPT connect
- * via the standard MCP OAuth discovery flow.
+ * OAuth 2.1 provider for MCP — lets Claude mobile / ChatGPT connect via the
+ * standard MCP OAuth discovery flow.
  *
- * Architecture:
- *   1. MCP client hits /mcp, gets 401 → discovers /.well-known/oauth-protected-resource
- *   2. Client does dynamic client registration → POST /register
- *   3. Client redirects user to /authorize → we redirect to Google sign-in
- *   4. Google redirects back to /oauth/google/callback → we extract email,
- *      check allowlist, mint an auth code
- *   5. Client exchanges auth code for access token → POST /token
- *   6. Client uses Bearer token on subsequent /mcp requests
+ *   1. Client hits /mcp, gets 401 → discovers /.well-known/*
+ *   2. Dynamic client registration → POST /register
+ *   3. /authorize → we redirect to the upstream IdP
+ *   4. IdP callback → verify id_token, check allowlist, mint an auth code
+ *   5. POST /token → exchange the code for a PAT
  *
- * All state is in-memory (POC). Tokens survive until container restart.
- * PATs continue to work in parallel — verifyAccessToken falls back to the
- * API's PAT validation.
+ * Issuer-generic: discovery, authorize-URL construction, code exchange, and
+ * id_token verification all live in oidc.ts. OAuth state is in-memory and
+ * does not survive a restart; the PATs it mints do.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type {
   AuthorizationParams,
@@ -28,30 +25,37 @@ import type {
   OAuthTokenRevocationRequest,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { Response } from "express";
+import type { Response as ExpressResponse } from "express";
+import type { OidcClient } from "./oidc.js";
 
 // ─── Config ──────────────────────────────────────────────────────────
 
 export type OAuthConfig = {
-  /** Google OAuth client ID (same one oauth2-proxy uses). */
-  googleClientId: string;
-  /** Google OAuth client secret. */
-  googleClientSecret: string;
   /**
    * Public base URL of the MCP server (e.g. https://almanac.example.com).
-   * Used to construct the Google redirect URI and the issuer URL.
+   * Combined with `callbackPath` to form the redirect URI used by both the
+   * authorization request and the token exchange — these must be
+   * byte-identical, per the OAuth spec.
    */
   publicBaseUrl: string;
   /**
-   * Allowed emails. If empty, any Google account is accepted.
-   * In production this should be loaded from allowed-users.txt.
+   * Path (mounted on the Express app) that the upstream IdP redirects back
+   * to after sign-in, e.g. "/oauth/callback".
+   */
+  callbackPath: string;
+  /**
+   * Allowed emails. If empty, any verified account from the upstream IdP
+   * is accepted. In production this should be loaded from allowed-users.txt.
    */
   allowedEmails: Set<string>;
   /**
    * Internal API URL (e.g. http://almanac-api:3001). Used to mint PATs
-   * via the API's POST /v1/auth/tokens endpoint using X-Forwarded-Email.
+   * via the API's POST /v1/auth/tokens endpoint using X-Forwarded-Email,
+   * and to revoke them via DELETE /v1/auth/tokens/:id.
    */
   apiUrl: string;
+  /** OIDC client for the upstream identity provider (see oidc.ts). */
+  oidc: OidcClient;
 };
 
 // ─── In-memory stores ────────────────────────────────────────────────
@@ -61,18 +65,59 @@ type TokenData = {
   email: string;
   scopes: string[];
   expiresAt: number;
+  /** The underlying PAT's DB id, used to revoke it via the API. Undefined
+   *  only if the mint response was somehow missing it (should not happen). */
+  patId: number | undefined;
 };
 
-// Pending auth flows — keyed by the state we send to Google.
-// Flow: authorize() stores the MCP client's params here, redirects to Google.
-// Google callback looks up by state, verifies email, mints an auth code.
+// Pending auth flows — keyed by the state we send to the upstream IdP.
+// Flow: authorize() stores the MCP client's params here, redirects upstream.
+// The IdP callback looks up by state, verifies email, mints an auth code.
+//
+// Entries expire (see PENDING_AUTH_TTL_MS): a user who abandons sign-in at the
+// IdP's consent screen never comes back to the callback, so the delete on the
+// success path alone would leak an entry per abandoned flow. /authorize is
+// reachable pre-SSO (compose sets --skip-auth-route=^/authorize), so without a
+// TTL an unauthenticated client could grow this map without bound.
 const pendingAuths = new Map<
   string,
   {
     clientId: string;
     params: AuthorizationParams;
+    /**
+     * PKCE verifier for the UPSTREAM leg (us ↔ the IdP) — freshly generated
+     * per flow, never leaves this process until the token exchange. Distinct
+     * from `params.codeChallenge`, which is the DOWNSTREAM leg's challenge
+     * (MCP client ↔ us); we hold no verifier for that one, by design.
+     */
+    upstreamCodeVerifier: string;
+    expiresAt: number;
   }
 >();
+
+// How long a user has to complete sign-in at the upstream IdP. Generous
+// enough for a real login (password + MFA + consent), short enough that
+// abandoned flows don't accumulate.
+const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
+
+/** Drop every pending auth whose TTL has elapsed. Called on insert. */
+function sweepExpiredPendingAuths(now: number): void {
+  for (const [state, entry] of pendingAuths) {
+    if (entry.expiresAt <= now) pendingAuths.delete(state);
+  }
+}
+
+/**
+ * Generate a fresh PKCE pair for the UPSTREAM leg (RFC 7636): a
+ * high-entropy random verifier and its S256 challenge. 32 random bytes is
+ * the RFC's recommended entropy; base64url keeps it inside the
+ * unreserved-character alphabet the spec requires.
+ */
+function generateUpstreamPkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
 
 // Auth codes — keyed by the code string. Short-lived (5 min).
 const authCodes = new Map<
@@ -125,35 +170,50 @@ export class AlmanacOAuthProvider implements OAuthServerProvider {
   }
 
   /**
-   * Step 1: MCP client calls /authorize. We redirect to Google's consent
-   * screen, stashing the MCP client's params so we can resume after the
-   * Google callback.
+   * The redirect URI used for BOTH the authorization request and the token
+   * exchange. OAuth requires these be byte-identical — this getter is the
+   * single source of truth so the two call sites can never drift apart.
+   */
+  private get redirectUri(): string {
+    return `${this.cfg.publicBaseUrl}${this.cfg.callbackPath}`;
+  }
+
+  /**
+   * Redirect to the upstream IdP, stashing the MCP client's params to resume
+   * on callback.
+   *
+   * Two independent PKCE legs — do not conflate them:
+   *   DOWNSTREAM (client ↔ Almanac): the client owns the verifier; we only
+   *     ever see `params.codeChallenge` and hand it back at /token.
+   *   UPSTREAM (Almanac ↔ IdP): we are the client, so we mint our own pair.
+   *
+   * Sending the downstream challenge upstream leaves us unable to produce a
+   * verifier at the IdP's token endpoint, which fails every login.
    */
   async authorize(
     client: OAuthClientInformationFull,
     params: AuthorizationParams,
-    res: Response,
+    res: ExpressResponse,
   ): Promise<void> {
-    const googleState = randomUUID();
-    pendingAuths.set(googleState, {
+    const upstreamState = randomUUID();
+    const upstreamPkce = generateUpstreamPkcePair();
+
+    sweepExpiredPendingAuths(Date.now());
+    pendingAuths.set(upstreamState, {
       clientId: client.client_id,
       params,
+      upstreamCodeVerifier: upstreamPkce.verifier,
+      expiresAt: Date.now() + PENDING_AUTH_TTL_MS,
     });
 
-    // Build Google OAuth authorization URL
-    const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    googleAuthUrl.searchParams.set("client_id", this.cfg.googleClientId);
-    googleAuthUrl.searchParams.set(
-      "redirect_uri",
-      `${this.cfg.publicBaseUrl}/oauth/google/callback`,
-    );
-    googleAuthUrl.searchParams.set("response_type", "code");
-    googleAuthUrl.searchParams.set("scope", "openid email");
-    googleAuthUrl.searchParams.set("state", googleState);
-    googleAuthUrl.searchParams.set("access_type", "online");
-    googleAuthUrl.searchParams.set("prompt", "select_account");
+    const authUrl = await this.cfg.oidc.authorizationUrl({
+      redirectUri: this.redirectUri,
+      state: upstreamState,
+      // The UPSTREAM challenge — NOT params.codeChallenge (see above).
+      codeChallenge: upstreamPkce.challenge,
+    });
 
-    res.redirect(googleAuthUrl.toString());
+    res.redirect(authUrl.toString());
   }
 
   /**
@@ -190,9 +250,9 @@ export class AlmanacOAuthProvider implements OAuthServerProvider {
 
     // Mint a real PAT via the API. The API trusts X-Forwarded-Email from
     // within the Docker network (ALMANAC_TRUST_PROXY_HEADERS=true), so we
-    // pass the verified Google email to authenticate the request. The
-    // returned cleartext token is a real PAT stored in the DB — the API
-    // will accept it on subsequent MCP tool calls.
+    // pass the verified email to authenticate the request. The returned
+    // cleartext token is a real PAT stored in the DB — the API will accept
+    // it on subsequent MCP tool calls.
     const clientName = `OAuth (${client.client_name ?? client.client_id.slice(0, 12)})`;
     const apiRes = await fetch(`${this.cfg.apiUrl}/api/v1/auth/tokens`, {
       method: "POST",
@@ -209,8 +269,9 @@ export class AlmanacOAuthProvider implements OAuthServerProvider {
       throw new Error("Failed to mint access token");
     }
 
-    const patResult = (await apiRes.json()) as { token: string };
+    const patResult = (await apiRes.json()) as { id?: unknown; token: string };
     const token = patResult.token;
+    const patId = typeof patResult.id === "number" ? patResult.id : undefined;
 
     // Track the token in-memory so verifyAccessToken can resolve it
     // without hitting the API on every request.
@@ -219,6 +280,7 @@ export class AlmanacOAuthProvider implements OAuthServerProvider {
       email: codeData.email,
       scopes: codeData.scopes,
       expiresAt: Date.now() + 365 * 24 * 3600 * 1000, // PATs don't expire
+      patId,
     });
 
     return {
@@ -276,102 +338,104 @@ export class AlmanacOAuthProvider implements OAuthServerProvider {
     throw new Error("Invalid or expired token");
   }
 
+  /**
+   * Revoke an access token: delete the PAT via the API, then clear the map
+   * entry. Without the API call, verifyAccessToken's fallback re-accepts the
+   * token on the next request.
+   *
+   * A map miss (e.g. after a restart) leaves no id to delete — log and
+   * return. A failed DELETE throws and KEEPS the entry so a retry can still
+   * resolve the id; the API's DELETE is idempotent.
+   */
   async revokeToken(
     _client: OAuthClientInformationFull,
     request: OAuthTokenRevocationRequest,
   ): Promise<void> {
-    accessTokens.delete(request.token);
-  }
-
-  // ─── Google callback handler (mounted as a separate Express route) ──
-
-  /**
-   * Handles the Google OAuth callback. Not part of the OAuthServerProvider
-   * interface — mounted directly on the Express app.
-   *
-   * Flow: Google redirects here with ?code=...&state=...
-   * We exchange the Google code for a Google token, extract the email,
-   * check the allowlist, then mint an MCP auth code and redirect back
-   * to the MCP client's redirect_uri.
-   */
-  async handleGoogleCallback(
-    query: { code?: string; state?: string; error?: string },
-    res: Response,
-  ): Promise<void> {
-    if (query.error) {
-      res.status(400).json({ error: `Google auth error: ${query.error}` });
+    const data = accessTokens.get(request.token);
+    if (data?.patId === undefined) {
+      console.error(
+        "revokeToken: no known PAT id for this token (map miss); clearing local state only",
+      );
+      accessTokens.delete(request.token);
       return;
     }
 
-    const { code: googleCode, state: googleState } = query;
-    if (!googleCode || !googleState) {
-      res.status(400).json({ error: "Missing code or state from Google" });
+    let res: Response;
+    try {
+      res = await fetch(`${this.cfg.apiUrl}/api/v1/auth/tokens/${data.patId}`, {
+        method: "DELETE",
+        headers: { "X-Forwarded-Email": data.email },
+      });
+    } catch (cause) {
+      throw new Error(`Failed to revoke PAT ${data.patId} via API: ${String(cause)}`);
+    }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to revoke PAT ${data.patId} via API: ${res.status} ${body}`);
+    }
+
+    accessTokens.delete(request.token);
+  }
+
+  // ─── Upstream IdP callback handler (mounted as a separate Express route) ──
+
+  /**
+   * Handles the upstream identity provider's OAuth callback. Not part of
+   * the OAuthServerProvider interface — mounted directly on the Express app.
+   *
+   * Flow: the IdP redirects here with ?code=...&state=...
+   * We exchange the code for tokens via the discovered token endpoint,
+   * verify the id_token's signature against the IdP's JWKS, extract the
+   * email, check the allowlist, then mint an MCP auth code and redirect
+   * back to the MCP client's redirect_uri.
+   */
+  async handleCallback(
+    query: { code?: string; state?: string; error?: string },
+    res: ExpressResponse,
+  ): Promise<void> {
+    if (query.error) {
+      res.status(400).json({ error: `Upstream auth error: ${query.error}` });
+      return;
+    }
+
+    const { code: upstreamCode, state: upstreamState } = query;
+    if (!upstreamCode || !upstreamState) {
+      res.status(400).json({ error: "Missing code or state from upstream provider" });
       return;
     }
 
     // Look up the pending MCP auth request
-    const pending = pendingAuths.get(googleState);
+    const pending = pendingAuths.get(upstreamState);
     if (!pending) {
       res.status(400).json({ error: "Unknown or expired state parameter" });
       return;
     }
-    pendingAuths.delete(googleState);
-
-    // Exchange Google's auth code for a token
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code: googleCode,
-        client_id: this.cfg.googleClientId,
-        client_secret: this.cfg.googleClientSecret,
-        redirect_uri: `${this.cfg.publicBaseUrl}/oauth/google/callback`,
-        grant_type: "authorization_code",
-      }),
-    });
-
-    if (!tokenRes.ok) {
-      const body = await tokenRes.text();
-      console.error("Google token exchange failed:", body);
-      res.status(500).json({ error: "Google token exchange failed" });
+    pendingAuths.delete(upstreamState);
+    if (pending.expiresAt <= Date.now()) {
+      res.status(400).json({ error: "Unknown or expired state parameter" });
       return;
     }
 
-    const tokenBody = (await tokenRes.json()) as { id_token?: string; access_token?: string };
-
-    // Extract email from the ID token (JWT, base64-decoded payload)
-    let email: string | undefined;
-    if (tokenBody.id_token) {
-      try {
-        const payloadSegment = tokenBody.id_token.split(".")[1];
-        if (payloadSegment === undefined) {
-          throw new Error("malformed id_token: missing payload segment");
-        }
-        const payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString()) as {
-          email?: string;
-          email_verified?: boolean;
-        };
-        if (payload.email_verified) {
-          email = payload.email;
-        }
-      } catch {
-        // Fall through to userinfo
+    let email: string;
+    try {
+      const tokenResponse = await this.cfg.oidc.exchangeCode({
+        code: upstreamCode,
+        redirectUri: this.redirectUri,
+        // The UPSTREAM verifier stashed in authorize(); its S256 challenge
+        // is what we sent to the IdP's authorize endpoint.
+        codeVerifier: pending.upstreamCodeVerifier,
+      });
+      if (tokenResponse.idToken === undefined) {
+        res.status(500).json({ error: "Upstream token response did not include an id_token" });
+        return;
       }
-    }
-
-    // Fallback: fetch from Google's userinfo endpoint
-    if (!email && tokenBody.access_token) {
-      const userInfoRes = await fetch(
-        `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenBody.access_token}`,
-      );
-      if (userInfoRes.ok) {
-        const userInfo = (await userInfoRes.json()) as { email?: string };
-        email = userInfo.email;
-      }
-    }
-
-    if (!email) {
-      res.status(403).json({ error: "Could not determine email from Google" });
+      const verified = await this.cfg.oidc.verifyIdToken(tokenResponse.idToken, {
+        accessToken: tokenResponse.accessToken,
+      });
+      email = verified.email;
+    } catch (cause) {
+      console.error("Upstream OIDC token exchange / verification failed:", cause);
+      res.status(500).json({ error: "Upstream token exchange failed" });
       return;
     }
 

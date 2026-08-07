@@ -9,6 +9,7 @@ import express from "express";
 import { ApiClient } from "./client.js";
 import { loadConfig } from "./config.js";
 import { AlmanacOAuthProvider } from "./oauth-provider.js";
+import { createOidcClient } from "./oidc.js";
 import { buildMcpServer } from "./server.js";
 
 const cfg = loadConfig();
@@ -105,7 +106,8 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
   // When ALMANAC_MCP_OAUTH_CLIENT_ID is set, the server mounts the SDK's
   // mcpAuthRouter which serves the .well-known discovery endpoints,
   // /authorize, /token, and /register — letting Claude mobile and ChatGPT
-  // connect via the standard MCP OAuth flow. Google is the upstream IdP.
+  // connect via the standard MCP OAuth flow. The upstream IdP is whichever
+  // OIDC provider is configured via ALMANAC_MCP_OIDC_ISSUER.
   //
   // When the OAuth vars are NOT set, the server falls back to the previous
   // behavior: raw Bearer token (PAT) validation only.
@@ -143,14 +145,18 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
     );
   }
 
-  // Bind the three OAuth env vars to consts and gate on explicit
+  // Bind the four OAuth env vars to consts and gate on explicit
   // `!== undefined` checks so control-flow analysis narrows each to `string`
   // inside the `if (oauthEnabled)` block — no non-null assertions needed.
   const oauthClientId = cfg.ALMANAC_MCP_OAUTH_CLIENT_ID;
   const oauthClientSecret = cfg.ALMANAC_MCP_OAUTH_CLIENT_SECRET;
   const oauthPublicUrl = cfg.ALMANAC_MCP_PUBLIC_URL;
+  const oauthIssuer = cfg.ALMANAC_MCP_OIDC_ISSUER;
   const oauthEnabled =
-    oauthClientId !== undefined && oauthClientSecret !== undefined && oauthPublicUrl !== undefined;
+    oauthClientId !== undefined &&
+    oauthClientSecret !== undefined &&
+    oauthPublicUrl !== undefined &&
+    oauthIssuer !== undefined;
 
   // Handler for /mcp requests — shared between OAuth and non-OAuth modes.
   // The bearer is captured from the Authorization header (either a PAT or
@@ -216,12 +222,18 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
     const publicUrl = oauthPublicUrl;
     const allowedEmails = loadAllowedEmails();
 
+    const oidc = createOidcClient({
+      issuer: oauthIssuer,
+      clientId: oauthClientId,
+      clientSecret: oauthClientSecret,
+    });
+
     const oauthProvider = new AlmanacOAuthProvider({
-      googleClientId: oauthClientId,
-      googleClientSecret: oauthClientSecret,
       publicBaseUrl: publicUrl,
+      callbackPath: cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH,
       allowedEmails,
       apiUrl: cfg.ALMANAC_API_URL,
+      oidc,
     });
 
     const app = express();
@@ -239,9 +251,9 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
       }),
     );
 
-    // Google OAuth callback — outside the SDK's router.
-    app.get("/oauth/google/callback", async (req, res) => {
-      await oauthProvider.handleGoogleCallback(
+    // OAuth callback — outside the SDK's router.
+    app.get(cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH, async (req, res) => {
+      await oauthProvider.handleCallback(
         req.query as { code?: string; state?: string; error?: string },
         res,
       );
@@ -285,8 +297,8 @@ if (cfg.ALMANAC_MCP_TRANSPORT === "stdio") {
       console.error(
         `almanac-mcp listening on ${cfg.ALMANAC_MCP_HOST}:${cfg.ALMANAC_MCP_PORT} (http, Streamable HTTP + OAuth 2.1)`,
       );
-      console.error(`  OAuth issuer: ${publicUrl}`);
-      console.error(`  Google callback: ${publicUrl}/oauth/google/callback`);
+      console.error(`  OAuth issuer: ${oauthIssuer}`);
+      console.error(`  OAuth callback: ${publicUrl}${cfg.ALMANAC_MCP_OAUTH_CALLBACK_PATH}`);
     });
 
     process.on("SIGTERM", () => {
