@@ -22,6 +22,8 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
+        "http://localhost:4180/oauth/callback",
+        "http://127.0.0.1:4180/oauth/callback",
         "http://localhost:3030/oauth/callback",
         "http://127.0.0.1:3030/oauth/callback"
       ],
@@ -41,6 +43,8 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
+        "http://localhost:4180/oauth2/callback",
+        "http://127.0.0.1:4180/oauth2/callback",
         "http://localhost:3030/oauth/callback",
         "http://127.0.0.1:3030/oauth/callback"
       ],
@@ -58,7 +62,7 @@
       "trustEmail": true,
       "storeToken": false,
       "addReadTokenRoleOnCreate": false,
-      "firstBrokerLoginFlowAlias": "almanac-first-broker-login",
+      "firstBrokerLoginFlowAlias": "first broker login",
       "config": {
         "clientId": "__GOOGLE_CLIENT_ID__",
         "clientSecret": "__GOOGLE_CLIENT_SECRET__",
@@ -75,100 +79,12 @@
       "trustEmail": false,
       "storeToken": false,
       "addReadTokenRoleOnCreate": false,
-      "firstBrokerLoginFlowAlias": "almanac-first-broker-login",
+      "firstBrokerLoginFlowAlias": "first broker login",
       "config": {
         "clientId": "__GITHUB_CLIENT_ID__",
         "clientSecret": "__GITHUB_CLIENT_SECRET__",
         "syncMode": "IMPORT"
       }
-    }
-  ],
-
-  "authenticationFlows": [
-    {
-      "alias": "almanac-first-broker-login",
-      "description": "First-broker-login for almanac: links a new IdP identity to an existing account by verified email instead of always creating a new user. See almanac-realm.README.md.",
-      "providerId": "basic-flow",
-      "topLevel": true,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
-          "authenticator": "idp-review-profile",
-          "authenticatorFlow": false,
-          "requirement": "REQUIRED",
-          "priority": 10,
-          "userSetupAllowed": false
-        },
-        {
-          "authenticatorFlow": true,
-          "requirement": "REQUIRED",
-          "priority": 20,
-          "flowAlias": "almanac-first-broker-login handle existing account",
-          "userSetupAllowed": false
-        }
-      ]
-    },
-    {
-      "alias": "almanac-first-broker-login handle existing account",
-      "description": "Sub-flow: if an account with the same (verified) email already exists, link to it automatically rather than prompting the user or creating a duplicate.",
-      "providerId": "basic-flow",
-      "topLevel": false,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
-          "authenticator": "idp-confirm-link",
-          "authenticatorFlow": false,
-          "requirement": "REQUIRED",
-          "priority": 10,
-          "userSetupAllowed": false
-        },
-        {
-          "authenticatorFlow": true,
-          "requirement": "REQUIRED",
-          "priority": 20,
-          "flowAlias": "almanac-first-broker-login handle existing account verify",
-          "userSetupAllowed": false
-        }
-      ]
-    },
-    {
-      "alias": "almanac-first-broker-login handle existing account verify",
-      "description": "Sub-flow: automatically links by verified email, no manual confirmation prompt.",
-      "providerId": "basic-flow",
-      "topLevel": false,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
-          "authenticator": "idp-email-verification",
-          "authenticatorFlow": false,
-          "requirement": "ALTERNATIVE",
-          "priority": 10,
-          "userSetupAllowed": false
-        },
-        {
-          "authenticatorFlow": true,
-          "requirement": "ALTERNATIVE",
-          "priority": 20,
-          "flowAlias": "almanac-first-broker-login handle existing account verify link",
-          "userSetupAllowed": false
-        }
-      ]
-    },
-    {
-      "alias": "almanac-first-broker-login handle existing account verify link",
-      "description": "Sub-flow: finalizes the automatic link.",
-      "providerId": "basic-flow",
-      "topLevel": false,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
-          "authenticator": "idp-username-password-form",
-          "authenticatorFlow": false,
-          "requirement": "REQUIRED",
-          "priority": 10,
-          "userSetupAllowed": false
-        }
-      ]
     }
   ],
 
