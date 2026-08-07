@@ -69,6 +69,7 @@ Connect issuer. See
 | `OAUTH2_PROXY_PROVIDER` | oauth2-proxy provider for browser SSO. Defaults to `google`. `github` needs no issuer URL; `oidc` (or `keycloak-oidc`) does. | optional |
 | `OAUTH2_PROXY_OIDC_ISSUER_URL` | Issuer URL when `OAUTH2_PROXY_PROVIDER=oidc`. Ignored by `google` and `github`, and safe to leave blank for them. | `oidc` provider |
 | `OAUTH2_PROXY_SKIP_PROVIDER_BUTTON` | Skip oauth2-proxy's "Sign in with X" interstitial and go straight to the provider. Defaults to `true` — Almanac only ever configures one provider, so the page is an extra click. Set `false` to restore it. | optional |
+| `OAUTH2_PROXY_BACKEND_LOGOUT_URL` | Provider endpoint to call on sign-out, ending the provider's session as well as Almanac's. Without it, signing out leaves the provider session intact and the next request signs you back in. Google publishes no such endpoint; for others use `end_session_endpoint` from the issuer's discovery document, with `{id_token}` as the token placeholder. | optional |
 | `OAUTH2_PROXY_CLIENT_ID` | OAuth client ID for browser SSO. Also the default for the MCP OAuth client. | production |
 | `OAUTH2_PROXY_CLIENT_SECRET` | OAuth client secret for browser SSO | production |
 | `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy session cookie encryption key. Generate fresh; never reuse one across deployments. | production |

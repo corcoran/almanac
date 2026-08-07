@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Signing out now ends the provider's session, not just Almanac's.** Sign-out
+  cleared Almanac's cookie and left the identity provider's session running, so
+  the next request signed you straight back in. Set
+  `OAUTH2_PROXY_BACKEND_LOGOUT_URL` to your issuer's `end_session_endpoint` to
+  enable it; Google publishes no such endpoint, so Google deployments are
+  unchanged.
+- **Social login through the Keycloak fixture works.** Its realm shipped a
+  custom first-broker-login flow with no branch for a first-time user, so any
+  Google or GitHub sign-in failed with "Invalid username or password" after
+  authenticating successfully. Both providers now use Keycloak's built-in flow.
+- **The fixture's `almanac-web` client accepts oauth2-proxy's callback.** Its
+  redirect URIs only covered the MCP server's port, so browser sign-in failed
+  with `invalid_redirect_uri`.
+- **A misconfigured MCP client now gets an error that names the problem.**
+  Registering `/mcp` under the SSE transport instead of Streamable HTTP
+  returned "Server not initialized", which reads as a broken server; it now
+  returns `405` with `Allow: POST`. Connecting assistants documents the
+  transport.
+
 ## [1.35.0] - 2026-08-07
 
 ### Added

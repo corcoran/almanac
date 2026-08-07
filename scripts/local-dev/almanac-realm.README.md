@@ -56,8 +56,8 @@ through `"standardFlowEnabled": true` (`authorization_code` + PKCE).
 
 ```json
 "redirectUris": [
-  "http://localhost:3030/oauth/callback",
-  "http://127.0.0.1:3030/oauth/callback"
+  "http://localhost:4180/oauth2/callback",
+  "http://127.0.0.1:4180/oauth2/callback"
 ]
 ```
 
@@ -67,6 +67,16 @@ redirect is a classic OAuth vulnerability (it lets an attacker redirect the
 authorization code or token to a URI they control). `localhost` and
 `127.0.0.1` are both listed because browsers treat them as different origins
 even though they resolve to the same host.
+
+Both clients are normally reached through oauth2-proxy on `4180`, so both list
+it: `/oauth2/callback` for the browser (`almanac-web`) and `/oauth/callback`
+for MCP (`almanac-mcp`). The MCP callback is built from
+`ALMANAC_MCP_PUBLIC_URL`, which is the origin users reach Almanac at — not the
+MCP server's own port. `3030` is listed only for running the MCP server
+directly, without a proxy in front.
+
+Serve Almanac on any other port or host and you must add that exact callback
+here, or authorization fails with `invalid_redirect_uri`.
 
 ## Identity providers: Google and GitHub (present but disabled)
 
@@ -92,24 +102,20 @@ sign-in. To actually turn one on:
 
 `trustEmail` differs between the two: `true` for Google, `false` for GitHub —
 GitHub accounts can have unverified or private emails, so Keycloak is told
-not to assume the email claim is verified. That's exactly what the
-account-linking flow below is for.
+not to assume the email claim is verified.
 
-## Account linking by verified email
+## Account linking
 
-Both identity providers point `firstBrokerLoginFlowAlias` at
-`almanac-first-broker-login`, a custom (non-built-in) authentication flow
-defined in `authenticationFlows`. It's a copy of Keycloak's built-in "first
-broker login" flow with one behavioral change: instead of always creating a
-new user for a new IdP identity, it links to an **existing** account when one
-already exists with the same verified email (via the `idp-confirm-link` +
-`idp-email-verification` executions, chained through the nested sub-flows).
+Both identity providers use Keycloak's built-in `first broker login` flow. A
+provider identity with no matching account creates one; a provider identity
+whose email matches an existing account links to it, so one person keeps one
+account whichever provider they signed in with.
 
-**Net effect:** if a user first signs up via Google as `jane@example.com`,
-then later authenticates via GitHub with that same verified
-`jane@example.com`, Keycloak links the GitHub identity to the **existing**
-account instead of creating a second one. One person, one account, regardless
-of which provider they used that day.
+Linking to an existing account asks you to prove you own it, either by email
+confirmation or by entering that account's password. **This realm configures no
+SMTP**, so the email option is unavailable and the password is the only route —
+expect a password prompt the first time you link a provider to an account that
+already exists. Configure `smtpServer` if you want the email path.
 
 ## No users baked into the file
 
