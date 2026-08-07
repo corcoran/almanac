@@ -3,12 +3,13 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/corcoran/almanac/ci.yml?branch=master&label=ci)](https://github.com/corcoran/almanac/actions/workflows/ci.yml)
 [![Latest tag](https://img.shields.io/github/v/tag/corcoran/almanac?label=release&color=c8871f)](https://github.com/corcoran/almanac/tags)
 [![License](https://img.shields.io/github/license/corcoran/almanac?color=4a7a5f)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-almanac--fitness.com-c8871f)](https://almanac-fitness.com/guide/)
 ![MCP](https://img.shields.io/badge/MCP-70%2B_tools-c8871f)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-4a7a5f)
 
 **A precise, self-hosted fitness record your own AI agent can read.**
 
-**[See what it does →](https://corcoran.github.io/almanac/)**
+**[See what it does →](https://almanac-fitness.com/)** &nbsp;·&nbsp; **[Read the docs →](https://almanac-fitness.com/guide/)**
 
 Almanac keeps an accurate account of what you eat, lift, weigh, and sleep, then hands it to the assistant you already use over MCP. Ask how your cut is going or what to train today, and the answer comes from your own numbers, not a guess. It runs on your hardware, so the record stays yours.
 
@@ -60,7 +61,19 @@ Claude / ChatGPT ─────────┴──► almanac-mcp   (70+ tool
 
 Four containers behind nginx. oauth2-proxy handles browser SSO (Google, GitHub, or any OIDC provider it supports); MCP traffic bypasses SSO and authenticates via OAuth 2.1 or personal access tokens (PATs). All auth paths converge on the same PAT format stored in SQLite.
 
-See [reference/mcp-auth.md](reference/mcp-auth.md) for the full authentication architecture.
+See the [authentication guide](https://almanac-fitness.com/guide/authentication) for the full architecture.
+
+## Documentation
+
+Full documentation is at **[almanac-fitness.com](https://almanac-fitness.com/)**.
+
+- [Getting started](https://almanac-fitness.com/guide/getting-started) — install and run locally
+- [Deploy](https://almanac-fitness.com/guide/deploy) — production walkthrough
+- [Authentication](https://almanac-fitness.com/guide/authentication) — Google OAuth, step by step
+- [Connecting assistants](https://almanac-fitness.com/guide/connecting-assistants) — MCP clients and PATs
+- [Configuration](https://almanac-fitness.com/guide/configuration) — every environment variable
+- [Operations](https://almanac-fitness.com/guide/operations) — updates, backups, recovery
+- [Architecture](https://almanac-fitness.com/guide/architecture) — how the MCP layer works
 
 ## Features
 
@@ -108,7 +121,7 @@ See [reference/mcp-auth.md](reference/mcp-auth.md) for the full authentication a
 - **Workout panel** — template picker, build/edit templates and starter programs, active session with live set entry, add-exercise-mid-session, end/save dialog, and last-session reference.
 - **Calendar** — month view in Workouts or Intake mode. Workouts mode shows per-template tallies, recovery pills (too_soon, prime, etc.), and a forward recommendation window; Intake mode tints each day by adherence. Tap a day (or step with `‹ ›`) to view and edit any past day; the URL reflects the day (`?date=…`).
 - **Copy stats for LLM** — one button copies a full markdown briefing of your current picture (phase, TDEE, today, trends, recent workouts, a 14-day history table) to paste into any chat.
-- **AI Meal Assistant** — an in-app chat panel where you describe what you ate and get editable proposal cards to log. It matches your stored-meal library first, estimates otherwise, and can web-search unfamiliar foods. A daily token budget shows "~N logs left"; both budget and search have configurable caps. Optional — see the LLM `.env` section.
+- **AI Meal Assistant** — an in-app chat panel where you describe what you ate and get editable proposal cards to log. It matches your stored-meal library first, estimates otherwise, and can web-search unfamiliar foods. A daily token budget shows "~N logs left"; both budget and search have configurable caps. Optional — see [Configuration](#configuration).
 - **AI insights coach** — a second panel that reads your logged history back to you: nutrition adherence, TDEE drift, training volume and split balance, and sleep. Read-only by design (no write tools, no web search). Transcripts persist per day with `◀ ▶` navigation, and opening a fresh day auto-asks for a quick read. Runs a stronger model than the meal parser (`ALMANAC_LLM_INSIGHTS_MODEL`).
 - **Settings** — profile editing, activity level, timezone and unit (metric/imperial) selectors, PAT creation/revocation, and the MCP URL for connecting an assistant.
 - **Mobile responsive** — single 768 px breakpoint, swipeable panels via CSS scroll-snap, contextual sticky header, and 36 px touch targets.
@@ -123,7 +136,7 @@ See [reference/mcp-auth.md](reference/mcp-auth.md) for the full authentication a
 
 ### Auth
 
-- **One user or several** — the allowlist decides. Each allowlisted email gets its own account, provisioned automatically on first sign-in; there's no separate account-creation step. The first account on a fresh instance is bootstrapped as admin, so you're never locked out of the admin tooling — make sure that first sign-in is *you* (see the [deploy runbook](deploy/README.md), Step 9, for the cached-session gotcha and how to reassign it).
+- **One user or several** — the allowlist decides. Each allowlisted email gets its own account, provisioned automatically on first sign-in; there's no separate account-creation step. The first account on a fresh instance is bootstrapped as admin, so you're never locked out of the admin tooling — make sure that first sign-in is *you* (see the [authentication guide](https://almanac-fitness.com/guide/authentication) for the cached-session gotcha and how to reassign it).
 - **Three-layer allowlist** — oauth2-proxy (browser SSO), API (account provisioning), and MCP (OAuth flow) all enforce the same `allowed-users.txt` file.
 - **OAuth tokens are real PATs** — minted via the API, stored in SQLite, visible and revocable in the web Settings panel.
 - **Per-user data isolation** — every record is scoped to its owner. Reads and writes are enforced against the authenticated user at the data layer, so one account never sees or touches another's data.
@@ -250,8 +263,8 @@ For local dev with a PAT, point at `http://localhost:4180/mcp`. For OAuth-capabl
 > and ChatGPT's web and mobile apps cannot: they connect from the vendor's
 > servers, so `localhost` is *their* localhost and a `192.168.x` address isn't
 > routable from outside your network. Those clients need Almanac published at a
-> public HTTPS domain — see the [deploy runbook](deploy/README.md). The app
-> detects this and adjusts the connect instructions it shows you.
+> public HTTPS domain — see the [deploy guide](https://almanac-fitness.com/guide/deploy).
+> The app detects this and adjusts the connect instructions it shows you.
 
 > **Connecting a custom MCP server is a paid feature on both Claude and
 > ChatGPT.** Adding your own remote MCP server is gated behind their paid
@@ -266,103 +279,18 @@ For local dev with a PAT, point at `http://localhost:4180/mcp`. For OAuth-capabl
 
 Open Claude Code. The `almanac` tools should show up under the `almanac` server. Tell Claude what you ate in plain language — "two eggs, toast and butter, and a flat white" — and it should estimate the calories and macros itself, log them, and show you what it recorded. The meal then appears in the web UI and via `get_macros_today`.
 
-## `.env` reference
+## Configuration
 
-### Core
+Almanac is configured entirely through `.env`. `.env.example` documents every
+variable inline, and the [configuration reference](https://almanac-fitness.com/guide/configuration)
+covers all of them grouped by concern — core, MCP, OAuth, watchtower
+notifications, and the optional LLM surfaces.
 
-| Variable | Purpose | Required when |
-|---|---|---|
-| `ALMANAC_DB_PATH` | SQLite file location | always |
-| `ALMANAC_API_PORT` / `_HOST` | Where API listens | always |
-| `ALMANAC_API_URL` | Where MCP reaches API | always |
-| `ALMANAC_TRUST_PROXY_HEADERS` | API trusts `X-Forwarded-Email` from oauth2-proxy | behind a proxy |
-| `ALMANAC_ALLOWED_EMAILS` | Email allowlist — file path or comma-separated. Shared by the API and MCP server. | production |
-| `ALMANAC_WEB_PORT` | Port the Vite dev server binds (default `5173`). Set when running two stacks side by side. | local dev |
-| `ALMANAC_DEV_EMAIL` | Email the Vite dev proxy injects as `X-Forwarded-Email`. The API auto-provisions this user. | local dev |
-| `ALMANAC_LOG_LEVEL` | Pino level override (`fatal`…`silent`). Unset uses debug in dev, info in prod. | optional |
-
-### MCP
-
-| Variable | Purpose | Required when |
-|---|---|---|
-| `ALMANAC_MCP_TRANSPORT` | `stdio`, `http`, or `sse` (legacy) | always |
-| `ALMANAC_MCP_PORT` / `_HOST` | Where MCP listens (HTTP/SSE only) | http/sse |
-| `ALMANAC_MCP_CLIENT_TOKEN` | Static PAT for stdio transport | stdio |
-
-### OAuth 2.1 (MCP + browser SSO)
-
-The stack ships configured for Google as the SSO provider, so the variables below name Google credentials. oauth2-proxy also supports GitHub, GitLab, and any generic OIDC provider — swap `--provider` in `docker-compose.yml` and supply that provider's client ID and secret in the same variables.
-
-| Variable | Purpose | Required when |
-|---|---|---|
-| `OAUTH2_PROXY_CLIENT_ID` | Google OAuth client ID (shared by oauth2-proxy and MCP) | production |
-| `OAUTH2_PROXY_CLIENT_SECRET` | Google OAuth client secret | production |
-| `OAUTH2_PROXY_COOKIE_SECRET` | oauth2-proxy session cookie encryption key | production |
-| `OAUTH2_PROXY_REDIRECT_URL` | oauth2-proxy callback URL (`https://domain/oauth2/callback`) | production |
-| `ALMANAC_MCP_OAUTH_CLIENT_ID` | Google client ID for MCP OAuth (typically `${OAUTH2_PROXY_CLIENT_ID}`) | MCP OAuth mode |
-| `ALMANAC_MCP_OAUTH_CLIENT_SECRET` | Google client secret for MCP OAuth | MCP OAuth mode |
-| `ALMANAC_MCP_PUBLIC_URL` | Public URL for MCP OAuth issuer (`https://domain`) | MCP OAuth mode |
-
-### Watchtower auto-deploy notifications (deploy-only, optional)
-
-The `watchtower` compose service emails on container updates/errors via shoutrrr SMTP. Set `WATCHTOWER_EMAIL_TO` to turn notifications on; leave it blank and watchtower runs silently.
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `WATCHTOWER_EMAIL_TO` | Recipient. Blank = notifications off | unset (silent) |
-| `WATCHTOWER_EMAIL_FROM` | Sender address | — |
-| `WATCHTOWER_EMAIL_SERVER` | SMTP host | — |
-| `WATCHTOWER_EMAIL_PORT` | SMTP port | `25` |
-| `WATCHTOWER_EMAIL_HELO` | HELO/EHLO hostname — **must be an FQDN**; a strict postfix rejects shoutrrr's `localhost` default with `504 5.5.2 … need fully-qualified hostname` | — |
-
-### LLM / AI surfaces (optional)
-
-Read by the API only. Both AI surfaces — the **AI Meal Assistant** and the **AI insights coach** — are gated behind the same `ALMANAC_LLM_ENABLED` switch (off by default), so they stay dark until explicitly turned on. The prod `docker-compose.yml` already forwards these from the host `.env` to the `almanac-api` service.
-
-The two surfaces use **separate models**: meal parsing is a cheap extraction task and stays on Haiku, while the coach does harder multi-signal reasoning and defaults to Sonnet.
-
-**Anthropic is currently the only supported provider.** `ALMANAC_LLM_PROVIDER`
-exists as a seam and is validated at boot, but `anthropic` is the only accepted
-value — anything else fails fast rather than silently misbehaving. Adding
-another provider means implementing one branch behind that seam; it's a
-plausible future change, not something that works today.
-
-**This runs on your own API key, so the AI surfaces cost real money per use.**
-Two things keep that small. The cheaper model does the high-volume work (meal
-parsing on Haiku; only the coach reaches for Sonnet), and the system prompts are
-split so the large stable part is served from Anthropic's 1-hour prompt cache
-instead of being re-billed on every turn.
-
-In practice, dogfooding over a couple of months, **an active user costs roughly
-5–10¢ on a day they use it** — nothing on days they don't. Your mileage will
-vary with usage and current model pricing, so treat that as an order of
-magnitude, not a quote.
-
-If you'd rather not find out the hard way, the limits below are the guardrails:
-`ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` drives the visible "~N logs left"
-counter, `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` is a real circuit breaker that
-starts returning 429s, and `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` bounds web
-searches specifically. All three are per-user-per-day, and an admin can override
-the limit for one person with `admin_set_user_daily_limit`. Left unset, there is
-**no cap** — deliberate, but worth knowing before you invite other people.
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `ALMANAC_LLM_ENABLED` | Master switch for both AI surfaces (meal chat + insights coach) | `false` |
-| `ANTHROPIC_API_KEY` | Anthropic key. Without it both AI surfaces are hidden (`llm_available=false`) | — |
-| `ALMANAC_LLM_PROVIDER` | Provider seam. Only `anthropic` is supported; any other value fails at boot | `anthropic` |
-| `ALMANAC_LLM_MODEL` | Model for the **meal assistant** (the cheap parser) | `claude-haiku-4-5` |
-| `ALMANAC_LLM_INSIGHTS_MODEL` | Model for the **insights coach** — harder reasoning, so a stronger default | `claude-sonnet-4-6` |
-| `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` | Soft daily token limit — drives "~N logs left"; warns but never blocks | unset (no soft limit) |
-| `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` | Hard daily token ceiling — 429 circuit-breaker | unset (no hard cap) |
-| `ALMANAC_LLM_TOKENS_PER_SEARCH` | Flat token charge per web search when no recent search history to average | `2500` |
-| `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day; at the cap search is disabled but meals still log | unset (uncapped) |
-
-> **Turning it on** also needs: (1) the per-user flag `llm_logging_enabled = 1`
-> (admin API/MCP tool, or `UPDATE users SET llm_logging_enabled = 1 WHERE email = '…'`),
-> and (2) web search enabled for your org in the Anthropic Console (Settings → Privacy).
-> Web searches draw a flat charge from the same daily token budget; the real token
-> cost is still recorded but the budget is billed the flat per-search amount.
+The AI surfaces are off by default and run on your own Anthropic API key, so
+they cost real money per use. Per-user daily token and search caps are
+available; left unset there is **no cap**. See the
+[LLM section](https://almanac-fitness.com/guide/configuration#llm-ai-surfaces)
+before you turn them on or invite other people.
 
 ## Production deployment
 
@@ -376,8 +304,8 @@ The email allowlist is enforced at three independent layers, all reading the
 same `allowed-users.txt`: oauth2-proxy for browser traffic, the API for account
 provisioning, and the MCP server during the OAuth flow.
 
-Full walkthrough (DNS, TLS, nginx, first boot, updates, backups, rollback) is in
-the **[deploy runbook](deploy/README.md)**.
+- **[Deploy](https://almanac-fitness.com/guide/deploy)** — DNS, TLS, nginx, OAuth, first boot
+- **[Operations](https://almanac-fitness.com/guide/operations)** — updates, watchtower, backups, recovery
 
 ## Testing
 
@@ -405,8 +333,7 @@ almanac/
 │   ├── mcp/            # MCP server, MCP tools + resources, OAuth 2.1
 │   └── web/            # Vue 3 SPA, Vite, Pinia
 ├── deploy/             # nginx config, post-migration smoke test
-├── docs/               # showcase landing page (GitHub Pages)
-├── reference/          # MCP architecture + authentication reference
+├── docs/               # documentation site (VitePress) + landing page
 ├── scripts/
 │   └── local-dev/      # up.sh / down.sh, dev-noauth.sh, demo.sh, screenshot.mjs
 ├── docker-compose.yml

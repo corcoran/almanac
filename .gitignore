@@ -12,6 +12,8 @@ data/*.sqlite-wal
 # Design specs and implementation plans are working notes, not product docs —
 # kept local rather than published with the repo.
 docs/superpowers/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 .DS_Store
 .worktrees/
 data/backups/
