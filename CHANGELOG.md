@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Documentation site at [almanac-fitness.com](https://almanac-fitness.com).**
+  Setting Almanac up asks you to be comfortable with web, MCP, backend *and*
+  DevOps, and being strong in three of those still leaves you stranded in the
+  fourth. The deploy and setup material moved out of a 420-line README and two
+  scattered reference files into a browsable, searchable site with a sidebar
+  and cross-links, so you can arrive in the middle and find your way.
+- **A real OAuth walkthrough.** The old runbook named the callback URL and left
+  you to work out where an OAuth client comes from. There is now a step-by-step
+  Google Cloud Console guide, a table mapping each console value onto its
+  environment variable, and the failure modes with their causes — wrong
+  redirect URI, unlisted email, a cached session claiming first-admin.
+- **The deploy runbook is longer, not shorter.** Every step gained a
+  verification block showing what healthy output looks like, failure modes now
+  sit at the step where they happen, and nginx settings that vary by host are
+  called out with the errors they produce.
+
+### Fixed
+
+- **Corrected the MCP OAuth callback path in `.env.example`.** It documented a
+  URL that Google would never redirect to, so following it produced a
+  `redirect_uri_mismatch` with nothing to explain it.
+- **The first-boot instructions no longer describe log lines that do not
+  exist.** The runbook told you to watch for two specific messages during the
+  first `docker compose up`; neither string has ever been in the codebase, so a
+  patient operator could wait indefinitely and conclude the deploy had failed.
+  Verification now points at the health endpoint instead.
+- **Corrected the MCP URL handed out for assistant setup.** It carried a
+  trailing slash that the PAT-only listener rejects, so the copy-paste config
+  returned a 404 for anyone who had not enabled MCP OAuth.
+- **Documented the per-user flag that gates the AI surfaces.** Setting the
+  environment variables is not enough — each user also needs
+  `llm_logging_enabled`, which has no toggle in the web UI, so the chat buttons
+  simply never appeared with nothing to indicate why.
+
 ## [1.34.0] - 2026-08-06
 
 ### Fixed
