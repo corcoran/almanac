@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Almanac — a precise fitness log your AI agent can actually read</title>
+<title>Almanac: a precise fitness log your AI agent can actually read</title>
 <meta name="description" content="A self-hosted log of your training, nutrition, weight and sleep, kept in one SQLite file your own AI assistant can read and write over MCP. Ask how the cut is going, get an answer off your real numbers.">
-<meta property="og:title" content="Almanac — a precise fitness log your AI agent can actually read">
+<meta property="og:title" content="Almanac: a precise fitness log your AI agent can actually read">
 <meta property="og:description" content="Most trackers hand you a number and explain nothing. Almanac keeps the log and hands it to whatever assistant you already use, so the answers come off your own numbers.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://almanac-fitness.com/">
@@ -143,6 +143,12 @@
   .section-head { max-width: 62ch; margin-bottom: 40px; }
   /* text-only sections: the head IS the content, so drop its trailing gap */
   .section-head:only-child { margin-bottom: 0; }
+  /* Most heads end in a lede that sits 16px under the h2, and the 40px above
+     buys separation from the block below. A head with no lede has nothing in
+     that 40px, and the following block adds its own leading margin on top, so
+     the heading floats. Match the 16px rhythm instead. */
+  .section-head:has(h2:last-child) { margin-bottom: 16px; }
+  .host-grid p:first-child { margin-top: 0; }
   h2 {
     font-family: var(--font-display);
     font-weight: 500;
@@ -234,7 +240,10 @@
   .feature h3 { margin-top: 0; }
 
   /* ---- self-host ---- */
-  .host-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start; }
+  /* The stack card carries ~200px less content than the prose column beside it,
+     so it stretches to match. The slack lands inside the panel as padding
+     instead of as a hole in the section. */
+  .host-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: stretch; }
   .host-grid p { color: var(--ink-soft); font-size: 17px; }
   .stack {
     font-family: var(--font-mono);
@@ -372,8 +381,8 @@
     <div class="section-head">
       <p class="eyebrow">Built in, if you don't run your own</p>
       <h2>No agent of your own? There's one built in.</h2>
-      <p>Two chat surfaces ship with the web app, so you don't have to wire anything up to get the same thing. Connecting your own assistant needs a paid Claude or ChatGPT plan; these don't — they run on the server's key, for everyone you've let in.</p>
-      <p style="margin-top:15px">That key is yours, so these cost you a few cents on a day someone uses them. Cheap model for parsing, cached prompts, and a per-user daily cap you set — the bill stays boring.</p>
+      <p>Two chat surfaces ship with the web app, so you don't have to wire anything up to get the same thing. Connecting your own assistant needs a paid Claude or ChatGPT plan. These don't, because they run on the server's key for everyone you've let in.</p>
+      <p style="margin-top:15px">That key is yours, so these cost you a few cents on a day someone uses them. Cheap model for parsing, cached prompts, and a per-user daily cap you set, so the bill stays boring.</p>
     </div>
     <div class="two-up">
       <figure>
