@@ -20,3 +20,16 @@ if ! pnpm -r test; then
 fi
 
 echo "pre-push: tests passed."
+
+# The docs build is the dead-page check (VitePress fails on one); the script
+# after it covers `#fragment` targets, which VitePress does not check.
+echo "pre-push: checking docs links..."
+if ! docs_build=$(pnpm docs:build 2>&1); then
+  echo "$docs_build" >&2
+  echo "pre-push: docs build failed — push aborted. Use --no-verify to override." >&2
+  exit 1
+fi
+if ! node scripts/check-docs-links.mjs; then
+  echo "pre-push: dead docs links — push aborted. Use --no-verify to override." >&2
+  exit 1
+fi
