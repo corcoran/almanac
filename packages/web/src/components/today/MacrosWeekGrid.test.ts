@@ -29,7 +29,7 @@ type DayTotals = {
 type Observed = {
   cardio_kcal: number;
   workout_kcal: number;
-  steps_kcal: number;
+  steps_kcal: number | null;
   vs_target: number;
   vs_maintenance: number;
   status: "on_track" | "at_risk" | "off_track";
@@ -63,7 +63,9 @@ function makeDay(
     maintenance_kcal: number;
     cardio_kcal: number;
     workout_kcal: number;
-    steps_kcal: number;
+    // number: a logged step-burn value. null: a real gap day (no step log —
+    // distinct from 0, which would mean "logged zero steps").
+    steps_kcal: number | null;
     status: Observed["status"];
     // Top-level snapshotted net: intake − TDEE (deficit negative). When set,
     // overrides the default null. Used to test the new net_kcal field path.
@@ -92,7 +94,9 @@ function makeDay(
   const maintenance_kcal = overrides.maintenance_kcal ?? 2370;
   const cardio_kcal = overrides.cardio_kcal ?? 0;
   const workout_kcal = overrides.workout_kcal ?? 0;
-  const steps_kcal = overrides.steps_kcal ?? 0;
+  // `steps_kcal: null` is a deliberate override (unlogged day), so check
+  // "was a key passed" rather than `?? 0`, which would coerce null back to 0.
+  const steps_kcal = overrides.steps_kcal !== undefined ? overrides.steps_kcal : 0;
   const status = overrides.status ?? "on_track";
   return {
     date,
@@ -598,5 +602,36 @@ describe("MacrosWeekGrid", () => {
     const wrapper = mount(MacrosWeekGrid, { props: { days: [] } });
     expect(wrapper.find('[data-test="macros-cell"]').exists()).toBe(false);
     expect(wrapper.text()).toMatch(/loading|—|no data/i);
+  });
+
+  it("excludes an unlogged (null steps_kcal) day from the steps average", () => {
+    // Two logged days (300, 400) and one gap day with steps_kcal: null.
+    // Skip-null mean of [300, 400] = 350 — not 233, which is what treating
+    // the gap day as a zero-step day would produce.
+    const days = [
+      makeDay(
+        "2026-08-04",
+        { kcal: 1800, protein_g: 150, carb_g: 180, fat_g: 60 },
+        { steps_kcal: 300 },
+      ),
+      makeDay(
+        "2026-08-05",
+        { kcal: 1800, protein_g: 150, carb_g: 180, fat_g: 60 },
+        { steps_kcal: null },
+      ),
+      makeDay(
+        "2026-08-06",
+        { kcal: 1800, protein_g: 150, carb_g: 180, fat_g: 60 },
+        { steps_kcal: 400 },
+      ),
+      makeDay(
+        "2026-08-07",
+        { kcal: 1800, protein_g: 150, carb_g: 180, fat_g: 60 },
+        { steps_kcal: 500 },
+      ), // today — always dropped from the avg
+    ];
+    const wrapper = mount(MacrosWeekGrid, { props: { days } });
+    const avgs = avgCellsAll(wrapper);
+    expect(at(avgs, STEPS_ROW).text()).toBe("350");
   });
 });

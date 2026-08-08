@@ -62,6 +62,11 @@ describe("buildMealSystemPrompt split", () => {
     expect(lc).toContain("hypothetical");
   });
 
+  it("tells the model to speak plainly", () => {
+    const { stable } = buildMealSystemPrompt(baseCtx);
+    expect(stable).toContain("Speak plainly");
+  });
+
   it("stable block teaches alcohol -> alcohol_sessions and pour-size clarification", () => {
     const { stable } = buildMealSystemPrompt(baseCtx);
     const lc = stable.toLowerCase();

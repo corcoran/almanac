@@ -33,7 +33,7 @@ export function makeGetWeightTrendTool(deps: ToolDeps): Tool<GetWeightTrendInput
   return {
     name: "get_weight_trend",
     description:
-      "Get the user's exponentially-weighted body-weight trend over a date range. Defaults to the last 30 days. Returns `{ points: [{ measured_on, weight_kg, trend_kg }] }`.",
+      "Get the user's exponentially-weighted body-weight trend over a date range. Defaults to the last 30 days. Returns `{ points: [{ date, raw_kg, trend_kg }] }`. `raw_kg` is null on days with no weigh-in — `trend_kg` carries forward on those days rather than being recomputed.",
     inputSchema: GetWeightTrendInputSchema,
     annotations: {
       readOnlyHint: true,

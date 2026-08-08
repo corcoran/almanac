@@ -8,6 +8,17 @@ function mockJsonResponse(status: number, body: unknown) {
 }
 
 describe("get_weight_trend", () => {
+  it("describes the fields the endpoint actually returns", () => {
+    const tool = makeGetWeightTrendTool({
+      api: new ApiClient({ baseUrl: "http://x", fetchImpl: vi.fn() }),
+      currentUserId: async () => 1,
+      currentToken: () => "alm_test",
+    });
+    expect(tool.description).toContain("raw_kg");
+    expect(tool.description).not.toContain("measured_on");
+    expect(tool.description).not.toContain("weight_kg");
+  });
+
   it("defaults to last 30 days, sends YYYY-MM-DD, returns { points }", async () => {
     const points = [
       { measured_on: "2026-05-01", weight_kg: 80.1, trend_kg: 80.5 },

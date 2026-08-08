@@ -141,7 +141,7 @@ describe("TodayPane", () => {
           measurement_days: 0,
         },
       },
-      trend_weight: { current_kg: null, weight_change: null },
+      trend_weight: { current_kg: null, as_of: null, weight_change: null },
       profile_complete: true,
       unexplained_gap: null,
       phase_adherence: null,

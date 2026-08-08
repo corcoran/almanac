@@ -227,7 +227,7 @@ export function computeDailyTargetForDate(
   }
   // Steps for the requested date: snapshotted est_kcal (weight-aware at write).
   const stepLog = findStepLogByDate(db, userId, date);
-  const steps_kcal = stepLog?.est_kcal ?? 0;
+  const steps_kcal = stepLog?.est_kcal ?? null;
 
   const dayTarget = computeDailyTarget({
     phase: {

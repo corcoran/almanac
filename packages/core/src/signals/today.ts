@@ -125,12 +125,12 @@ export type TodayContext = {
     sleep: { hours: number; quality: number | null } | null;
     /**
      * Today's step log, if the user logged steps for the current user-day.
-     * `null` when no step log row exists — distinct from a zero-steps log
-     * (`{ count: 0, est_kcal: 0 }`), which is an explicit "I tracked, but
-     * didn't move". The MCP summary tools use this distinction the same way
-     * `meals_logged_today` separates "ate zero kcal" from "didn't log".
+     * `null` when no row exists — there is no such thing as a zero-step day.
+     * `est_kcal` is separately nullable: a logged row can have its kcal
+     * estimate cleared (`PATCH .../step-logs/:id { est_kcal: null }`) without
+     * un-logging the day, so `count` and `est_kcal` nullness are independent.
      */
-    steps: { id: number; count: number; est_kcal: number } | null;
+    steps: { id: number; count: number; est_kcal: number | null } | null;
     workouts: Array<{ id: number; template_name: string | null; rpe: number }>;
     cardio: Array<{
       id: number;
@@ -163,7 +163,13 @@ export type TodayContext = {
   };
   stim_states: StimState[];
   tdee: TDEE;
-  trend_weight: { current_kg: number | null; weight_change: WeightChange | null };
+  trend_weight: {
+    current_kg: number | null;
+    /** Date of the most recent weigh-in the trend reflects. The EWMA carries
+     * forward on days without one, so this is how far back the value is from. */
+    as_of: string | null;
+    weight_change: WeightChange | null;
+  };
   /**
    * `true` once the user has logged at least one body weight reading — the
    * minimum needed for the TDEE back-calc to ever have something to chew on.
@@ -342,7 +348,7 @@ export function getTodayContext(
   // Looked up unconditionally so the no-phase branch can still surface
   // today.steps and energy_balance.steps_out for the dashboard.
   const todayStepLog = findStepLogByDate(db, userId, today);
-  const todayStepsKcal = todayStepLog?.est_kcal ?? 0;
+  const todayStepsKcal = todayStepLog?.est_kcal ?? null;
 
   // Today's intake — always computed (no phase needed). Kept as a single
   // object so the no-phase branch can surface it unchanged.
@@ -581,6 +587,10 @@ export function getTodayContext(
   // at body-weight precision.
   const rawTrend = trend[trend.length - 1]?.trend_kg ?? null;
   const currentTrend = rawTrend === null ? null : Number(rawTrend.toFixed(2));
+  // Last point with a real weigh-in (raw_kg non-null) — not just the last point
+  // in the window, which may be a carried-forward day. Non-null exactly when
+  // currentTrend is (both derive from the same possibly-empty `trend` series).
+  const trendAsOf = [...trend].reverse().find((p) => p.raw_kg !== null)?.date ?? null;
   const weightChange = computeWeightChange(weights30);
 
   // Energy balance for today. food_in is meals-only (no alcohol), alcohol_in is
@@ -729,7 +739,7 @@ export function getTodayContext(
         : null,
       sleep: sleep ? { hours: sleep.hours, quality: sleep.quality } : null,
       steps: todayStepLog
-        ? { id: todayStepLog.id, count: todayStepLog.steps, est_kcal: todayStepLog.est_kcal ?? 0 }
+        ? { id: todayStepLog.id, count: todayStepLog.steps, est_kcal: todayStepLog.est_kcal }
         : null,
       workouts: workoutsToday.map((w) => ({
         id: w.id,
@@ -787,7 +797,7 @@ export function getTodayContext(
     },
     stim_states: stimStates,
     tdee,
-    trend_weight: { current_kg: currentTrend, weight_change: weightChange },
+    trend_weight: { current_kg: currentTrend, as_of: trendAsOf, weight_change: weightChange },
     profile_complete: profileComplete,
     unexplained_gap: unexplainedGap,
     phase_adherence: phaseAdherence && phaseAdherence.logged_days > 0 ? phaseAdherence : null,

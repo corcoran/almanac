@@ -1,10 +1,10 @@
-// The API version, surfaced by the /v1/health and /v1/version routes. The
-// value comes from packages/api/package.json — bump it there, not here. Keep
-// it in lockstep with packages/mcp/package.json so ping and get_capabilities
-// report the same number.
+// The API version, surfaced by the /v1/health and /v1/version routes. Released
+// images report the git tag they were built from; package.json is the fallback
+// for local builds, which carry no tag.
+import { resolveVersion } from "@almanac/core/types";
 import pkg from "../package.json" with { type: "json" };
 
-export const API_VERSION: string = pkg.version;
+export const API_VERSION: string = resolveVersion(process.env.ALMANAC_GIT_TAG, pkg.version);
 
 // The git commit the running image was built from. Baked in via the
 // ALMANAC_GIT_SHA env (set from a GIT_SHA build arg in the Dockerfile /

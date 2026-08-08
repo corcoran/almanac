@@ -16,7 +16,7 @@ type CardioEdit = { modality: string | null; duration_min: number | null; est_kc
 
 const props = defineProps<{
   cardio: CardioSession[];
-  steps: { id: number; count: number; est_kcal: number } | null;
+  steps: { id: number; count: number; est_kcal: number | null } | null;
   client: ApiClient;
   date: string;
   /** True when viewing a past day (calendar traversal). When false/omitted the
@@ -142,13 +142,16 @@ const stepsInputValid = computed(() => {
   const s = stepsDraft.value.trim();
   if (s === "") return false;
   const n = Number(s);
-  return Number.isInteger(n) && n >= 0;
+  return Number.isInteger(n) && n >= 1;
 });
 const stepsSaveDisabled = computed(() => stepsEdit.pending.value || !stepsInputValid.value);
+const stepsKcalLabel = computed(() =>
+  props.steps?.est_kcal != null ? `${props.steps.est_kcal.toLocaleString("en-US")} kcal` : "—",
+);
 
 async function onStepsSave(): Promise<void> {
   const n = Number(stepsDraft.value.trim());
-  if (!(Number.isInteger(n) && n >= 0)) return;
+  if (!(Number.isInteger(n) && n >= 1)) return;
   await stepsEdit.save(async () => {
     await props.client.post(
       "/v1/step-logs",
@@ -241,7 +244,7 @@ async function onStepsDelete(): Promise<void> {
         <span class="label">Steps:</span>
         <template v-if="steps">
           <span class="value">{{ steps.count.toLocaleString("en-US") }}</span>
-          <span class="kcal">→ {{ steps.est_kcal.toLocaleString("en-US") }} kcal</span>
+          <span class="kcal">→ {{ stepsKcalLabel }}</span>
         </template>
         <template v-else>
           <span class="value missing">— not logged</span>

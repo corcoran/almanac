@@ -5,4 +5,5 @@ export * from "./units.js";
 export * from "./untracked-periods.js";
 export * from "./user-day.js";
 export * from "./users.js";
+export * from "./version.js";
 export * from "./workouts.js";

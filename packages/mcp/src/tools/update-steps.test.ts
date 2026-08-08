@@ -1,7 +1,7 @@
 import { nthCall } from "@almanac/core/test-support";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../client.js";
-import { makeUpdateStepsTool } from "./update-steps.js";
+import { makeUpdateStepsTool, UpdateStepsInputSchema } from "./update-steps.js";
 
 function mockJsonResponse(status: number, body: unknown) {
   return { ok: status < 400, status, json: async () => body };
@@ -49,5 +49,15 @@ describe("update_steps", () => {
       currentToken: () => "alm_test",
     });
     await expect(tool.handler({ id: 999, steps: 9000 })).rejects.toThrow(/404/);
+  });
+});
+
+describe("UpdateStepsInputSchema bounds", () => {
+  it("rejects a zero step count", () => {
+    expect(UpdateStepsInputSchema.safeParse({ id: 4, steps: 0 }).success).toBe(false);
+  });
+
+  it("accepts a one-step count", () => {
+    expect(UpdateStepsInputSchema.safeParse({ id: 4, steps: 1 }).success).toBe(true);
   });
 });

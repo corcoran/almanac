@@ -7,7 +7,7 @@ import { createExercise } from "../repos/exercises.repo.js";
 import { createMeal } from "../repos/meals.repo.js";
 import { closeAndStartPhase, type StartPhaseInput } from "../repos/nutrition-phases.repo.js";
 import { createSleepLog } from "../repos/sleep.repo.js";
-import { createOrUpdateStepLog } from "../repos/step-logs.repo.js";
+import { createOrUpdateStepLog, updateStepLog } from "../repos/step-logs.repo.js";
 import { createUntrackedPeriod } from "../repos/untracked-periods.repo.js";
 import { updateUser } from "../repos/users.repo.js";
 import { createTemplate } from "../repos/workout-templates.repo.js";
@@ -543,6 +543,26 @@ describe("getTodayContext", () => {
       expect(current).toBe(Number(defined(current, "current").toFixed(2)));
     });
 
+    it("trend_weight.as_of is the date of the last real weigh-in, not today", () => {
+      // Last actual reading is 07-25; context is generated on 08-07, so the
+      // EWMA has been carrying forward for 13 days. as_of must still read
+      // 07-25 — the date the trend value reflects, not "today".
+      const { db, userId } = setupTzScenario("America/Toronto");
+      createBodyWeight(db, { user_id: userId, measured_on: "2026-07-20", weight_kg: 80 });
+      createBodyWeight(db, { user_id: userId, measured_on: "2026-07-25", weight_kg: 79.5 });
+
+      const ctx = getTodayContext(db, userId, new Date("2026-08-07T18:00:00Z"));
+      expect(ctx.trend_weight.as_of).toBe("2026-07-25");
+      expect(ctx.trend_weight.current_kg).not.toBeNull();
+    });
+
+    it("trend_weight.current_kg and as_of are both null when no weights exist", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
+      expect(ctx.trend_weight.current_kg).toBeNull();
+      expect(ctx.trend_weight.as_of).toBeNull();
+    });
+
     it("today.most_recent_weight returns the latest reading even when no reading today (Gap 21)", () => {
       const { db, userId } = setupTzScenario("America/Toronto");
       createBodyWeight(db, { user_id: userId, measured_on: "2026-05-12", weight_kg: 71.2 });
@@ -634,17 +654,30 @@ describe("getTodayContext", () => {
 
     it("today.steps is null when no step log exists for the user-day", () => {
       // Distinguishes "didn't log steps today" from an explicit zero — same
-      // rule meals_logged_today applies. energy_balance.steps_out is 0 (no
-      // contribution to display), and the net is computed exactly as if
+      // rule meals_logged_today applies. energy_balance.steps_out is null (no
+      // step log, not a zero burn), and the net is computed exactly as if
       // steps were absent (it never subtracts steps_out anyway).
       const { db, userId } = setupTzScenario("America/Toronto");
       const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
       expect(ctx.today.steps).toBeNull();
-      expect(ctx.today.energy_balance.steps_out).toBe(0);
+      expect(ctx.today.energy_balance.steps_out).toBeNull();
       // net is unchanged by steps_out — confirms the display-only rule.
       expect(ctx.today.energy_balance.net).toBe(
         ctx.today.energy_balance.total_in - ctx.today.energy_balance.tdee_baseline,
       );
+    });
+
+    it("observed.steps_kcal is null when no step log exists for the user-day", () => {
+      // Same fixture shape as the today.steps null test above.
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
+      expect(ctx.today.observed?.steps_kcal).toBeNull();
+    });
+
+    it("energy_balance.steps_out is null when no step log exists", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
+      expect(ctx.today.energy_balance.steps_out).toBeNull();
     });
 
     it("today.steps and energy_balance.steps_out populate from step_logs", () => {
@@ -666,10 +699,29 @@ describe("getTodayContext", () => {
       expect(ctx.today.observed?.steps_kcal).toBe(320);
     });
 
-    it("a zero-steps log is distinguished from absence", () => {
-      // An explicit { steps: 0, est_kcal: 0 } row means "I tracked, but I
-      // didn't move" — distinct from "didn't log". today.steps surfaces the
-      // row (NOT null); steps_out is 0 either way.
+    it("today.steps.est_kcal stays null when the estimate is cleared, without un-logging the day", () => {
+      // A logged day (steps: 8000) whose est_kcal was explicitly cleared via
+      // update (PATCH { est_kcal: null }) must still report the row — count
+      // present, est_kcal null — not collapse to est_kcal: 0, which would read
+      // as "logged, burned nothing" instead of "no estimate available".
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const row = createOrUpdateStepLog(db, {
+        user_id: userId,
+        on_date: "2026-05-12",
+        steps: 8000,
+        est_kcal: 320,
+      });
+      updateStepLog(db, userId, row.id, { est_kcal: null });
+
+      const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
+      expect(ctx.today.steps).toEqual({ id: row.id, count: 8000, est_kcal: null });
+    });
+
+    it("a stored row is distinguished from absence regardless of its steps value", () => {
+      // The repo layer isn't the validation boundary — StepLogInputSchema
+      // rejects steps: 0 above the repo, but a row written directly still
+      // surfaces as a logged day (today.steps non-null), never collapsing to
+      // the same shape as "didn't log" (null).
       const { db, userId } = setupTzScenario("America/Toronto");
       createOrUpdateStepLog(db, {
         user_id: userId,

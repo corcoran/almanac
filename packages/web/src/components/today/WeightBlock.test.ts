@@ -67,6 +67,7 @@ function makeTodayBody(
 
 const trend = {
   current_kg: 82.58,
+  as_of: "2026-06-14",
   weight_change: {
     value_kg: -0.42,
     over_days: 14,
@@ -121,6 +122,7 @@ const BASE_PROPS = () => ({
   todayBody: makeTodayBody(),
   trend: {
     current_kg: 82.1,
+    as_of: "2026-06-14",
     weight_change: { value_kg: -0.4, over_days: 10, confidence: "established" as const },
   },
   series: [],
@@ -189,7 +191,7 @@ describe("WeightBlock", () => {
     const wrapper = mount(WeightBlock, {
       props: {
         todayBody: makeTodayBody({ body_weight_kg: 82.42 }),
-        trend: { current_kg: 82.0, weight_change: null },
+        trend: { current_kg: 82.0, as_of: "2026-06-14", weight_change: null },
         series: makeSeries(2),
         unitSystem: "metric",
         client: makeClient(),
@@ -314,7 +316,7 @@ describe("WeightBlock", () => {
     const wrapper = mount(WeightBlock, {
       props: {
         todayBody: makeTodayBody({ body_weight_kg: null, most_recent: null }),
-        trend: { current_kg: null, weight_change: null },
+        trend: { current_kg: null, as_of: null, weight_change: null },
         series: [],
         unitSystem: "metric",
         client: makeClient(),

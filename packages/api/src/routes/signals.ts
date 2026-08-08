@@ -392,7 +392,7 @@ export const registerSignalsRoutes: FastifyPluginAsyncZod = async (app) => {
       // Steps for the requested date — snapshot from the step-logs repo, same
       // accounting today.ts and macros.ts use.
       const stepLog = findStepLogByDate(app.db, userId, date);
-      const steps_kcal = stepLog?.est_kcal ?? 0;
+      const steps_kcal = stepLog?.est_kcal ?? null;
       const intake = {
         kcal: meals.reduce((s, m) => s + m.kcal, 0),
         protein_g: meals.reduce((s, m) => s + m.protein_g, 0),

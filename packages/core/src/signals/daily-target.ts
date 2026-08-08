@@ -26,7 +26,9 @@ export interface DailyTargetInput {
   intake: { kcal: number; protein_g: number; carb_g: number; fat_g: number };
   cardio_kcal: number;
   workout_kcal: number;
-  steps_kcal: number;
+  // null = no step log for the day. Display-only: nothing here computes with
+  // it, so absence propagates rather than collapsing to a burn of zero.
+  steps_kcal: number | null;
 }
 
 export interface DailyTargetOutput {
@@ -36,7 +38,7 @@ export interface DailyTargetOutput {
   observed: {
     cardio_kcal: number;
     workout_kcal: number;
-    steps_kcal: number;
+    steps_kcal: number | null;
     vs_target: number;
     vs_maintenance: number;
     status: DailyTargetStatus;

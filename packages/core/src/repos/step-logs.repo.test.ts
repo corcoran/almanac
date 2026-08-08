@@ -91,7 +91,7 @@ describe("step-logs.repo", () => {
     expect(b.steps).toBe(12000);
   });
 
-  it("supports zero steps (sick / bedridden day)", () => {
+  it("does not itself enforce the positive-steps constraint — that's StepLogInputSchema's job", () => {
     const db = freshDb();
     const userId = seedUser(db);
     const log = createOrUpdateStepLog(db, {
