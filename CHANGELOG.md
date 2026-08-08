@@ -5,7 +5,7 @@ All notable changes to Almanac are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.36.0] - 2026-08-07
 
 ### Added
 
@@ -254,4 +254,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Almanac was developed privately before its public release at 1.31.2; earlier
 release notes are not included.
 
-[Unreleased]: https://github.com/corcoran/almanac/compare/v1.35.0...HEAD
+[Unreleased]: https://github.com/corcoran/almanac/compare/v1.36.0...HEAD
