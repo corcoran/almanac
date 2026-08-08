@@ -5,19 +5,19 @@ title: Connecting assistants
 # Connecting assistants
 
 How to point an AI assistant at your Almanac instance. There are two ways in,
-and both end at the same artifact — a Personal Access Token (PAT) that the API
+and both end at the same artifact: a Personal Access Token (PAT) that the API
 validates on every request.
 
-- **OAuth 2.1** — the client discovers Almanac's OAuth server, walks you through
-  sign-in, and receives a token automatically. Claude mobile and ChatGPT work
-  this way.
-- **Manual PAT** — you mint a token in the web Settings panel and paste it into
-  the client config. Claude Code and any client that supports a static bearer
-  token work this way.
+- With OAuth 2.1, the client discovers Almanac's OAuth server, walks you
+  through sign-in, and receives a token automatically. Claude mobile and
+  ChatGPT work this way.
+- With a manual PAT, you mint a token in the web Settings panel and paste it
+  into the client config. Claude Code and any client that supports a static
+  bearer token work this way.
 
 This page covers the client side. For how the two paths are implemented on the
-server — the proxy routing, the three-layer allowlist, and the auth failure
-modes — see [Authentication](/guide/authentication).
+server, including the proxy routing, the three-layer allowlist, and the auth
+failure modes, see [Authentication](/guide/authentication).
 
 ## Which path do you need?
 
@@ -36,7 +36,7 @@ modes — see [Authentication](/guide/authentication).
 
 1. Sign in to the web UI at `https://almanac.example.com`.
 2. Open the user menu (top-right) → **Settings** → **Tokens**.
-3. Click **Create token** and name it after the client — "Claude Code", "Claude
+3. Click **Create token** and name it after the client: "Claude Code", "Claude
    Desktop".
 4. Copy the cleartext token. It starts with `alm_`.
 
@@ -56,8 +56,8 @@ claude mcp add --transport http almanac https://almanac.example.com/mcp \
 ```
 
 `/mcp` speaks **Streamable HTTP**, so the transport must be `http`. Registering
-it as `sse` — a different protocol that opens with a `GET` and posts to a
-separate endpoint — fails with `HTTP 405` however valid your token is.
+it as `sse` (a different protocol that opens with a `GET` and posts to a
+separate endpoint) fails with `HTTP 405`, however valid your token is.
 
 Or write the same thing into `~/.claude.json` (or your project config) by hand:
 
@@ -78,11 +78,11 @@ Or write the same thing into `~/.claude.json` (or your project config) by hand:
 Restart the client. The `almanac` tools should appear under the `almanac`
 server, and calling `ping` should return `{ok: true, …}`.
 
-For **local dev with a PAT**, point at `http://localhost:4180/mcp` instead —
-that's oauth2-proxy, which passes `/mcp` through to the MCP container. If you're
-running the no-Docker script there's no proxy, so run the MCP server in stdio
-transport against the local API; `scripts/local-dev/dev-noauth.sh` prints the
-exact command on startup.
+For **local dev with a PAT**, point at `http://localhost:4180/mcp` instead:
+that's oauth2-proxy, which passes `/mcp` through to the MCP container. Without
+the proxy, run `pnpm --filter @almanac/mcp dev` and point at
+`http://127.0.0.1:3030/mcp`: `http` is the default transport and the MCP server
+validates the PAT itself, so the config shape doesn't change.
 
 ## Connecting Claude mobile and ChatGPT
 
@@ -100,7 +100,7 @@ and survives container restarts because it lives in SQLite.
 Behind the scenes the client runs the standard MCP OAuth 2.1 flow: discovery,
 authorization server metadata, dynamic client registration, browser
 authorization, provider callback, and token exchange. Only the last step is
-Almanac-specific — the MCP server verifies the provider token, extracts the
+Almanac-specific: the MCP server verifies the provider token, extracts the
 email, checks it against the allowlist, and mints a real PAT. The
 [Authentication](/guide/authentication#mcp-bypasses-sso) page has the details.
 
@@ -135,37 +135,15 @@ you:
 
 ## Verifying the connection
 
-Before debugging a client, confirm the endpoint itself is reachable and
-authenticating. A request with no token must be rejected:
+<!--@include: ./_mcp-probe.md-->
 
-```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
-  https://almanac.example.com/mcp
-```
-
-A `401` proves the route is wired and PAT validation is running. Repeat the same
-request with `-H 'Authorization: Bearer alm_<your-token>'`.
-
-| Status | Meaning |
-| --- | --- |
-| 2xx / 400 / 406 | Working. Auth and transport are alive. |
-| 401 with a token | The PAT is wrong, revoked, or bound to a different user. |
-| 404 | Wrong path. The MCP listener checks for `/mcp` exactly. |
-| 502 | `almanac-mcp` is down. Check `docker compose logs almanac-mcp`. |
-
-**2xx, 400, and 406 all indicate success here** — they prove the auth and
-transport layers are alive. A barebones POST that doesn't advertise SSE in its
-`Accept` header commonly gets 406, which is fine.
-
-Once connected, tell the assistant what you ate in plain language — "two eggs,
+Once connected, tell the assistant what you ate in plain language: "two eggs,
 toast and butter, and a flat white". It should estimate the calories and macros,
 log them, and show you what it recorded. The meal then appears in the web UI and
 via `get_macros_today`.
 
 ## Next steps
 
-- [Architecture](/guide/architecture) — what happens after a tool call arrives
-- [Authentication](/guide/authentication) — the server side of both auth paths
-- [Configuration](/guide/configuration) — the MCP and OAuth variables
+- [Architecture](/guide/architecture): what happens after a tool call arrives
+- [Authentication](/guide/authentication): the server side of both auth paths
+- [Configuration](/guide/configuration): the MCP and OAuth variables

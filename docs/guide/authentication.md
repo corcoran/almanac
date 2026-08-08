@@ -13,13 +13,13 @@ access token minted from the web UI.
 This page covers the part the deploy runbook assumes you already have: creating
 the OAuth client in Google Cloud Console, mapping its values onto Almanac's
 environment variables, and diagnosing the handful of ways it goes wrong. Google
-is the default rather than a requirement — [Using a different
+is the default rather than a requirement: [Using a different
 provider](#using-a-different-provider) covers GitHub, any OIDC provider, and
 running your own.
 
 Work through it between [Step 4 and Step 6 of the deploy
-runbook](/guide/deploy) — you need the client ID and secret before you write
-`.env`.
+runbook](/guide/deploy), since you need the client ID and secret before you
+write `.env`.
 
 ## How auth fits together
 
@@ -67,12 +67,12 @@ told to let their traffic through untouched:
 --skip-auth-route=^/mcp
 ```
 
-Nothing is unauthenticated as a result — the MCP server and the API do their own
+Nothing is unauthenticated as a result: the MCP server and the API do their own
 validation. Every `/mcp` request carries `Authorization: Bearer alm_…`, and the
 API checks that token against the `personal_access_tokens` table.
 
 The MCP OAuth 2.1 endpoints (`/.well-known/`, `/authorize`, `/token`,
-`/register`, `/revoke`, `/oauth/`) are skipped for the same reason — they are
+`/register`, `/revoke`, `/oauth/`) are skipped for the same reason: they are
 Almanac's own OAuth server and must be publicly reachable.
 
 The skip rule is anchored at `^/oauth/`, so a custom
@@ -82,7 +82,7 @@ completes.
 
 ### The allowlist is enforced three times
 
-One file — `allowed-users.txt`, one email per line — is read by three
+One file, `allowed-users.txt`, one email per line, is read by three
 independent components:
 
 | Layer | How it reads the file | What it gates |
@@ -95,20 +95,16 @@ Compose mounts the same host file read-only into all three containers. An email
 absent from it cannot sign in through the browser, cannot have an account
 created for it, and cannot finish an MCP OAuth flow.
 
-An empty or unreadable list means "allow any authenticated email" — the provider
+An empty or unreadable list means "allow any authenticated email": the provider
 is then your only gate.
 
-::: warning Removing a line does not revoke access
-The API's allowlist check applies to *provisioning*, not to every request: a user
-who already exists in the database keeps working after you delete their line. To
-actually cut off access, remove the account and revoke its tokens as well.
-:::
+<!--@include: ./_allowlist-revoke-warning.md-->
 
 ### Everything converges on one token format
 
 Both auth paths end at the same artifact: a PAT prefixed `alm_`, stored as a
 SHA-256 hash in SQLite. An OAuth-capable client that completes the MCP OAuth 2.1
-flow receives a real PAT as its access token — the same kind of token you would
+flow receives a real PAT as its access token, the same kind of token you would
 paste by hand. That is why tokens obtained through either route show up in
 Settings → Tokens and can be revoked there.
 
@@ -133,10 +129,10 @@ Throughout, replace `almanac.example.com` with your own domain.
    - **User type: External.** Internal is only available on Google Workspace
      domains and restricts sign-in to that domain. External works for personal
      Gmail accounts.
-   - **App name** — shown on the Google consent screen when you sign in. Use
+   - **App name**: shown on the Google consent screen when you sign in. Use
      something you'll recognize, e.g. `Almanac`.
-   - **User support email** — your own address.
-   - **Developer contact information** — your own address again.
+   - **User support email**: your own address.
+   - **Developer contact information**: your own address again.
    - **Scopes**: add none. Almanac requests only `openid` and `email`, which
      Google treats as non-sensitive defaults and does not require you to declare
      here. Adding scopes only creates a verification burden.
@@ -160,7 +156,7 @@ Throughout, replace `almanac.example.com` with your own domain.
 
    The first is oauth2-proxy's browser SSO callback and must match
    `OAUTH2_PROXY_REDIRECT_URL` character-for-character. The second is the MCP
-   OAuth 2.1 callback — `ALMANAC_MCP_PUBLIC_URL` plus
+   OAuth 2.1 callback, built from `ALMANAC_MCP_PUBLIC_URL` plus
    `ALMANAC_MCP_OAUTH_CALLBACK_PATH`, which defaults to `/oauth/callback`. You
    only need the second if you want Claude mobile or ChatGPT to connect by URL;
    without it, PAT-based clients still work.
@@ -194,7 +190,7 @@ Written into `.env` on the server (deploy runbook Step 6):
 
 `docker-compose.yml` defaults `ALMANAC_MCP_OAUTH_CLIENT_ID` and
 `ALMANAC_MCP_OAUTH_CLIENT_SECRET` to the `OAUTH2_PROXY_*` values, so with
-Google — where one client serves both consumers — setting the two
+Google, where one client serves both consumers, setting the two
 `OAUTH2_PROXY_*` variables is enough. Set the `ALMANAC_MCP_OAUTH_*` pair
 explicitly when your provider wants two separate clients.
 
@@ -210,14 +206,14 @@ The public origin is the OAuth issuer Almanac advertises to MCP clients, and the
 base it prepends to `ALMANAC_MCP_OAUTH_CALLBACK_PATH` to build the redirect URI
 it sends your provider. `ALMANAC_MCP_OIDC_ISSUER` is where Almanac fetches
 `/.well-known/openid-configuration` to learn the provider's authorization,
-token, and JWKS endpoints — nothing about the provider is hardcoded.
+token, and JWKS endpoints: nothing about the provider is hardcoded.
 
-Those four — issuer, client ID, client secret, public URL — must be set together
+Those four (issuer, client ID, client secret, public URL) must be set together
 or all left blank. All blank runs the MCP server in PAT-only mode, with no OAuth
 discovery endpoints. A partial set fails at boot naming what's missing, rather
 than quietly behaving like an intentional PAT-only deployment.
 
-Generate the cookie secret fresh — do not reuse one from another deployment, and
+Generate the cookie secret fresh. Do not reuse one from another deployment, and
 do not commit it:
 
 ```bash
@@ -243,7 +239,7 @@ address was proven. Both auth layers in front of it are configurable, so the
 provider is a `.env` choice rather than a fork.
 
 Four options, in order of how many people want them. **Most self-hosters should
-stop after the first or second** — you do not need to run an identity server to
+stop after the first or second**: you do not need to run an identity server to
 use Almanac.
 
 ### 1. Google (the default)
@@ -265,16 +261,16 @@ OAUTH2_PROXY_CLIENT_SECRET=<github oauth app client secret>
 OAUTH2_PROXY_REDIRECT_URL=https://almanac.example.com/oauth2/callback
 ```
 
-No `--scope` flag is needed — oauth2-proxy's GitHub provider already defaults to
+No `--scope` flag is needed: oauth2-proxy's GitHub provider already defaults to
 `user:email read:org`, which is what supplies the email.
 
-::: warning GitHub only emits an email that is verified *and* primary
+::: warning GitHub only emits an email that is verified and primary
 oauth2-proxy's GitHub provider populates the email header only when the address
 is both **verified** and marked **primary** on the GitHub account. A user whose
 email is private, or whose primary address is unverified, arrives with an empty
 header and Almanac returns 401. Confirm the account has a verified primary email
 before blaming the deployment. This is the real shape of the "identity is
-email-based" constraint — and it is why GitHub suits a personal instance better
+email-based" constraint, and it is why GitHub suits a personal instance better
 than a mixed group.
 :::
 
@@ -285,15 +281,15 @@ that, so you only want them if you would rather gate on org membership than
 maintain an email list.
 
 GitHub is browser SSO only. It publishes no OIDC discovery document for user
-login — its OIDC provider exists for GitHub Actions workload identity, not
-sign-in — so it cannot back the MCP OAuth flow. Leave the four
+login: its OIDC provider exists for GitHub Actions workload identity, not
+sign-in, so it cannot back the MCP OAuth flow. Leave the four
 `ALMANAC_MCP_*` OAuth variables blank and machine clients use PATs, which works
 with any browser provider. If you want OAuth-capable MCP clients on GitHub
 identities, broker GitHub through an OIDC provider (see below).
 
 ### 3. Any OIDC provider
 
-Anything OIDC-compliant — Keycloak, Authentik, Zitadel, Okta, Entra ID — needs
+Anything OIDC-compliant (Keycloak, Authentik, Zitadel, Okta, Entra ID) needs
 only an issuer URL. There is no per-provider code in Almanac: both layers read
 `<issuer>/.well-known/openid-configuration` and take the authorization, token,
 and JWKS endpoints from it.
@@ -353,7 +349,7 @@ match.
 #### Try it locally first
 
 `scripts/local-dev/keycloak.sh` boots a Keycloak on port `8085` with a seeded
-`almanac` realm — two clients (`almanac-web` for oauth2-proxy, `almanac-mcp` for
+`almanac` realm: two clients (`almanac-web` for oauth2-proxy, `almanac-mcp` for
 the MCP OAuth flow), freshly generated secrets, and a user with the email you
 pass it.
 
@@ -367,11 +363,11 @@ scripts/local-dev/keycloak.sh --down                     # teardown
 It prints a ready-to-paste `.env` block on success. Secrets are generated per
 run with `openssl rand -hex 32` and never written into the tracked realm JSON.
 `scripts/local-dev/almanac-realm.README.md` annotates every non-obvious choice
-in that realm — read it if you want to learn the model rather than just run it.
+in that realm; read it if you want to learn the model rather than just run it.
 
 ::: warning Two things to know
 Keycloak silently skips importing a realm that already exists, so in `--persist`
-mode editing `almanac-realm.json` and re-running appears to do nothing — the
+mode editing `almanac-realm.json` and re-running appears to do nothing. The
 script detects this and points you at `--reimport`.
 
 The fixture runs `start-dev`, which disables HTTPS and hostname enforcement. It
@@ -396,7 +392,7 @@ the realm already contains and which fields each identity provider needs.
 
 Console changes are lost on `--down` or a restart unless you started with
 `--persist`. Rotating a client secret there also invalidates the `.env` block the
-script printed — copy the new value out, or re-up to regenerate both.
+script printed, so copy the new value out, or re-up to regenerate both.
 
 #### Running one for real
 
@@ -414,11 +410,11 @@ docker compose --profile keycloak up -d   # the stack plus Keycloak
 | Variable | Purpose |
 | --- | --- |
 | `KEYCLOAK_ADMIN_PASSWORD` | Bootstrap admin console password. **Required** |
-| `KEYCLOAK_DB_PASSWORD` | Postgres password, read by both the `keycloak` and `keycloak-db` services — they must match, so set it once. **Required** |
+| `KEYCLOAK_DB_PASSWORD` | Postgres password, read by both the `keycloak` and `keycloak-db` services. They must match, so set it once. **Required** |
 | `KEYCLOAK_HOSTNAME` | Public HTTPS URL you authenticate against. Defaults to a placeholder domain |
 | `KEYCLOAK_ADMIN_USER` | Admin username. Defaults to `admin` |
 
-::: danger Unset passwords do not fail — they blank
+::: danger Unset passwords do not fail, they blank
 Compose supplies no default for the two password variables. Left unset they
 resolve to an empty string, so Keycloak starts with a **blank admin password**
 rather than refusing to boot. It warns; it does not stop. Generate both before
@@ -429,8 +425,8 @@ python -c 'import secrets,string;print("".join(secrets.choice(string.ascii_lette
 ```
 :::
 
-Terminate TLS in front of Keycloak with host nginx, like the rest of the stack —
-the profile runs it in production mode (`start`, not `start-dev`), which enforces
+Terminate TLS in front of Keycloak with host nginx, like the rest of the stack.
+The profile runs it in production mode (`start`, not `start-dev`), which enforces
 hostname and TLS strictness, so `KEYCLOAK_HOSTNAME` must be the real public HTTPS
 URL. Then create a realm and the two clients, mirroring
 `scripts/local-dev/almanac-realm.json` with your own hostname and fresh secrets.
@@ -459,7 +455,7 @@ devices you trust less.**
 A user signing in through a new provider for the first time is auto-provisioned
 with `timezone: UTC` and `preferred_unit_system: metric`, because there is
 nothing else to infer them from. The onboarding card prompts for both on first
-load — that is expected behavior, not a bug. An existing user whose email is
+load, and that is expected behavior, not a bug. An existing user whose email is
 unchanged keeps their profile, data, and tokens.
 
 The allowlist behaves identically whichever provider you pick: it compares email
@@ -470,13 +466,13 @@ docs](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/).
 ::: tip Almanac is dogfooded on Google
 Google is the configuration running in production daily. GitHub and generic OIDC
 are covered by tests and manual verification, and the Keycloak path has an
-integration suite against a real Keycloak — but they see less mileage. Report
+integration suite against a real Keycloak, but they see less mileage. Report
 anything that looks wrong.
 :::
 
 ## Next steps
 
-- [Connect an assistant](/guide/connecting-assistants) — mint a PAT and wire up
+- [Connect an assistant](/guide/connecting-assistants): mint a PAT and wire up
   an MCP client.
-- [Configuration](/guide/configuration) — every environment variable, including
+- [Configuration](/guide/configuration): every environment variable, including
   the OAuth ones covered here.
