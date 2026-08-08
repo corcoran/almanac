@@ -61,6 +61,44 @@ Rough smell test: a comment longer than the function it describes, or a
 changelog bullet longer than three lines, is probably explaining itself
 rather than the code.
 
+### Voice for user-facing prose
+
+**Scope: everything under `docs/` and `README.md`.** Code comments and
+changelog entries keep the rules above and are not covered here.
+
+The goal is prose that reads like a sharp email to a smart friend, with no AI
+signature on it.
+
+Banned words: delve, harness, realm, testament, tapestry, cutting-edge,
+elevate, foster, revolutionize.
+
+No em-dashes anywhere. Use a comma, colon, period, or parentheses. This is the
+loudest tell and the easiest to backslide on.
+
+Vary sentence length, and never let three in a row share a structure or a
+length. Short doesn't mean fragments: when two short sentences cover the same
+thought, join them with a comma or a conjunction instead of stacking them. Save
+the genuinely short sentence for when you want the beat.
+
+Bullets are good, and encouraged for technical detail that someone will scan
+rather than read. What's banned is the shape they usually take:
+
+- **Bold lead-in.** Followed by an em-dash or a period, then the sentence.
+- **Another one.** Repeated forty times down the page.
+
+Write the bullet as a sentence instead. If a term needs emphasis, put it where
+it falls naturally rather than always at the front.
+
+Start at the value and stop when it's said. No "in this guide we'll", no
+closing paragraph restating what was just read.
+
+Active voice, contractions, specifics. Write 40 days, 768 px, two weeks of
+weigh-ins, not "a configurable window" when the number is known.
+
+`docs/guide/getting-started.md` and `README.md` are written this way and are
+the reference. The other guide pages predate it and still carry em-dashes
+throughout, so don't treat them as the model.
+
 ## Null safety
 
 This codebase compiles with `noUncheckedIndexedAccess` (see `tsconfig.base.json`),
