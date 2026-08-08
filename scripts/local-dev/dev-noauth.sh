@@ -75,22 +75,22 @@ ALMANAC_API_URL="http://127.0.0.1:${ALMANAC_API_PORT}" \
   pnpm --filter @almanac/web exec vite --host "$WEB_HOST" --port "$WEB_PORT" --strictPort &
 echo "web:$!" >> "$PIDFILE"
 
-# --- MCP (stdio) helper -------------------------------------------------------
-# We don't run MCP as a server here (http mode would need a client PAT without
-# the proxy). For an MCP client like Claude Code, launch MCP in stdio mode — it
-# threads a PAT directly to the API. Mint a PAT in the web Settings panel first,
-# then register:
+# --- MCP helper ---------------------------------------------------------------
+# MCP isn't started here — run it in a second terminal when you want it. http is
+# the default transport and validates the PAT itself, so oauth2-proxy is not
+# involved and the client config is the same shape as a deployed instance.
 cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
 Web UI:  http://${WEB_HOST}:${WEB_PORT}
 API:     http://127.0.0.1:${ALMANAC_API_PORT}
 
-MCP (stdio) — mint a PAT in Settings, then point your MCP client at:
-  ALMANAC_MCP_TRANSPORT=stdio \\
+MCP — mint a PAT in Settings, then in another terminal:
   ALMANAC_API_URL=http://127.0.0.1:${ALMANAC_API_PORT} \\
-  ALMANAC_MCP_CLIENT_TOKEN=<your-PAT> \\
     pnpm --filter @almanac/mcp dev
+
+  It listens on http://127.0.0.1:3030/mcp. Point your client there with
+  "type": "http" and Authorization: Bearer <your-PAT>.
 
 Claude Preview: it attaches to a running server (doesn't launch one). Leave this
 running, then point Preview at the Web UI above — set .claude/launch.json's
