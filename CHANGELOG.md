@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gap can't read as current.
 - **Sitemap and social-card tags on the documentation site.**
 
+### Changed
+
+- **The AI coach and meal assistant speak plainly too.** The rule that stops
+  assistants surfacing internal field names and error codes, added to the MCP
+  server in 1.34.0, now applies to the built-in chat surfaces as well.
+
 ### Fixed
 
 - **Day-one TDEE now uses your logged weight.** When the only weigh-in was
