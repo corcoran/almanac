@@ -28,17 +28,17 @@ registered against that exact hostname. You need to be able to create an A (or
 AAAA) record pointing at the server. A domain whose DNS you can't change will
 block you at Step 1 and again at Step 5.
 
-**A Linux host running Docker, with ports 80 and 443 free.** Specifically:
+**A Linux host running Docker, with ports 80 and 443 yours to use.** Specifically:
 
 - Docker Engine 24+ and the Docker Compose v2 plugin (`docker compose`, not the
   legacy `docker-compose`)
 - nginx on the host, which terminates TLS and proxies to oauth2-proxy inside
   the Compose stack
 - certbot, or your preferred ACME client
-- Ports **80** and **443** unbound on the host. certbot's `--nginx` challenge
-  needs 80, and the vhost listens on both. If something else already holds
-  them (Apache, another nginx, a Traefik container publishing `:80`), stop or
-  relocate it first.
+- Ports **80** and **443** held by that nginx and nothing else. certbot's
+  `--nginx` challenge needs 80, and the vhost listens on both. If something
+  else already holds them (Apache, another nginx, a Traefik container
+  publishing `:80`), stop or relocate it first.
 - Port **24180** on `127.0.0.1` free. Compose binds `127.0.0.1:24180:4180` for
   oauth2-proxy. That binding is loopback-only by design, and it must never be
   exposed publicly.
@@ -203,6 +203,20 @@ firewall or cloud security group, or something other than nginx holding port
 80. Let's Encrypt also rate-limits repeated failures against the same
 hostname, so use `--dry-run` while you debug and a burst of failures won't lock
 you out for the rest of the week.
+
+**If certbot reports it can't find a virtual host for the domain**, you've hit
+the one circular dependency in this runbook. The `--nginx` authenticator wants a
+server block matching the hostname, yours doesn't exist until Step 3, and Step 3
+can't load without the certificate this step produces. Most installs ship a
+`default_server` that certbot borrows for the challenge, which is why this
+usually passes without you noticing. On a host where that default site was
+removed, take nginx out of the loop instead:
+
+```bash
+sudo systemctl stop nginx
+sudo certbot certonly --standalone -d almanac.example.com
+sudo systemctl start nginx
+```
 
 **Renewal** is handled by certbot's own systemd timer or cron entry on most
 distributions. Confirm it exists rather than assuming:
