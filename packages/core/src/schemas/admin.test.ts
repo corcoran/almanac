@@ -27,6 +27,16 @@ describe("AdminUserUpdateSchema", () => {
   it("rejects a negative daily limit", () => {
     expect(() => AdminUserUpdateSchema.parse({ llm_daily_token_limit: -5 })).toThrow();
   });
+
+  it("accepts the per-user hard cap, and null to clear it", () => {
+    expect(AdminUserUpdateSchema.parse({ llm_daily_hard_cap: 20000 })).toEqual({
+      llm_daily_hard_cap: 20000,
+    });
+    expect(AdminUserUpdateSchema.parse({ llm_daily_hard_cap: null })).toEqual({
+      llm_daily_hard_cap: null,
+    });
+    expect(() => AdminUserUpdateSchema.parse({ llm_daily_hard_cap: -5 })).toThrow();
+  });
 });
 
 describe("AdminUserSummarySchema", () => {
@@ -38,9 +48,11 @@ describe("AdminUserSummarySchema", () => {
       llm_logging_enabled: 1,
       is_admin: 1,
       llm_daily_token_limit: 50000,
+      llm_daily_hard_cap: 20000,
     });
     expect(row.id).toBe(1);
     expect(row.llm_daily_token_limit).toBe(50000);
+    expect(row.llm_daily_hard_cap).toBe(20000);
   });
 
   it("allows null email + null limit", () => {
@@ -51,8 +63,10 @@ describe("AdminUserSummarySchema", () => {
       llm_logging_enabled: 0,
       is_admin: 0,
       llm_daily_token_limit: null,
+      llm_daily_hard_cap: null,
     });
     expect(row.email).toBeNull();
     expect(row.llm_daily_token_limit).toBeNull();
+    expect(row.llm_daily_hard_cap).toBeNull();
   });
 });

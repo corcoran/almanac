@@ -15,6 +15,7 @@ export type User = {
   llm_logging_enabled: number;
   is_admin: number;
   llm_daily_token_limit: number | null;
+  llm_daily_hard_cap: number | null;
   about_me: string | null;
   created_at: string;
 };

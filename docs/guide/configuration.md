@@ -163,7 +163,7 @@ plausible future change, not something that works today.
 | `ALMANAC_LLM_MODEL` | Model for the **meal assistant** (the cheap parser) | `claude-haiku-4-5` |
 | `ALMANAC_LLM_INSIGHTS_MODEL` | Model for the **insights coach**, which does harder reasoning and gets a stronger default | `claude-sonnet-4-6` |
 | `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` | Soft daily token limit that drives the "~N logs left" indicator. Warns but never blocks | unset (no soft limit) |
-| `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` | Hard daily token ceiling, a 429 circuit-breaker | unset (no hard cap) |
+| `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` | Hard daily token ceiling, a 429 circuit-breaker | unset (falls back to 1.5x the soft limit) |
 | `ALMANAC_LLM_TOKENS_PER_SEARCH` | Flat token charge per web search when there's no recent search history to average | `2500` |
 | `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day. At the cap, search is disabled for the turn but meals still log. | unset (uncapped) |
 
@@ -191,14 +191,49 @@ magnitude, not a quote.
 
 ### The guardrails
 
-`ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` drives the visible "~N logs left"
-counter, `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` is a real circuit breaker that
-starts returning 429s, and `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` bounds web
-searches specifically. All three are per-user-per-day, and an admin can override
-the limit for one person with `admin_set_user_soft_limit`.
+There are two token tiers, and they do different jobs:
 
-::: danger Unset means uncapped
-That's deliberate, but worth knowing before you invite other people.
+| Tier | Set by | Scope | What it does |
+|---|---|---|---|
+| Soft limit | `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT`, or per user with `admin_set_user_soft_limit` | per user | Drives the "~N logs left" counter and its amber warning. Never blocks. |
+| Hard cap | `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP`, or per user with `admin_set_user_hard_cap` | per user | Returns 429 once a user's own day passes it. The only thing that stops a chat. |
+
+Neither cap is a shared pool: a 75k ceiling gives every account its own 75k,
+yours included. When both an env cap and a per-user cap are set the effective
+ceiling is the **lower** of the two, so a per-user value can only tighten against
+the operator's. Set only one and that one applies.
+
+Set neither and the ceiling is 1.5x the soft limit, so an install that never
+configures a cap still has a backstop. Only an account with no soft limit either
+is genuinely uncapped. An explicitly configured cap always wins over the derived
+one, including upward: granting somebody 200k against a 30k soft limit is a
+deliberate act, not something to clamp back to 45k.
+
+The hard cap always sits strictly above the soft limit. Set one at or below it
+and Almanac lowers the soft limit to the cap divided by 1.5, rather than
+weakening the cap you asked for. Cap a guest at 20k against the 50k default and
+their counter reads 13,333. It empties exactly as the cap starts blocking.
+Otherwise they'd meet a 429 with the counter still promising five logs left,
+which is the surprise both tiers exist to prevent.
+
+Contradict yourself across the two env variables and the API logs an error
+naming both values and the soft limit that will actually apply. It boots anyway,
+since the resolver keeps the tiers coherent either way.
+
+Note what `min` does to the env var: it stops being a global backstop and becomes
+your own cap too. To give yourself more headroom than a guest, raise the env
+value to your number and set an explicit per-user cap on each guest.
+
+Almanac checks the cap before each call but never bounds the call itself, so a
+turn starting one token under it runs to completion. Treat the number as a
+threshold, not a total you can't exceed. Web searches are bounded separately by
+`ALMANAC_LLM_HARD_DAILY_SEARCH_CAP`, which has no soft tier of its own.
+
+All of these reset on the user-local 4am day boundary.
+
+::: danger Turning off every limit turns off the backstop
+Clearing the soft limit as well as the hard cap leaves the account genuinely
+uncapped. Worth knowing before you invite other people.
 :::
 
 Each of the numeric limits treats an empty string as unset. That matters in

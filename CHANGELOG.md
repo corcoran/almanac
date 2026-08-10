@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-user hard caps.** `admin_set_user_hard_cap` sets a daily token ceiling
+  for one account, so you can rein in a heavy user without capping yourself.
+  Where both it and `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` are set the lower one
+  wins, so a per-user value can only tighten.
+
 ### Changed
 
+- **An unset hard cap now falls back to 1.5x the soft limit** instead of meaning
+  uncapped, so an install that never configures one still has a backstop. Only
+  an account with no soft limit either is genuinely uncapped, and an explicitly
+  configured cap always wins over the derived one.
+- **The hard cap is always held above the soft limit.** A cap set at or below it
+  used to let a user hit a 429 while the counter still read "5 logs left"; the
+  soft limit is now pulled down to keep the counter honest, and contradictory
+  env values are logged as an error at startup.
 - **The AI usage pill stops freezing at "~0 logs left".** Past the soft limit it
   now reads "over budget" and the card says how far over, rather than a stuck
   zero that looked like the chat was about to cut off.

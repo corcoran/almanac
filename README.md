@@ -171,7 +171,7 @@ To connect Claude Code instead, mint a PAT in Settings, run `pnpm --filter @alma
 
 Everything is configured through `.env`. `.env.example` documents each variable inline, and the [configuration reference](https://almanac-fitness.com/guide/configuration) groups all of them by concern: core, MCP, OAuth, watchtower notifications, and the optional LLM surfaces.
 
-The AI surfaces are off by default and bill your own Anthropic key, so they cost real money per use. Per-user daily token and search caps exist. Leave them unset and there is **no cap**. Read the [LLM section](https://almanac-fitness.com/guide/configuration#llm-ai-surfaces) before switching them on or inviting anyone else.
+The AI surfaces are off by default and bill your own Anthropic key, so they cost real money per use. Two daily token tiers bound that, both counted per account: a soft limit that warns without blocking, and a hard cap that actually stops the chat. Leave the hard cap unset and it falls back to 1.5x the soft limit, so a backstop exists even if you never configure one, and only clearing both leaves an account genuinely uncapped. Web searches are capped separately, and an admin can tighten any of it for one person. Read the [LLM section](https://almanac-fitness.com/guide/configuration#llm-ai-surfaces) before switching them on or inviting anyone else.
 
 ## Production deployment
 

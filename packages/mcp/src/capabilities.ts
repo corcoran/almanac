@@ -260,6 +260,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
       update: [
         "admin_set_user_llm_access",
         "admin_set_user_soft_limit",
+        "admin_set_user_hard_cap",
         "admin_set_user_admin",
       ],
     },

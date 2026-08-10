@@ -11,7 +11,7 @@ function reqWithUser(userId: number | undefined) {
 function dbWith(users: Array<{ id: number; is_admin: number }>) {
   const db = openDb(":memory:");
   db.exec(
-    "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, dob TEXT, height_cm REAL, sex TEXT, email TEXT, preferred_unit_system TEXT DEFAULT 'metric', timezone TEXT DEFAULT 'UTC', activity_level TEXT, llm_logging_enabled INTEGER DEFAULT 0, is_admin INTEGER DEFAULT 0, llm_daily_token_limit INTEGER, about_me TEXT, created_at TEXT DEFAULT '2026-01-01T00:00:00Z')",
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, dob TEXT, height_cm REAL, sex TEXT, email TEXT, preferred_unit_system TEXT DEFAULT 'metric', timezone TEXT DEFAULT 'UTC', activity_level TEXT, llm_logging_enabled INTEGER DEFAULT 0, is_admin INTEGER DEFAULT 0, llm_daily_token_limit INTEGER, llm_daily_hard_cap INTEGER, about_me TEXT, created_at TEXT DEFAULT '2026-01-01T00:00:00Z')",
   );
   for (const u of users)
     db.prepare("INSERT INTO users (id, is_admin) VALUES (?, ?)").run(u.id, u.is_admin);

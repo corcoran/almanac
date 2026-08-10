@@ -41,15 +41,16 @@ type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 // Drift assertions. Each line is a compile-time check; failure = typecheck error.
-// `is_admin` and `llm_daily_token_limit` are server-internal: they live on the
-// `User` domain type and repo, but are deliberately NOT exposed on the
-// self-serve `UserResponseSchema` (GET/PATCH /v1/users/me) — surfacing admin
-// status or a user's token limit there would be an information leak, and they're
-// only settable via the future admin route. So the drift guard compares the
-// response schema against `User` minus those two fields.
+// `is_admin`, `llm_daily_token_limit` and `llm_daily_hard_cap` are
+// server-internal: they live on the `User` domain type and repo, but are
+// deliberately NOT exposed on the self-serve `UserResponseSchema` (GET/PATCH
+// /v1/users/me) — surfacing admin status or either of someone's token ceilings
+// there would be an information leak, and they're settable only via the admin
+// route. So the drift guard compares the response schema against `User` minus
+// those three fields.
 const _u: Equals<
   z.infer<typeof UserResponseSchema>,
-  Omit<User, "is_admin" | "llm_daily_token_limit">
+  Omit<User, "is_admin" | "llm_daily_token_limit" | "llm_daily_hard_cap">
 > = true;
 const _g: Equals<z.infer<typeof ExerciseGroupResponseSchema>, ExerciseGroup> = true;
 const _e: Equals<z.infer<typeof ExerciseResponseSchema>, Exercise> = true;

@@ -15,6 +15,7 @@ import {
   perSearchPrice,
   recentAvgTokensPerCall,
   recordLlmUsage,
+  resolveDailyLimits,
   runAgent,
   runMealAgent,
 } from "@almanac/core/llm";
@@ -114,7 +115,12 @@ export function makeLlmRoutes(deps: LlmDeps): FastifyPluginAsyncZod {
 
         // Hard backstop: a runaway circuit-breaker, separate from the advisory
         // soft limit (which never blocks). Only this hard cap stops the chat.
-        const hardCap = deps.config.hardDailyTokenCap ?? null;
+        const { hardCap } = resolveDailyLimits({
+          envSoft: deps.config.defaultDailyTokenLimit,
+          userSoft: user.llm_daily_token_limit,
+          envCap: deps.config.hardDailyTokenCap,
+          userCap: user.llm_daily_hard_cap,
+        });
         if (hardCap !== null) {
           const day = getUsageForDay(app.db, user.id, user.timezone, today);
           if (day.billed_tokens >= hardCap) {
@@ -214,7 +220,12 @@ export function makeLlmRoutes(deps: LlmDeps): FastifyPluginAsyncZod {
         const today = currentUserDate(new Date(), user.timezone);
         const onDate = req.body.on_date ?? today;
 
-        const hardCap = deps.config.hardDailyTokenCap ?? null;
+        const { hardCap } = resolveDailyLimits({
+          envSoft: deps.config.defaultDailyTokenLimit,
+          userSoft: user.llm_daily_token_limit,
+          envCap: deps.config.hardDailyTokenCap,
+          userCap: user.llm_daily_hard_cap,
+        });
         if (hardCap !== null) {
           const day = getUsageForDay(app.db, user.id, user.timezone, today);
           if (day.billed_tokens >= hardCap) {
@@ -300,13 +311,19 @@ export function makeLlmRoutes(deps: LlmDeps): FastifyPluginAsyncZod {
           feature ? { feature } : undefined,
         );
         const avg = recentAvg ?? (feature ? DEFAULT_AVG_TOKENS_BY_FEATURE[feature] : null);
+        const { softLimit, hardCap } = resolveDailyLimits({
+          envSoft: deps.config.defaultDailyTokenLimit,
+          userSoft: user.llm_daily_token_limit,
+          envCap: deps.config.hardDailyTokenCap,
+          userCap: user.llm_daily_hard_cap,
+        });
 
         return computeDailyBalance({
           tokensUsedToday: day.billed_tokens,
           callsToday: day.calls,
           recentAvgTokensPerCall: avg,
-          softLimitTokens: user.llm_daily_token_limit ?? deps.config.defaultDailyTokenLimit ?? null,
-          hardCapTokens: deps.config.hardDailyTokenCap ?? null,
+          softLimitTokens: softLimit,
+          hardCapTokens: hardCap,
           resetsAtLabel: "4am",
         });
       },

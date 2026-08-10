@@ -68,7 +68,7 @@ describe("MCP <-> API end-to-end", () => {
       const tools = (await client.listTools()) as {
         tools: Array<{ name: string }>;
       };
-      expect(tools.tools).toHaveLength(76);
+      expect(tools.tools).toHaveLength(77);
       const toolNames = tools.tools.map((t) => t.name);
       expect(toolNames).toContain("log_meal");
       expect(toolNames).toContain("define_exercise");

@@ -3,6 +3,7 @@ import type { Tool, ToolDeps } from "../tool.js";
 import { makeAddExerciseToWorkoutTool } from "./add-exercise-to-workout.js";
 import { makeAdminListUsersTool } from "./admin-list-users.js";
 import { makeAdminSetUserAdminTool } from "./admin-set-user-admin.js";
+import { makeAdminSetUserHardCapTool } from "./admin-set-user-hard-cap.js";
 import { makeAdminSetUserLlmAccessTool } from "./admin-set-user-llm-access.js";
 import { makeAdminSetUserSoftLimitTool } from "./admin-set-user-soft-limit.js";
 // Setup/define tools (30d).
@@ -169,6 +170,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     makeAdminListUsersTool(deps) as Tool<unknown>,
     makeAdminSetUserAdminTool(deps) as Tool<unknown>,
     makeAdminSetUserSoftLimitTool(deps) as Tool<unknown>,
+    makeAdminSetUserHardCapTool(deps) as Tool<unknown>,
     makeAdminSetUserLlmAccessTool(deps) as Tool<unknown>,
   ];
 

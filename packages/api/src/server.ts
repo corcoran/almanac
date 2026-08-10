@@ -4,6 +4,7 @@ import {
   type CreateMessage,
   createAnthropicClient,
   type LlmConfig,
+  llmLimitConfigError,
   loadLlmConfig,
 } from "@almanac/core/llm";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
@@ -142,6 +143,12 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.decorate("db", db);
 
   const llmDeps = opts.llm ?? buildLlmDepsFromEnv();
+
+  const limitConfigError = llmLimitConfigError(
+    llmDeps.config.defaultDailyTokenLimit,
+    llmDeps.config.hardDailyTokenCap,
+  );
+  if (limitConfigError) app.log.error(limitConfigError);
 
   // One structured log line per completed request. Fires in onResponse —
   // after the auth preHandler — so `req.userId` is resolved. `reply.elapsedTime`

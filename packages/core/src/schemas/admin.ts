@@ -13,6 +13,7 @@ export const AdminUserUpdateSchema = z
     llm_logging_enabled: FlagSchema.optional(),
     is_admin: FlagSchema.optional(),
     llm_daily_token_limit: z.number().int().positive().nullable().optional(),
+    llm_daily_hard_cap: z.number().int().positive().nullable().optional(),
   })
   .strict();
 export type AdminUserUpdate = z.infer<typeof AdminUserUpdateSchema>;
@@ -25,5 +26,6 @@ export const AdminUserSummarySchema = z.object({
   llm_logging_enabled: z.number(),
   is_admin: z.number(),
   llm_daily_token_limit: z.number().nullable(),
+  llm_daily_hard_cap: z.number().nullable(),
 });
 export type AdminUserSummary = z.infer<typeof AdminUserSummarySchema>;
