@@ -14,6 +14,7 @@ const UPDATABLE_COLUMNS = [
   "llm_logging_enabled",
   "is_admin",
   "llm_daily_token_limit",
+  "llm_daily_hard_cap",
   "about_me",
 ] as const satisfies readonly (keyof User)[];
 
@@ -22,7 +23,7 @@ export type UserUpdate = Partial<Pick<User, (typeof UPDATABLE_COLUMNS)[number]>>
 export function findUserById(db: Connection, id: number): User | null {
   const row = db
     .prepare(
-      `SELECT id, name, dob, height_cm, sex, email, preferred_unit_system, timezone, activity_level, llm_logging_enabled, is_admin, llm_daily_token_limit, about_me, created_at
+      `SELECT id, name, dob, height_cm, sex, email, preferred_unit_system, timezone, activity_level, llm_logging_enabled, is_admin, llm_daily_token_limit, llm_daily_hard_cap, about_me, created_at
        FROM users WHERE id = ?`,
     )
     .get(id) as User | undefined;
@@ -32,7 +33,7 @@ export function findUserById(db: Connection, id: number): User | null {
 export function listUsers(db: Connection): User[] {
   return db
     .prepare(
-      `SELECT id, name, dob, height_cm, sex, email, preferred_unit_system, timezone, activity_level, llm_logging_enabled, is_admin, llm_daily_token_limit, about_me, created_at
+      `SELECT id, name, dob, height_cm, sex, email, preferred_unit_system, timezone, activity_level, llm_logging_enabled, is_admin, llm_daily_token_limit, llm_daily_hard_cap, about_me, created_at
        FROM users ORDER BY id`,
     )
     .all() as User[];

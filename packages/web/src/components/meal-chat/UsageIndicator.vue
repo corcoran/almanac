@@ -9,15 +9,26 @@ const props = defineProps<{ balance: Balance | null }>();
 
 const expanded = ref(false);
 
-// Only render when we have a balance with a configured soft limit. With no soft
-// limit there's no cap to show, so the indicator stays out of the way.
+// Only render when we have a balance with a configured soft limit. The hard cap
+// is deliberately NOT surfaced: it exists to stop runaway spend, not to be
+// planned around, and naming it turns the card into a second budget readout.
 const show = computed(() => props.balance !== null && props.balance.softLimit !== null);
 
-// Near-limit / over-limit: dim the pill and surface the reassurance copy.
-// "Running low" warning: over the soft limit, OR ≤30% of the daily balance left,
-// OR ≤2 logs left. The 30% gives early warning at normal/large limits; the
-// ≤2-logs floor guarantees a heads-up even at small limits, where 30% is barely
-// a message wide.
+// Past the soft limit the counter stops meaning anything, so say that rather
+// than freezing at "~0 logs left".
+const meter = computed(() => {
+  const b = props.balance;
+  if (!b) return null;
+  if (!b.overSoftLimit && b.softLimit !== null && b.logsLeftEstimate !== null) {
+    return { basis: "soft" as const, count: b.logsLeftEstimate, pct: b.pctRemaining ?? 0 };
+  }
+  return { basis: "none" as const, count: 0, pct: 0 };
+});
+
+// "Running low": over the soft limit, OR ≤30% of the daily balance left, OR ≤2
+// logs left. The 30% gives early warning at normal/large limits; the ≤2-logs
+// floor guarantees a heads-up even at small limits, where 30% is barely a
+// message wide. The hard tier never contributes.
 const low = computed(() => {
   const b = props.balance;
   if (!b) return false;
@@ -26,16 +37,22 @@ const low = computed(() => {
   return b.logsLeftEstimate !== null && b.logsLeftEstimate <= 2;
 });
 
-const pct = computed(() => props.balance?.pctRemaining ?? 0);
-const logsLeft = computed(() => props.balance?.logsLeftEstimate ?? 0);
+const pct = computed(() => meter.value?.pct ?? 0);
 
 const avgK = computed(() => ((props.balance?.avgTokensPerLog ?? 0) / 1000).toFixed(1));
 
 // Tokens used of the daily budget — base-consistent, unlike the old
 // callsToday-of-implied-logs framing (mixed bases, could read "8 of 7").
-// softLimit is non-null whenever the card shows, so ?? 0 never actually fires.
 const usedK = computed(() => ((props.balance?.tokensUsed ?? 0) / 1000).toFixed(1));
 const budgetK = computed(() => Math.round((props.balance?.softLimit ?? 0) / 1000));
+
+// Past the soft limit "60.0k of 50k tokens used" reads as a contradiction.
+// State the overage instead.
+const overK = computed(() => {
+  const b = props.balance;
+  if (!b || b.softLimit === null) return "0.0";
+  return ((b.tokensUsed - b.softLimit) / 1000).toFixed(1);
+});
 </script>
 
 <template>
@@ -48,15 +65,22 @@ const budgetK = computed(() => Math.round((props.balance?.softLimit ?? 0) / 1000
       @click="expanded = !expanded"
     >
       <span class="bar"><span class="bar-fill" :style="{ width: `${pct}%` }" /></span>
-      <span class="pill-text">~{{ logsLeft }} logs left</span>
+      <span v-if="meter?.basis === 'soft'" class="pill-text">~{{ meter.count }} logs left</span>
+      <span v-else class="pill-text">over budget</span>
     </button>
 
     <div v-if="expanded" class="usage-card" data-test="usage-card">
-      <div class="headline">~{{ logsLeft }} logs left today</div>
-      <div class="pct">{{ pct }}% of daily balance</div>
+      <div v-if="meter?.basis === 'soft'" class="headline">~{{ meter.count }} logs left today</div>
+      <div v-else class="headline">Over your daily budget</div>
+
+      <div v-if="meter?.basis === 'soft'" class="pct">{{ pct }}% of daily balance</div>
+
       <div class="detail">
-        {{ usedK }}k of {{ budgetK }}k tokens used · avg ~{{ avgK }}k tokens/log · resets at {{ balance.resetsAt }}
+        <template v-if="balance.overSoftLimit">{{ overK }}k over your {{ budgetK }}k budget</template>
+        <template v-else>{{ usedK }}k of {{ budgetK }}k tokens used</template>
+        · avg ~{{ avgK }}k tokens/log · resets at {{ balance.resetsAt }}
       </div>
+
       <div class="reassure">You can still log meals manually any time.</div>
     </div>
   </div>

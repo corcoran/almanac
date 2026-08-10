@@ -1,5 +1,11 @@
 export { renderAboutMeBlock } from "./about-me.js";
 export { type MealChatResult, makeLookupPastMeals, runMealAgent } from "./agent.js";
+export {
+  type DailyLimits,
+  DERIVED_HARD_CAP_MULTIPLIER,
+  llmLimitConfigError,
+  resolveDailyLimits,
+} from "./caps.js";
 export { createAnthropicClient } from "./client.js";
 export { type LlmConfig, loadLlmConfig } from "./config.js";
 export { assembleMealContext, type MealContext } from "./context.js";

@@ -50,6 +50,7 @@ export const registerAdminRoutes: FastifyPluginAsyncZod = async (app) => {
         llm_logging_enabled: updated.llm_logging_enabled,
         is_admin: updated.is_admin,
         llm_daily_token_limit: updated.llm_daily_token_limit,
+        llm_daily_hard_cap: updated.llm_daily_hard_cap,
       };
     },
   );

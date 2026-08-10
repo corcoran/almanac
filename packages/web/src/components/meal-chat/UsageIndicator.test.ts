@@ -6,12 +6,27 @@ const balance = {
   tokensUsed: 10000,
   callsToday: 5,
   softLimit: 50000,
+  hardCap: 150000,
   avgTokensPerLog: 2000,
   logsLeftEstimate: 20,
   pctRemaining: 80,
+  hardLogsLeftEstimate: 58,
+  hardPctRemaining: 93,
   overSoftLimit: false,
   overHardCap: false,
   resetsAt: "4am",
+};
+
+/** Past the soft limit, well short of the ceiling. The hard tier is deliberately
+ *  not surfaced, so nothing here may print the cap or count against it. */
+const overBudget = {
+  ...balance,
+  tokensUsed: 60000,
+  logsLeftEstimate: 0,
+  pctRemaining: 0,
+  hardLogsLeftEstimate: 37,
+  hardPctRemaining: 60,
+  overSoftLimit: true,
 };
 
 describe("UsageIndicator", () => {
@@ -25,13 +40,56 @@ describe("UsageIndicator", () => {
     expect(w.find('[data-test="usage-pill"]').exists()).toBe(false);
   });
 
-  it("renders nothing when there is no soft limit", () => {
+  it("renders nothing when there is no soft limit, even with a hard cap set", () => {
     const w = mount(UsageIndicator, {
       props: {
         balance: { ...balance, softLimit: null, logsLeftEstimate: null, pctRemaining: null },
       },
     });
     expect(w.find('[data-test="usage-pill"]').exists()).toBe(false);
+  });
+
+  it("never names the hard cap", async () => {
+    const w = mount(UsageIndicator, { props: { balance } });
+    await w.find('[data-test="usage-pill"]').trigger("click");
+    const text = w.find('[data-test="usage-card"]').text();
+    expect(text).not.toMatch(/ceiling/i);
+    expect(text).not.toMatch(/150k/);
+  });
+
+  it("says over budget past the soft limit rather than counting to the cap", async () => {
+    const w = mount(UsageIndicator, { props: { balance: overBudget } });
+    const pill = w.find('[data-test="usage-pill"]');
+    expect(pill.text()).toMatch(/over budget/i);
+    expect(pill.text()).not.toMatch(/37/);
+
+    await pill.trigger("click");
+    const text = w.find('[data-test="usage-card"]').text();
+    expect(text).not.toMatch(/ceiling/i);
+    expect(text).not.toMatch(/150k/);
+  });
+
+  it("frames the soft line as an overage past the budget, not 60k of 50k", async () => {
+    const w = mount(UsageIndicator, { props: { balance: overBudget } });
+    await w.find('[data-test="usage-pill"]').trigger("click");
+    const text = w.find('[data-test="usage-card"]').text();
+    expect(text).toMatch(/10\.0k over your 50k budget/i);
+    expect(text).not.toMatch(/60\.0k of 50k/i);
+  });
+
+  it("does not warn on the hard tier alone", () => {
+    // 23% of the ceiling left but the soft budget is barely touched: the hard
+    // tier is invisible, so it must not colour the pill either.
+    const nearCeiling = {
+      ...balance,
+      tokensUsed: 5000,
+      logsLeftEstimate: 18,
+      pctRemaining: 90,
+      hardLogsLeftEstimate: 14,
+      hardPctRemaining: 23,
+    };
+    const w = mount(UsageIndicator, { props: { balance: nearCeiling } });
+    expect(w.find('[data-test="usage-pill"]').classes().join(" ")).not.toMatch(/warn|low/);
   });
 
   it("expands to show the detail line on click", async () => {

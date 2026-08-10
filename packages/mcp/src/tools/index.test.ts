@@ -30,10 +30,10 @@ async function buildTestClient(fetchImpl: typeof fetch) {
 }
 
 describe("registerTools", () => {
-  it("registers all 76 tools and they advertise via ListToolsRequest", async () => {
+  it("registers all 77 tools and they advertise via ListToolsRequest", async () => {
     const client = await buildTestClient(vi.fn());
     const result = await client.listTools();
-    expect(result.tools).toHaveLength(76);
+    expect(result.tools).toHaveLength(77);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toContain("log_meal");
     expect(names).toContain("get_today_context");

@@ -42,13 +42,41 @@ export type DailyBalance = {
   tokensUsed: number;
   callsToday: number;
   softLimit: number | null;
+  hardCap: number | null;
   avgTokensPerLog: number;
   logsLeftEstimate: number | null;
   pctRemaining: number | null;
+  hardLogsLeftEstimate: number | null;
+  hardPctRemaining: number | null;
   overSoftLimit: boolean;
   overHardCap: boolean;
   resetsAt: string;
 };
+
+/**
+ * Remaining-budget figures for ONE tier. Both tiers report the same shape so the
+ * client can warn on either without knowing which is which.
+ *
+ * A null or non-positive limit means the tier isn't configured, and both figures
+ * come back null rather than 0 — a missing tier must not render as "exhausted".
+ * The `limit === null` branch also narrows without `!` (lint-blocked).
+ */
+function tierRemaining(
+  limitTokens: number | null,
+  usedTokens: number,
+  avgTokensPerLog: number,
+): { logsLeft: number | null; pctRemaining: number | null } {
+  if (limitTokens === null || limitTokens <= 0) return { logsLeft: null, pctRemaining: null };
+  const remainingTokens = Math.max(0, limitTokens - usedTokens);
+  // Divide by a PADDED per-log cost so the count over-estimates token use and
+  // runs conservative. The reported `avgTokensPerLog` stays the RAW average
+  // (the detail line should show real usage, not the padded figure).
+  const paddedAvg = avgTokensPerLog * LOGS_LEFT_PADDING_FACTOR;
+  return {
+    logsLeft: Math.floor(remainingTokens / paddedAvg),
+    pctRemaining: Math.max(0, Math.round((remainingTokens / limitTokens) * 100)),
+  };
+}
 
 export function computeDailyBalance(args: ComputeDailyBalanceArgs): DailyBalance {
   const avgTokensPerLog =
@@ -56,37 +84,23 @@ export function computeDailyBalance(args: ComputeDailyBalanceArgs): DailyBalance
       ? args.recentAvgTokensPerCall
       : DEFAULT_AVG_TOKENS_PER_LOG;
 
-  // Narrow softLimitTokens once via an explicit branch so the soft-limit math
-  // sees a non-null `soft` without any `!` (lint-blocked) or cast.
   const soft = args.softLimitTokens;
-  let softLimit: number | null = null;
-  let logsLeftEstimate: number | null = null;
-  let pctRemaining: number | null = null;
-  let overSoftLimit = false;
-  if (soft !== null && soft > 0) {
-    softLimit = soft;
-    const remainingTokens = Math.max(0, soft - args.tokensUsedToday);
-    // Divide by a PADDED per-log cost so the count over-estimates token use and
-    // runs conservative. The reported `avgTokensPerLog` stays the RAW average
-    // (the detail line should show real usage, not the padded figure).
-    const paddedAvg = avgTokensPerLog * LOGS_LEFT_PADDING_FACTOR;
-    logsLeftEstimate = Math.floor(remainingTokens / paddedAvg);
-    pctRemaining = Math.max(0, Math.round((remainingTokens / soft) * 100));
-    overSoftLimit = args.tokensUsedToday > soft;
-  }
-
-  const overHardCap =
-    args.hardCapTokens !== null ? args.tokensUsedToday >= args.hardCapTokens : false;
+  const hard = args.hardCapTokens;
+  const softFigures = tierRemaining(soft, args.tokensUsedToday, avgTokensPerLog);
+  const hardFigures = tierRemaining(hard, args.tokensUsedToday, avgTokensPerLog);
 
   return {
     tokensUsed: args.tokensUsedToday,
     callsToday: args.callsToday,
-    softLimit,
+    softLimit: soft !== null && soft > 0 ? soft : null,
+    hardCap: hard,
     avgTokensPerLog,
-    logsLeftEstimate,
-    pctRemaining,
-    overSoftLimit,
-    overHardCap,
+    logsLeftEstimate: softFigures.logsLeft,
+    pctRemaining: softFigures.pctRemaining,
+    hardLogsLeftEstimate: hardFigures.logsLeft,
+    hardPctRemaining: hardFigures.pctRemaining,
+    overSoftLimit: soft !== null && soft > 0 ? args.tokensUsedToday > soft : false,
+    overHardCap: hard !== null ? args.tokensUsedToday >= hard : false,
     resetsAt: args.resetsAtLabel,
   };
 }

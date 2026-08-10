@@ -1,5 +1,5 @@
 import { type CreateMessage, recordLlmUsage } from "@almanac/core/llm";
-import { appendTurns, listTurnsForDay } from "@almanac/core/repos";
+import { appendTurns, listTurnsForDay, updateUser } from "@almanac/core/repos";
 import { DailyBalanceSchema } from "@almanac/core/schemas";
 import { currentUserDate } from "@almanac/core/types";
 import type { FastifyInstance } from "fastify";
@@ -204,6 +204,59 @@ describe("/api/v1/llm/meal-chat hard backstop", () => {
     expect(createMessage).not.toHaveBeenCalled();
   });
 
+  it("429s on the per-user hard cap when it is tighter than the env cap", async () => {
+    const createMessage = vi.fn(proposeStub);
+    app = setup({ createMessage, hardDailyTokenCap: 100000 });
+    updateUser(app.db, 1, { llm_daily_hard_cap: 1000 });
+    seedUsage(app.db, 600, 500); // 1100: past the user's 1000, far under the env 100k
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/meal-chat",
+      headers: auth,
+      payload: { message: "I had a beer", history: [] },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(createMessage).not.toHaveBeenCalled();
+  });
+
+  it("429s on a per-user hard cap with no env cap configured", async () => {
+    // The shipping default leaves the env cap unset, so a per-user cap has to
+    // bite on its own or the admin control is inert on a fresh install.
+    const createMessage = vi.fn(proposeStub);
+    app = setup({ createMessage, hardDailyTokenCap: undefined });
+    updateUser(app.db, 1, { llm_daily_hard_cap: 1000 });
+    seedUsage(app.db, 600, 500);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/meal-chat",
+      headers: auth,
+      payload: { message: "I had a beer", history: [] },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(createMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not let a loose per-user cap raise the env ceiling", async () => {
+    const createMessage = vi.fn(proposeStub);
+    app = setup({ createMessage, hardDailyTokenCap: 1000 });
+    updateUser(app.db, 1, { llm_daily_hard_cap: 500000 });
+    seedUsage(app.db, 600, 500); // past the env 1000, under the user's 500k
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/meal-chat",
+      headers: auth,
+      payload: { message: "I had a beer", history: [] },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(createMessage).not.toHaveBeenCalled();
+  });
+
   it("still 200s and calls the model when over the soft limit but under the hard cap", async () => {
     const createMessage = vi.fn(proposeStub);
     app = setup({ createMessage, defaultDailyTokenLimit: 500, hardDailyTokenCap: 100000 });
@@ -250,7 +303,11 @@ describe("/api/v1/llm/usage", () => {
 
   const auth = { "x-forwarded-email": "test@example.com", "content-type": "application/json" };
 
-  function setup(opts: { userFlag: number; defaultDailyTokenLimit?: number }) {
+  function setup(opts: {
+    userFlag: number;
+    defaultDailyTokenLimit?: number;
+    hardDailyTokenCap?: number;
+  }) {
     const a = buildApp({
       dbPath: ":memory:",
       trustProxyHeaders: true,
@@ -262,7 +319,7 @@ describe("/api/v1/llm/usage", () => {
           insightsModel: "claude-sonnet-4-6",
           apiKey: "sk-test",
           defaultDailyTokenLimit: opts.defaultDailyTokenLimit,
-          hardDailyTokenCap: undefined,
+          hardDailyTokenCap: opts.hardDailyTokenCap,
           tokensPerSearch: 2500,
           hardDailySearchCap: undefined,
         },
@@ -332,6 +389,50 @@ describe("/api/v1/llm/usage", () => {
     expect(body.logsLeftEstimate).toBeNull();
     expect(body.tokensUsed).toBe(0);
     expect(body.callsToday).toBe(0);
+  });
+
+  it("surfaces the ceiling in the gap between the soft limit and the 429", async () => {
+    app = setup({ userFlag: 1, defaultDailyTokenLimit: 50000, hardDailyTokenCap: 150000 });
+    recordLlmUsage(app.db, {
+      userId: 1,
+      createdAt: new Date().toISOString(),
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      feature: "meal_chat",
+      usage: {
+        input_tokens: 40000,
+        output_tokens: 20000,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      },
+      webSearchRequests: 0,
+      billedTokens: 60000,
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/llm/usage", headers: auth });
+    const body = DailyBalanceSchema.parse(res.json());
+    // Past the soft limit, nowhere near the ceiling. The soft figures floor at
+    // zero here, so the hard ones are the only thing left to plan against.
+    expect(body.overSoftLimit).toBe(true);
+    expect(body.pctRemaining).toBe(0);
+    expect(body.overHardCap).toBe(false);
+    expect(body.hardCap).toBe(150000);
+    expect(body.hardPctRemaining).toBe(60);
+  });
+
+  it("derives the ceiling from the soft limit when no hard cap is configured", async () => {
+    app = setup({ userFlag: 1, defaultDailyTokenLimit: 50000 });
+    const res = await app.inject({ method: "GET", url: "/api/v1/llm/usage", headers: auth });
+    const body = DailyBalanceSchema.parse(res.json());
+    expect(body.hardCap).toBe(75000); // 1.5 × 50000
+  });
+
+  it("reports a null ceiling only when there is no soft limit to derive from", async () => {
+    app = setup({ userFlag: 1, defaultDailyTokenLimit: undefined });
+    const res = await app.inject({ method: "GET", url: "/api/v1/llm/usage", headers: auth });
+    const body = DailyBalanceSchema.parse(res.json());
+    expect(body.hardCap).toBeNull();
+    expect(body.hardPctRemaining).toBeNull();
   });
 
   it("scopes logsLeftEstimate to the requested feature", async () => {
@@ -627,6 +728,39 @@ describe("/api/v1/llm/insights-chat", () => {
 
     expect(res.statusCode).toBe(429);
     expect(res.json().error.code).toBe("usage_limit_exceeded");
+    expect(createMessage).not.toHaveBeenCalled();
+  });
+
+  it("429s on the per-user hard cap here too, not just on meal chat", async () => {
+    // The two 429 sites share effectiveHardCap; this pins the insights one so a
+    // future edit can't quietly leave it reading the env cap alone.
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage, hardDailyTokenCap: undefined });
+    updateUser(app.db, 1, { llm_daily_hard_cap: 1000 });
+    recordLlmUsage(app.db, {
+      userId: 1,
+      createdAt: new Date().toISOString(),
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      feature: "insights_chat",
+      usage: {
+        input_tokens: 600,
+        output_tokens: 500,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      },
+      webSearchRequests: 0,
+      billedTokens: 1100,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/insights-chat",
+      headers: auth,
+      payload: { message: "how am I doing?", history: [] },
+    });
+
+    expect(res.statusCode).toBe(429);
     expect(createMessage).not.toHaveBeenCalled();
   });
 

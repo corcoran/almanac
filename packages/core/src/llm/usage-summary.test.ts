@@ -67,6 +67,36 @@ describe("computeDailyBalance", () => {
     expect(b.overHardCap).toBe(false);
   });
 
+  it("returns the hard cap so the client can render the ceiling", () => {
+    const b = computeDailyBalance({ ...base, hardCapTokens: 150000, tokensUsedToday: 60000 });
+    expect(b.hardCap).toBe(150000);
+  });
+
+  it("returns a null hard cap when none is configured", () => {
+    const b = computeDailyBalance({ ...base, hardCapTokens: null });
+    expect(b.hardCap).toBeNull();
+  });
+
+  it("computes pct and logs-left against the hard cap, using the same padding", () => {
+    // 150000 - 60000 = 90000 remaining → 60%. Logs: 90000 / (2000 × 1.2) = 37.5 → 37.
+    // Padding lives in core so the client can't drift from the soft-tier maths.
+    const b = computeDailyBalance({ ...base, hardCapTokens: 150000, tokensUsedToday: 60000 });
+    expect(b.hardPctRemaining).toBe(60);
+    expect(b.hardLogsLeftEstimate).toBe(37);
+  });
+
+  it("clamps the hard-tier figures to 0 at the cap, never negative", () => {
+    const b = computeDailyBalance({ ...base, hardCapTokens: 150000, tokensUsedToday: 160000 });
+    expect(b.hardPctRemaining).toBe(0);
+    expect(b.hardLogsLeftEstimate).toBe(0);
+  });
+
+  it("returns null hard-tier figures when no hard cap is configured", () => {
+    const b = computeDailyBalance({ ...base, hardCapTokens: null, tokensUsedToday: 60000 });
+    expect(b.hardPctRemaining).toBeNull();
+    expect(b.hardLogsLeftEstimate).toBeNull();
+  });
+
   it("surfaces callsToday and resetsAt for the detail line", () => {
     const b = computeDailyBalance({ ...base, callsToday: 9, tokensUsedToday: 18000 });
     expect(b.callsToday).toBe(9);
