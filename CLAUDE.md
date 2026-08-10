@@ -1,5 +1,12 @@
 # Almanac — Agent Notes
 
+## Specs and plans are local-only
+
+`docs/superpowers/` (specs + plans) is **gitignored** (`.gitignore:14`) — working
+notes, deliberately not published with the repo. So they have no git history and
+no diff to recover from: treat an edit there as destructive, and don't reach for
+`git diff`/`git status` to review changes to one.
+
 ## Code navigation (LSP)
 
 A TypeScript **LSP** tool is available (the `typescript-lsp` plugin, backed by
