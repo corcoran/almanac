@@ -257,7 +257,11 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     },
     admin: {
       read: ["admin_list_users"],
-      update: ["admin_set_user_llm_access", "admin_set_user_daily_limit", "admin_set_user_admin"],
+      update: [
+        "admin_set_user_llm_access",
+        "admin_set_user_soft_limit",
+        "admin_set_user_admin",
+      ],
     },
   },
   tools_other: [

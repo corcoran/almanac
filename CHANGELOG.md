@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The AI usage pill stops freezing at "~0 logs left".** Past the soft limit it
   now reads "over budget" and the card says how far over, rather than a stuck
   zero that looked like the chat was about to cut off.
+- **`admin_set_user_daily_limit` is now `admin_set_user_soft_limit`**, and its
+  `daily_token_limit` argument is `soft_daily_token_limit`. The tool only ever
+  moved the advisory tier, and the description now says so instead of implying
+  it caps spend.
 
 ## [1.36.0] - 2026-08-07
 

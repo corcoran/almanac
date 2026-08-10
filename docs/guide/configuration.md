@@ -195,7 +195,7 @@ magnitude, not a quote.
 counter, `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` is a real circuit breaker that
 starts returning 429s, and `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` bounds web
 searches specifically. All three are per-user-per-day, and an admin can override
-the limit for one person with `admin_set_user_daily_limit`.
+the limit for one person with `admin_set_user_soft_limit`.
 
 ::: danger Unset means uncapped
 That's deliberate, but worth knowing before you invite other people.

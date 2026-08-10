@@ -3,8 +3,8 @@ import type { Tool, ToolDeps } from "../tool.js";
 import { makeAddExerciseToWorkoutTool } from "./add-exercise-to-workout.js";
 import { makeAdminListUsersTool } from "./admin-list-users.js";
 import { makeAdminSetUserAdminTool } from "./admin-set-user-admin.js";
-import { makeAdminSetUserDailyLimitTool } from "./admin-set-user-daily-limit.js";
 import { makeAdminSetUserLlmAccessTool } from "./admin-set-user-llm-access.js";
+import { makeAdminSetUserSoftLimitTool } from "./admin-set-user-soft-limit.js";
 // Setup/define tools (30d).
 import { makeCreateUntrackedPeriodTool } from "./create-untracked-period.js";
 import { makeDefineExerciseTool } from "./define-exercise.js";
@@ -168,7 +168,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
     // Admin
     makeAdminListUsersTool(deps) as Tool<unknown>,
     makeAdminSetUserAdminTool(deps) as Tool<unknown>,
-    makeAdminSetUserDailyLimitTool(deps) as Tool<unknown>,
+    makeAdminSetUserSoftLimitTool(deps) as Tool<unknown>,
     makeAdminSetUserLlmAccessTool(deps) as Tool<unknown>,
   ];
 

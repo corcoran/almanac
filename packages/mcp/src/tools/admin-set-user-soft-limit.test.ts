@@ -1,24 +1,40 @@
 import { nthCall } from "@almanac/core/test-support";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiHttpError } from "../client.js";
-import { makeAdminSetUserDailyLimitTool } from "./admin-set-user-daily-limit.js";
+import { makeAdminSetUserSoftLimitTool } from "./admin-set-user-soft-limit.js";
 
 function mockJsonResponse(status: number, body: unknown) {
   return { ok: status < 400, status, json: async () => body };
 }
 
-describe("admin_set_user_daily_limit", () => {
+describe("admin_set_user_soft_limit", () => {
+  const deps = {
+    api: new ApiClient({ baseUrl: "http://x", fetchImpl: vi.fn() }),
+    currentUserId: async () => 1,
+    currentToken: () => "alm_test",
+  };
+
+  it("is named for the tier it actually sets", () => {
+    expect(makeAdminSetUserSoftLimitTool(deps).name).toBe("admin_set_user_soft_limit");
+  });
+
+  it("warns in its description that this tier never blocks", () => {
+    const { description } = makeAdminSetUserSoftLimitTool(deps);
+    expect(description).toMatch(/never blocks/i);
+    expect(description).toMatch(/ALMANAC_LLM_HARD_DAILY_TOKEN_CAP/);
+  });
+
   it("PATCHes the target user's daily limit and returns the user", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(200, { id: 2, llm_daily_token_limit: 30000 }));
     const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
-    const tool = makeAdminSetUserDailyLimitTool({
+    const tool = makeAdminSetUserSoftLimitTool({
       api,
       currentUserId: async () => 1,
       currentToken: () => "alm_test",
     });
-    const result = (await tool.handler({ user_id: 2, daily_token_limit: 30000 })) as {
+    const result = (await tool.handler({ user_id: 2, soft_daily_token_limit: 30000 })) as {
       user: { id: number; llm_daily_token_limit: number };
     };
     expect(result.user.id).toBe(2);
@@ -34,12 +50,12 @@ describe("admin_set_user_daily_limit", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(200, { id: 2, llm_daily_token_limit: null }));
     const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
-    const tool = makeAdminSetUserDailyLimitTool({
+    const tool = makeAdminSetUserSoftLimitTool({
       api,
       currentUserId: async () => 1,
       currentToken: () => "alm_test",
     });
-    await tool.handler({ user_id: 2, daily_token_limit: null });
+    await tool.handler({ user_id: 2, soft_daily_token_limit: null });
     const init = nthCall(fetchImpl, 0)[1] as { body: string };
     expect(JSON.parse(init.body)).toEqual({ llm_daily_token_limit: null });
   });
@@ -49,13 +65,13 @@ describe("admin_set_user_daily_limit", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse(403, { error: { message: "forbidden" } }));
     const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
-    const tool = makeAdminSetUserDailyLimitTool({
+    const tool = makeAdminSetUserSoftLimitTool({
       api,
       currentUserId: async () => 1,
       currentToken: () => "alm_test",
     });
-    await expect(tool.handler({ user_id: 2, daily_token_limit: 30000 })).rejects.toBeInstanceOf(
-      ApiHttpError,
-    );
+    await expect(
+      tool.handler({ user_id: 2, soft_daily_token_limit: 30000 }),
+    ).rejects.toBeInstanceOf(ApiHttpError);
   });
 });
