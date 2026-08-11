@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { CardioSessionEnrichedResponseSchema, StepLogResponseSchema } from "@almanac/core/schemas";
-import { computed, nextTick, ref } from "vue";
+import {
+  CardioKcalEstimateSchema,
+  CardioSessionEnrichedResponseSchema,
+  StepLogResponseSchema,
+} from "@almanac/core/schemas";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { z } from "zod";
 import type { ApiClient } from "../../api/client.js";
 import { useInlineEdit } from "../../composables/useInlineEdit.js";
@@ -94,15 +98,55 @@ const addKcalValue = computed(() => {
 /** With both of these the server can work the calories out itself. */
 const canDerive = computed(() => addHrValue.value !== null && addDurationValue.value !== null);
 
-// A grey placeholder is the only thing separating "the server will fill this
-// in" from a value the user typed, so it has to name the number it stands for.
-const kcalPlaceholder = computed(() => (canDerive.value ? "auto" : "kcal"));
-
 const addSaveDisabled = computed(
   () => pending.value || !(addKcalValue.value !== null || canDerive.value),
 );
 
+// The server's own figure for what is currently typed, or null while nothing
+// has come back for it. Cosmetic: a preview never gates the save.
 const previewKcal = ref<number | null>(null);
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+// Bumped per request so a slow response can't overwrite a newer one.
+let previewSeq = 0;
+
+watch([addHr, addDuration, adding], () => {
+  if (previewTimer !== undefined) clearTimeout(previewTimer);
+  const hr = addHrValue.value;
+  const dur = addDurationValue.value;
+  if (!adding.value || hr === null || dur === null) {
+    // A stale figure under a cleared heart-rate box would read as current.
+    previewKcal.value = null;
+    return;
+  }
+  const seq = ++previewSeq;
+  previewTimer = setTimeout(() => {
+    void props.client
+      .get(
+        `/v1/cardio-sessions/kcal-preview?avg_hr=${hr}&duration_min=${dur}&on_date=${props.date}`,
+        CardioKcalEstimateSchema,
+      )
+      .then((r) => {
+        if (seq === previewSeq) previewKcal.value = r.est_kcal_hr;
+      })
+      // A failed preview is cosmetic. Leave the placeholder at "auto" rather
+      // than blocking the save or raising the error banner.
+      .catch(() => {
+        if (seq === previewSeq) previewKcal.value = null;
+      });
+  }, 300);
+});
+
+onBeforeUnmount(() => {
+  if (previewTimer !== undefined) clearTimeout(previewTimer);
+});
+
+// A grey placeholder is the only thing separating "the server will fill this
+// in" from a value the user typed, so it has to name the number it stands for:
+// the derived figure once one is in, "auto" until then.
+const kcalPlaceholder = computed(() => {
+  if (!canDerive.value) return "kcal";
+  return previewKcal.value === null ? "auto" : String(previewKcal.value);
+});
 
 // The only place the form says the calorie and heart-rate boxes are
 // alternatives. It stays rendered for every state of the form so the card

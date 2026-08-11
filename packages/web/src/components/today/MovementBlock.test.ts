@@ -1,6 +1,6 @@
 import { at } from "@almanac/core/test-support";
 import { flushPromises, mount } from "@vue/test-utils";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MovementBlock from "./MovementBlock.vue";
 
 const realMatchMedia = window.matchMedia;
@@ -51,6 +51,7 @@ function makeCardio(overrides: Partial<CardioSession> = {}): CardioSession {
 
 function makeClient(
   overrides: Partial<{
+    get: (p: string) => Promise<unknown>;
     post: (p: string, b: unknown) => Promise<unknown>;
     patch: (p: string, b: unknown) => Promise<unknown>;
     delete: (p: string) => Promise<unknown>;
@@ -60,9 +61,24 @@ function makeClient(
     post: overrides.post ?? (async () => ({ id: 1 })),
     patch: overrides.patch ?? (async () => ({ id: 1 })),
     delete: overrides.delete ?? (async () => undefined),
-    get: async () => [],
+    get: overrides.get ?? (async () => []),
     put: async () => ({}),
   } as unknown as import("../../api/client.js").ApiClient;
+}
+
+/** Shape of GET /v1/cardio-sessions/kcal-preview, as far as the form reads it. */
+function previewResponse(est_kcal_hr: number) {
+  return {
+    est_kcal_hr,
+    basis: "keytel_and_mets",
+    components: {
+      keytel_kcal: est_kcal_hr,
+      mets_kcal: est_kcal_hr,
+      met_value_used: 9,
+      pct_hrmax: 80,
+      mets_basis: "zone_scaled",
+    },
+  };
 }
 
 const MB_BASE = () => ({ cardio: [], steps: null, client: makeClient(), date: "2026-06-15" });
@@ -440,7 +456,11 @@ describe("MovementBlock cardio CRUD", () => {
     await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
     await wrapper.find('[data-test="cardio-add-duration"]').setValue("30");
     await wrapper.find('[data-test="cardio-add-hr"]').setValue("142");
-    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toContain("142 bpm over 30 min");
+    // No preview has resolved yet, so it names the inputs rather than a figure.
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toBe(
+      "Calories from 142 bpm over 30 min.",
+    );
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("auto");
   });
 
   it("stacks activity above the numbers on mobile", async () => {
@@ -489,6 +509,186 @@ describe("MovementBlock cardio CRUD", () => {
     // form is still open after the failed save; cancel clears the error
     await wrapper.find('[data-test="cardio-add-cancel"]').trigger("click");
     expect(wrapper.find('[data-test="cardio-error"]').exists()).toBe(false);
+  });
+});
+
+describe("MovementBlock kcal preview", () => {
+  // Only setTimeout is faked: @vue/test-utils' flushPromises schedules on
+  // setImmediate, which has to stay real or every await here deadlocks.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Open the form and type a heart rate and duration into it. */
+  async function fillDerivable(
+    wrapper: ReturnType<typeof mount>,
+    hr: string,
+    duration = "30",
+  ): Promise<void> {
+    if (!wrapper.find('[data-test="cardio-add-form"]').exists()) {
+      await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+      await wrapper.find('[data-test="cardio-add-duration"]').setValue(duration);
+    }
+    await wrapper.find('[data-test="cardio-add-hr"]').setValue(hr);
+  }
+
+  /** Let the debounce elapse and the resulting response land in the DOM. */
+  async function settle(): Promise<void> {
+    vi.advanceTimersByTime(300);
+    await flushPromises();
+  }
+
+  it("fills the placeholder and the hint with the derived figure", async () => {
+    const wrapper = mount(MovementBlock, {
+      props: { ...MB_BASE(), client: makeClient({ get: async () => previewResponse(384) }) },
+    });
+    await fillDerivable(wrapper, "142");
+    await settle();
+
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("384");
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toBe(
+      "384 kcal from 142 bpm over 30 min.",
+    );
+  });
+
+  it("asks the preview route for the typed inputs on the selected date", async () => {
+    const paths: string[] = [];
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        date: "2026-06-15",
+        client: makeClient({
+          get: async (p) => {
+            paths.push(p);
+            return previewResponse(384);
+          },
+        }),
+      },
+    });
+    await fillDerivable(wrapper, "142");
+    await settle();
+
+    expect(paths).toEqual([
+      "/v1/cardio-sessions/kcal-preview?avg_hr=142&duration_min=30&on_date=2026-06-15",
+    ]);
+  });
+
+  it("debounces a burst of keystrokes into one request", async () => {
+    const paths: string[] = [];
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client: makeClient({
+          get: async (p) => {
+            paths.push(p);
+            return previewResponse(431);
+          },
+        }),
+      },
+    });
+    await fillDerivable(wrapper, "1");
+    vi.advanceTimersByTime(100);
+    await fillDerivable(wrapper, "14");
+    vi.advanceTimersByTime(100);
+    await fillDerivable(wrapper, "142");
+    // Under the 300ms window the whole way, so nothing has gone out yet.
+    expect(paths).toHaveLength(0);
+    await settle();
+
+    expect(paths).toEqual([
+      "/v1/cardio-sessions/kcal-preview?avg_hr=142&duration_min=30&on_date=2026-06-15",
+    ]);
+  });
+
+  it("ignores a slow response that lands after a newer one", async () => {
+    const resolvers: Array<(v: unknown) => void> = [];
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client: makeClient({
+          get: async () =>
+            new Promise((resolve) => {
+              resolvers.push(resolve);
+            }),
+        }),
+      },
+    });
+    await fillDerivable(wrapper, "140");
+    await settle();
+    await fillDerivable(wrapper, "150");
+    await settle();
+    expect(resolvers).toHaveLength(2);
+
+    at(resolvers, 1)(previewResponse(431));
+    await flushPromises();
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("431");
+
+    // The first request finally answers, with a figure for a heart rate the
+    // user has since changed.
+    at(resolvers, 0)(previewResponse(999));
+    await flushPromises();
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("431");
+  });
+
+  it("clears a resolved figure when the heart rate is emptied", async () => {
+    const wrapper = mount(MovementBlock, {
+      props: { ...MB_BASE(), client: makeClient({ get: async () => previewResponse(384) }) },
+    });
+    await fillDerivable(wrapper, "142");
+    await settle();
+    await wrapper.find('[data-test="cardio-add-hr"]').setValue("");
+
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("kcal");
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toBe(
+      "Enter calories, or heart rate and we'll work them out.",
+    );
+  });
+
+  it("leaves the form usable and silent when the preview fails", async () => {
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client: makeClient({
+          get: async () => {
+            throw new Error("nope");
+          },
+        }),
+      },
+    });
+    await fillDerivable(wrapper, "142");
+    await settle();
+
+    expect(wrapper.find('[data-test="cardio-add-kcal"]').attributes("placeholder")).toBe("auto");
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toBe(
+      "Calories from 142 bpm over 30 min.",
+    );
+    expect(wrapper.find('[data-test="cardio-error"]').exists()).toBe(false);
+    expect(
+      (wrapper.find('[data-test="cardio-add-save"]').element as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("does not preview while the form is closed", async () => {
+    const paths: string[] = [];
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client: makeClient({
+          get: async (p) => {
+            paths.push(p);
+            return previewResponse(384);
+          },
+        }),
+      },
+    });
+    await fillDerivable(wrapper, "142");
+    await wrapper.find('[data-test="cardio-add-cancel"]').trigger("click");
+    await settle();
+
+    expect(paths).toHaveLength(0);
   });
 });
 

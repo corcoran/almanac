@@ -7,13 +7,14 @@ import {
   updateCardioSession,
 } from "@almanac/core/repos";
 import {
+  CardioKcalEstimateSchema,
   CardioSessionEnrichedResponseSchema,
   CardioSessionInputSchema,
   CardioSessionUpdateSchema,
   ListCardioSessionsQuerySchema,
 } from "@almanac/core/schemas";
 import { compareKcalEstimates, computeCardioKcalEstimate } from "@almanac/core/signals";
-import type { EstKcalSource } from "@almanac/core/types";
+import { currentUserDate, type EstKcalSource } from "@almanac/core/types";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireUser } from "../auth.js";
@@ -123,6 +124,32 @@ export const registerCardioRoutes: FastifyPluginAsyncZod = async (app) => {
       const sessions = listCardioSessions(app.db, user.id, { ...range, limit: req.query.limit });
       const weight = latestWeightKg(app.db, user.id);
       return sessions.map((s) => enrichCardio(s, user, weight));
+    },
+  );
+
+  // Must stay ahead of `/:id`: that route's params schema would reject the
+  // literal segment as a non-integer id.
+  app.get(
+    "/v1/cardio-sessions/kcal-preview",
+    {
+      schema: {
+        querystring: z.object({
+          avg_hr: z.coerce.number().int().positive(),
+          duration_min: z.coerce.number().int().positive(),
+          on_date: z.string().length(10).optional(),
+        }),
+        response: { 200: CardioKcalEstimateSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(app.db, req);
+      return computeCardioKcalEstimate({
+        avg_hr: req.query.avg_hr,
+        duration_min: req.query.duration_min,
+        user: { dob: user.dob, sex: user.sex, weight_kg: latestWeightKg(app.db, user.id) },
+        // Only feeds the age calculation, so a day either way is harmless.
+        asOf: req.query.on_date ?? currentUserDate(new Date(), user.timezone),
+      });
     },
   );
 

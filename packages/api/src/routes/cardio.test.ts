@@ -459,6 +459,27 @@ describe("/api/v1/cardio-sessions", () => {
       expect(r.json().estimate_warning).not.toBeNull();
     });
 
+    it("previews the estimate without writing a row", async () => {
+      app = setup();
+      seedProfile(app);
+      const r = await app.inject({
+        method: "GET",
+        url: "/api/v1/cardio-sessions/kcal-preview?avg_hr=150&duration_min=30&on_date=2026-05-21",
+        headers: auth,
+      });
+
+      expect(r.statusCode).toBe(200);
+      expect(r.json().est_kcal_hr).toBe(431);
+      expect(r.json().components.mets_basis).toBe("zone_scaled");
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/v1/cardio-sessions",
+        headers: auth,
+      });
+      expect(list.json()).toHaveLength(0);
+    });
+
     it("leaves a legacy row with no recorded source alone on PATCH", async () => {
       app = setup();
       seedProfile(app);
