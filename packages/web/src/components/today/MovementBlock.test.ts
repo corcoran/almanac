@@ -477,6 +477,34 @@ describe("MovementBlock cardio CRUD", () => {
     expect(wrapper.find('[data-test="cardio-add-form"]').classes()).not.toContain("stacked");
   });
 
+  it("offers common activities as suggestions", async () => {
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    const input = wrapper.find('[data-test="cardio-add-modality"]');
+    expect(input.attributes("list")).toBe("cardio-activities");
+    expect(input.attributes("placeholder")).toBe("activity");
+    expect(wrapper.findAll("#cardio-activities option").length).toBeGreaterThan(4);
+  });
+
+  it("points the edit rows at the same single datalist", async () => {
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        cardio: [makeCardio({ id: 1 }), makeCardio({ id: 2, modality: "row" })],
+      },
+    });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    for (const btn of wrapper.findAll('[data-test="cardio-row-edit"]')) {
+      await btn.trigger("click");
+    }
+    for (const input of wrapper.findAll('[data-test="cardio-modality-input"]')) {
+      expect(input.attributes("list")).toBe("cardio-activities");
+    }
+    // An id has to be unique in the document, so the block renders the list
+    // once for every input that points at it.
+    expect(wrapper.findAll("#cardio-activities")).toHaveLength(1);
+  });
+
   it("does not emit changed when an op fails, and shows an error", async () => {
     const client = makeClient({
       post: async () => {

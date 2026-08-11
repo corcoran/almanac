@@ -274,6 +274,18 @@ async function onStepsDelete(): Promise<void> {
 <template>
   <div class="block" data-test="movement-block">
     <div class="caption">{{ caption }}</div>
+    <!-- One list for every activity box on the block, including the ones each
+         CardioSessionRow renders: a datalist id has to be unique in the
+         document, so a row cannot own a copy. -->
+    <datalist id="cardio-activities">
+      <option value="bike" />
+      <option value="run" />
+      <option value="walk" />
+      <option value="row" />
+      <option value="swim" />
+      <option value="hike" />
+      <option value="elliptical" />
+    </datalist>
     <p v-if="!hasCardio && !adding" class="empty" data-test="cardio-empty">
       {{ isPastDay ? "No cardio logged." : "No cardio logged today." }}
     </p>
@@ -297,7 +309,8 @@ async function onStepsDelete(): Promise<void> {
           type="text"
           class="modality-input"
           data-test="cardio-add-modality"
-          placeholder="modality"
+          list="cardio-activities"
+          placeholder="activity"
           @keydown.esc="closeAdd"
         />
         <div class="numbers">

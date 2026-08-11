@@ -131,12 +131,16 @@ function onConfirmYes(): void {
   </li>
 
   <li v-else class="form-row" :class="{ stacked: isMobile }" data-test="cardio-edit-form">
+    <!-- The #cardio-activities datalist lives in MovementBlock, the only place
+         this row is mounted. Rendering one here would duplicate the id across
+         rows. -->
     <input
       v-model="modalityDraft"
       type="text"
       class="modality-input"
       data-test="cardio-modality-input"
-      placeholder="modality"
+      list="cardio-activities"
+      placeholder="activity"
       @keydown.esc="onCancel"
     />
     <div class="numbers">

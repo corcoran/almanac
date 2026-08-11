@@ -79,6 +79,14 @@ describe("CardioSessionRow", () => {
     expect(wrapper.emitted("save")).toEqual([[{ modality: "run", duration_min: 32, avg_hr: 145 }]]);
   });
 
+  it("names the activity field and points it at the shared datalist", async () => {
+    const wrapper = mount(CardioSessionRow, { props: { session: SESSION } });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    const input = wrapper.find('[data-test="cardio-modality-input"]');
+    expect(input.attributes("placeholder")).toBe("activity");
+    expect(input.attributes("list")).toBe("cardio-activities");
+  });
+
   it("stacks the edit form above the numbers on mobile", async () => {
     setViewportWidth(375);
     const wrapper = mount(CardioSessionRow, { props: { session: SESSION } });
