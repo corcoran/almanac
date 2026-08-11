@@ -94,7 +94,7 @@ Everything lives at **[almanac-fitness.com](https://almanac-fitness.com/)**.
 
 ### Cardio, steps, and alcohol
 
-- Cardio logs by modality such as bike, run, or ruck, with duration, distance, average HR, and estimated kcal from Keytel or METs.
+- Cardio takes an activity such as bike, run, or ruck with duration, distance, and average heart rate. Give it a heart rate and it works the calories out for you, scaled to the effort you actually put in.
 - Steps take a daily count with automatic kcal estimation you can override when you have better data.
 - Alcohol is session-based: start, end, US standard drinks, and a kcal estimate that overlays onto daily energy balance.
 
