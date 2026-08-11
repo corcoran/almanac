@@ -125,6 +125,9 @@ export const CardioKcalEstimateSchema = z.object({
   components: z.object({
     keytel_kcal: z.number().int().nullable(),
     mets_kcal: z.number().int(),
+    met_value_used: z.number(),
+    pct_hrmax: z.number().nullable(),
+    mets_basis: z.enum(["zone_scaled", "flat"]),
   }),
 });
 export const CardioKcalWarningSchema = z.object({

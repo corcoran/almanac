@@ -248,10 +248,9 @@ export const DEFAULT_DAY_STATUS_CONFIG: DayStatusConfig = {
 
 export type CardioKcalConfig = {
   /**
-   * Default METs value used when the user logs cardio with a heart rate but
-   * we don't have a modality-specific MET lookup. 6.0 is a midpoint between
-   * brisk walking (~4) and easy running (~8), reasonable for cycling and
-   * mixed-modality sessions. Tune per-user later if needed.
+   * Flat METs value used only when the user has no dob, which leaves the MET
+   * term with no HRmax to scale against. 6.0 sits between brisk walking (~4)
+   * and easy running (~8).
    */
   defaultMets: number;
   /**

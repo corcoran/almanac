@@ -8,11 +8,10 @@ import { type CardioKcalConfig, DEFAULT_CARDIO_KCAL_CONFIG } from "./config.js";
  *     sex, weight, and age. The standard HR-based estimator in
  *     sports-science literature.
  *
- *   - **METs midpoint** — `kcal = METs × 3.5 × weight_kg / 200 × min`, with
- *     a single default MET constant (config-driven). Modality-aware tables
- *     exist (ACSM compendium) but a single-constant approach is what we
- *     picked for v1 — keeps the surface tiny, and the midpoint with Keytel
- *     smooths over modality-specific error.
+ *   - **METs** — `kcal = METs × 3.5 × weight_kg / 200 × min`. The MET value
+ *     scales with `%HRmax` (Tanaka), interpolated between the anchors in
+ *     `MET_ANCHORS`. Without a dob there is no HRmax, so the flat
+ *     `config.defaultMets` constant stands in.
  *
  * The returned `est_kcal_hr` is the **midpoint** of the two. When the user
  * profile is missing fields Keytel needs (sex, weight, dob), we fall back
@@ -48,6 +47,15 @@ export type CardioKcalEstimate = {
   components: {
     keytel_kcal: number | null;
     mets_kcal: number;
+    /** The MET value the mets_kcal figure was computed from. */
+    met_value_used: number;
+    /** Percentage of age-predicted HRmax. Null when dob is unknown. */
+    pct_hrmax: number | null;
+    /**
+     * `zone_scaled` when the MET value came from %HRmax, `flat` when dob was
+     * missing and the config constant was used instead.
+     */
+    mets_basis: "zone_scaled" | "flat";
   };
 };
 
@@ -103,6 +111,57 @@ function metsKcal(
 }
 
 /**
+ * MET anchors by percentage of HRmax, interpolated linearly between points.
+ * A step ladder would put a 25% jump in the MET term across one bpm at a
+ * zone boundary; interpolating keeps the estimate continuous so two sessions
+ * a heartbeat apart don't differ by a hundred calories.
+ *
+ * Values track the Ainsworth compendium's intensity ladder for steady-state
+ * cardio. Below the first anchor and above the last, the value clamps.
+ */
+const MET_ANCHORS = [
+  [45, 2.5],
+  [55, 4],
+  [65, 6],
+  [75, 8],
+  [85, 10],
+  [95, 14],
+] as const;
+
+/**
+ * Age-predicted HRmax, Tanaka et al. (2001). Preferred over 220-age, which
+ * overestimates for the young and underestimates past about 40.
+ */
+function hrMax(age: number): number {
+  return 208 - 0.7 * age;
+}
+
+/** MET value for a heart rate, scaled by where it falls against HRmax. */
+export function zoneScaledMets(avg_hr: number, age: number): number {
+  const pct = (avg_hr / hrMax(age)) * 100;
+  const lo = MET_ANCHORS[0];
+  const hi = MET_ANCHORS[MET_ANCHORS.length - 1];
+  if (hi === undefined) return lo[1];
+  if (pct <= lo[0]) return lo[1];
+  if (pct >= hi[0]) return hi[1];
+  for (let i = 1; i < MET_ANCHORS.length; i++) {
+    const a = MET_ANCHORS[i - 1];
+    const b = MET_ANCHORS[i];
+    if (a === undefined || b === undefined) continue;
+    if (pct <= b[0]) {
+      const t = (pct - a[0]) / (b[0] - a[0]);
+      return a[1] + t * (b[1] - a[1]);
+    }
+  }
+  return hi[1];
+}
+
+/** Percentage of age-predicted HRmax. Exported for the estimate's traceability fields. */
+export function pctHrMax(avg_hr: number, age: number): number {
+  return Number(((avg_hr / hrMax(age)) * 100).toFixed(1));
+}
+
+/**
  * Compute the HR-derived kcal estimate. Caller should only invoke this when
  * `avg_hr` and `duration_min` are both present (>0).
  */
@@ -113,18 +172,31 @@ export function computeCardioKcalEstimate(
   const age = ageYears(input.user.dob, input.asOf);
   const keytel = keytelKcalPerMin(input.avg_hr, input.user.sex, input.user.weight_kg, age);
   const keytel_kcal = keytel === null ? null : keytel * input.duration_min;
+
+  // Without age there is no HRmax, so the MET term cannot be zone-scaled and
+  // falls back to the flat constant.
+  const metValue = age === null ? config.defaultMets : zoneScaledMets(input.avg_hr, age);
+  const mets_basis = age === null ? ("flat" as const) : ("zone_scaled" as const);
+  const pct_hrmax = age === null ? null : pctHrMax(input.avg_hr, age);
   const mets_kcal = metsKcal(
-    config.defaultMets,
+    metValue,
     input.user.weight_kg,
     input.duration_min,
     config.fallbackWeightKg,
   );
 
+  const sharedComponents = {
+    mets_kcal: Math.round(mets_kcal),
+    met_value_used: Number(metValue.toFixed(4)),
+    pct_hrmax,
+    mets_basis,
+  };
+
   if (keytel_kcal === null) {
     return {
       est_kcal_hr: Math.round(mets_kcal),
       basis: "mets_only",
-      components: { keytel_kcal: null, mets_kcal: Math.round(mets_kcal) },
+      components: { keytel_kcal: null, ...sharedComponents },
     };
   }
 
@@ -132,10 +204,7 @@ export function computeCardioKcalEstimate(
   return {
     est_kcal_hr: Math.round(midpoint),
     basis: "keytel_and_mets",
-    components: {
-      keytel_kcal: Math.round(keytel_kcal),
-      mets_kcal: Math.round(mets_kcal),
-    },
+    components: { keytel_kcal: Math.round(keytel_kcal), ...sharedComponents },
   };
 }
 
