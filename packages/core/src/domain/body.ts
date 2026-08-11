@@ -7,6 +7,12 @@ export type BodyWeight = {
   created_at: string;
 };
 
+/**
+ * Who produced `est_kcal`. NULL on rows written before the column existed;
+ * those are all caller-supplied, since est_kcal used to be required.
+ */
+export type EstKcalSource = "user" | "server_zone" | "server_flat";
+
 export type CardioSession = {
   id: number;
   user_id: number;
@@ -24,6 +30,7 @@ export type CardioSession = {
    */
   steps: number | null;
   est_kcal: number;
+  est_kcal_source: EstKcalSource | null;
   notes: string | null;
   created_at: string;
 };

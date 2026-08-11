@@ -305,4 +305,190 @@ describe("/api/v1/cardio-sessions", () => {
       expect(list.json()[0].kcal_estimate).not.toBeNull();
     });
   });
+
+  // --- server-computed est_kcal -------------------------------------------
+  // Fixture: 40 years old on the session date, 80 kg, male, 30 min.
+  //   150 bpm -> 83.33% of HRmax 180 -> 9.6667 METs -> 406 kcal;
+  //              Keytel 455.4; midpoint 431.
+  //   135 bpm -> 75% of HRmax 180 -> the 8 MET anchor -> 336 kcal;
+  //              Keytel 387.5; midpoint 362.
+  describe("server-computed est_kcal", () => {
+    function seedProfile(a: FastifyInstance) {
+      a.db.prepare("UPDATE users SET dob = '1986-05-21' WHERE id = 1").run();
+      a.db
+        .prepare(
+          "INSERT INTO body_weights (user_id, measured_on, weight_kg) VALUES (1, '2026-05-20', 80)",
+        )
+        .run();
+    }
+
+    it("computes est_kcal when the caller omits it and HR + duration are present", async () => {
+      app = setup();
+      seedProfile(app);
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/cardio-sessions",
+        headers: auth,
+        payload: { started_at: "2026-05-21T12:00:00Z", avg_hr: 150, duration_min: 30 },
+      });
+      expect(r.statusCode).toBe(201);
+      const body = r.json();
+      expect(body.est_kcal).toBe(431);
+      expect(body.est_kcal_source).toBe("server_zone");
+      // Nothing to second-guess when the server produced the number itself.
+      expect(body.estimate_warning).toBeNull();
+    });
+
+    it("marks the source server_flat when dob is unknown", async () => {
+      app = setup();
+      app.db.prepare("UPDATE users SET dob = NULL WHERE id = 1").run();
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/cardio-sessions",
+        headers: auth,
+        payload: { started_at: "2026-05-21T12:00:00Z", avg_hr: 150, duration_min: 30 },
+      });
+      expect(r.statusCode).toBe(201);
+      expect(r.json().est_kcal_source).toBe("server_flat");
+    });
+
+    it("keeps a caller-supplied est_kcal and marks it as theirs", async () => {
+      app = setup();
+      seedProfile(app);
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/cardio-sessions",
+        headers: auth,
+        payload: {
+          started_at: "2026-05-21T12:00:00Z",
+          avg_hr: 150,
+          duration_min: 30,
+          est_kcal: 900,
+        },
+      });
+      const body = r.json();
+      expect(body.est_kcal).toBe(900);
+      expect(body.est_kcal_source).toBe("user");
+      // 900 against an estimate of 431 is more than 20% out, so this warns.
+      expect(body.estimate_warning).not.toBeNull();
+    });
+
+    it("rejects a payload with neither est_kcal nor the inputs to derive it", async () => {
+      app = setup();
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/cardio-sessions",
+        headers: auth,
+        payload: { started_at: "2026-05-21T12:00:00Z", modality: "bike" },
+      });
+      expect(r.statusCode).toBe(422);
+    });
+
+    it("recomputes a server-owned est_kcal when the heart rate is corrected", async () => {
+      app = setup();
+      seedProfile(app);
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/cardio-sessions",
+          headers: auth,
+          payload: { started_at: "2026-05-21T12:00:00Z", avg_hr: 150, duration_min: 30 },
+        })
+      ).json();
+
+      const r = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/cardio-sessions/${created.id}`,
+        headers: auth,
+        payload: { avg_hr: 135 },
+      });
+
+      expect(r.json().est_kcal).toBe(362);
+      expect(r.json().est_kcal_source).toBe("server_zone");
+    });
+
+    it("never silently overwrites a user-supplied est_kcal", async () => {
+      app = setup();
+      seedProfile(app);
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/cardio-sessions",
+          headers: auth,
+          payload: {
+            started_at: "2026-05-21T12:00:00Z",
+            avg_hr: 150,
+            duration_min: 30,
+            est_kcal: 500,
+          },
+        })
+      ).json();
+
+      const r = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/cardio-sessions/${created.id}`,
+        headers: auth,
+        payload: { avg_hr: 135 },
+      });
+
+      expect(r.json().est_kcal).toBe(500);
+      expect(r.json().est_kcal_source).toBe("user");
+    });
+
+    it("hands ownership back to the caller when a PATCH sets est_kcal", async () => {
+      app = setup();
+      seedProfile(app);
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/cardio-sessions",
+          headers: auth,
+          payload: { started_at: "2026-05-21T12:00:00Z", avg_hr: 150, duration_min: 30 },
+        })
+      ).json();
+
+      const r = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/cardio-sessions/${created.id}`,
+        headers: auth,
+        payload: { est_kcal: 900 },
+      });
+
+      expect(r.json().est_kcal).toBe(900);
+      expect(r.json().est_kcal_source).toBe("user");
+      expect(r.json().estimate_warning).not.toBeNull();
+    });
+
+    it("leaves a legacy row with no recorded source alone on PATCH", async () => {
+      app = setup();
+      seedProfile(app);
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/cardio-sessions",
+          headers: auth,
+          payload: {
+            started_at: "2026-05-21T12:00:00Z",
+            avg_hr: 150,
+            duration_min: 30,
+            est_kcal: 500,
+          },
+        })
+      ).json();
+      app.db
+        .prepare("UPDATE cardio_sessions SET est_kcal_source = NULL WHERE id = ?")
+        .run(created.id);
+
+      const r = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/cardio-sessions/${created.id}`,
+        headers: auth,
+        payload: { avg_hr: 135 },
+      });
+
+      expect(r.json().est_kcal).toBe(500);
+      expect(r.json().est_kcal_source).toBeNull();
+      expect(r.json().estimate_warning).not.toBeNull();
+    });
+  });
 });

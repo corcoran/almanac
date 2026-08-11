@@ -91,6 +91,8 @@ export const StepLogResponseSchema = z.object({
 export const ListStepLogsQuerySchema = DateRangeQuerySchema;
 
 // Cardio sessions
+export const EstKcalSourceSchema = z.enum(["user", "server_zone", "server_flat"]);
+
 export const CardioSessionInputSchema = z
   .object({
     started_at: z.string().min(1),
@@ -99,10 +101,20 @@ export const CardioSessionInputSchema = z
     avg_hr: z.number().int().positive().nullish(),
     distance_km: z.number().positive().nullish(),
     steps: z.number().int().nonnegative().nullish(),
-    est_kcal: z.number().int().nonnegative(),
+    est_kcal: z.number().int().nonnegative().optional(),
     notes: z.string().nullish(),
   })
-  .strict();
+  .strict()
+  .superRefine((v, ctx) => {
+    // Omitting est_kcal asks the server to derive it, which needs both inputs.
+    if (v.est_kcal === undefined && (v.avg_hr == null || v.duration_min == null)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["est_kcal"],
+        message: "est_kcal is required unless both avg_hr and duration_min are given",
+      });
+    }
+  });
 export const CardioSessionUpdateSchema = z
   .object({
     started_at: z.string().min(1).optional(),
@@ -151,6 +163,7 @@ export const CardioSessionResponseSchema = z.object({
   distance_km: z.number().nullable(),
   steps: z.number().int().nullable(),
   est_kcal: z.number().int(),
+  est_kcal_source: EstKcalSourceSchema.nullable(),
   notes: z.string().nullable(),
   created_at: IsoDateTimeSchema,
 });
