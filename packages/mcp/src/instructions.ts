@@ -27,7 +27,7 @@ Almanac is a personal nutrition/training tracker. Every call is scoped to the ac
 
 # Warnings and nudges
 
-- **\`log_cardio.estimate_warning\`** (HR vs user est_kcal >20%): don't silently accept. Surface the delta, ask whether to revise. User's value persists either way.
+- **\`log_cardio\`**: with avg_hr + duration, omit est_kcal and the server derives it. A figure you pass persists as-is; if it draws an \`estimate_warning\`, surface the delta and ask whether to revise.
 - **\`get_day_status.nudges\`** (severities: info/warn/concern): surface warn+concern proactively. Skip info unless relevant.
 - **TDEE** starts as an estimate and calibrates over ~14 days of weigh-ins. Say so in plain words.
 

@@ -1,7 +1,7 @@
 import { nthCall } from "@almanac/core/test-support";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../client.js";
-import { makeLogCardioTool } from "./log-cardio.js";
+import { LogCardioInputSchema, makeLogCardioTool } from "./log-cardio.js";
 
 function mockJsonResponse(status: number, body: unknown) {
   return { ok: status < 400, status, json: async () => body };
@@ -103,5 +103,22 @@ describe("log_cardio", () => {
     const key = postCall[1].headers["idempotency-key"];
     expect(key).toBeDefined();
     expect(key).toMatch(/^cardio:1:[a-f0-9]{64}$/);
+  });
+
+  it("accepts a payload with no est_kcal when HR and duration are present", () => {
+    const parsed = LogCardioInputSchema.safeParse({
+      started_at: "2026-05-21T12:00:00",
+      avg_hr: 150,
+      duration_min: 30,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a payload with no est_kcal and no way to derive one", () => {
+    const parsed = LogCardioInputSchema.safeParse({
+      started_at: "2026-05-21T12:00:00",
+      modality: "bike",
+    });
+    expect(parsed.success).toBe(false);
   });
 });

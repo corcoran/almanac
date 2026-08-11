@@ -123,7 +123,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     {
       name: "cardio",
       summary:
-        "A cardio session (run, bike, etc). When avg_hr + duration_min are present, the response carries a kcal_estimate (midpoint of Keytel + METs) and an estimate_warning if user-reported est_kcal differs by >20%.",
+        "A cardio session (run, bike, etc). Give avg_hr + duration_min and omit est_kcal: the server derives the burn from heart rate against age-predicted HRmax. A caller-supplied est_kcal is stored as given, and carries an estimate_warning when it differs from the server's figure by >20%.",
     },
     {
       name: "sleep",
