@@ -1,8 +1,31 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import CardioSessionRow from "./CardioSessionRow.vue";
 
-const SESSION = { id: 7, modality: "run", duration_min: 32, est_kcal: 410 };
+const SESSION = { id: 7, modality: "run", duration_min: 32, avg_hr: 138, est_kcal: 410 };
+
+const realMatchMedia = window.matchMedia;
+
+/** Point the always-false matchMedia stub from vitest.setup.ts at a width. */
+function setViewportWidth(px: number): void {
+  window.matchMedia = ((query: string) => {
+    const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.NaN);
+    return {
+      matches: !Number.isNaN(max) && px <= max,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    };
+  }) as unknown as typeof window.matchMedia;
+}
+
+afterEach(() => {
+  window.matchMedia = realMatchMedia;
+});
 
 describe("CardioSessionRow", () => {
   it("renders modality, duration, and kcal in read-only mode", () => {
@@ -40,9 +63,34 @@ describe("CardioSessionRow", () => {
     expect(
       (wrapper.find('[data-test="cardio-duration-input"]').element as HTMLInputElement).value,
     ).toBe("32");
+    expect((wrapper.find('[data-test="cardio-hr-input"]').element as HTMLInputElement).value).toBe(
+      "138",
+    );
     expect(
       (wrapper.find('[data-test="cardio-kcal-input"]').element as HTMLInputElement).value,
     ).toBe("410");
+  });
+
+  it("omits est_kcal when the kcal box comes back unedited", async () => {
+    const wrapper = mount(CardioSessionRow, { props: { session: SESSION } });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    await wrapper.find('[data-test="cardio-hr-input"]').setValue("145");
+    await wrapper.find('[data-test="cardio-row-save"]').trigger("click");
+    expect(wrapper.emitted("save")).toEqual([[{ modality: "run", duration_min: 32, avg_hr: 145 }]]);
+  });
+
+  it("stacks the edit form above the numbers on mobile", async () => {
+    setViewportWidth(375);
+    const wrapper = mount(CardioSessionRow, { props: { session: SESSION } });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    expect(wrapper.find('[data-test="cardio-edit-form"]').classes()).toContain("stacked");
+  });
+
+  it("keeps the edit form on one row on desktop", async () => {
+    setViewportWidth(1280);
+    const wrapper = mount(CardioSessionRow, { props: { session: SESSION } });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    expect(wrapper.find('[data-test="cardio-edit-form"]').classes()).not.toContain("stacked");
   });
 
   it("disables Save when kcal is empty or negative", async () => {
@@ -68,7 +116,7 @@ describe("CardioSessionRow", () => {
     await wrapper.find('[data-test="cardio-kcal-input"]').setValue("250");
     await wrapper.find('[data-test="cardio-row-save"]').trigger("click");
     expect(wrapper.emitted("save")).toEqual([
-      [{ modality: null, duration_min: null, est_kcal: 250 }],
+      [{ modality: null, duration_min: null, avg_hr: 138, est_kcal: 250 }],
     ]);
   });
 
@@ -80,7 +128,7 @@ describe("CardioSessionRow", () => {
     await wrapper.find('[data-test="cardio-kcal-input"]').setValue("300");
     await wrapper.find('[data-test="cardio-row-save"]').trigger("click");
     expect(wrapper.emitted("save")).toEqual([
-      [{ modality: "bike", duration_min: 40, est_kcal: 300 }],
+      [{ modality: "bike", duration_min: 40, avg_hr: 138, est_kcal: 300 }],
     ]);
   });
 
@@ -115,7 +163,7 @@ describe("CardioSessionRow", () => {
     await wrapper.find('[data-test="cardio-duration-input"]').setValue("0");
     await save.trigger("click");
     expect(wrapper.emitted("save")).toEqual([
-      [{ modality: "run", duration_min: null, est_kcal: 300 }],
+      [{ modality: "run", duration_min: null, avg_hr: 138, est_kcal: 300 }],
     ]);
   });
 

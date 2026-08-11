@@ -1,12 +1,40 @@
 import { at } from "@almanac/core/test-support";
 import { flushPromises, mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import MovementBlock from "./MovementBlock.vue";
+
+const realMatchMedia = window.matchMedia;
+
+/**
+ * `useIsMobile` reads `window.matchMedia`, which vitest.setup.ts stubs as
+ * always-false. Point that stub at a width instead. The composable reads it
+ * once at setup, so call this before mounting.
+ */
+function setViewportWidth(px: number): void {
+  window.matchMedia = ((query: string) => {
+    const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.NaN);
+    return {
+      matches: !Number.isNaN(max) && px <= max,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    };
+  }) as unknown as typeof window.matchMedia;
+}
+
+afterEach(() => {
+  window.matchMedia = realMatchMedia;
+});
 
 type CardioSession = {
   id: number;
   modality: string | null;
   duration_min: number | null;
+  avg_hr: number | null;
   est_kcal: number;
 };
 
@@ -15,6 +43,7 @@ function makeCardio(overrides: Partial<CardioSession> = {}): CardioSession {
     id: 1,
     modality: "bike",
     duration_min: 45,
+    avg_hr: null,
     est_kcal: 320,
     ...overrides,
   };
@@ -285,6 +314,55 @@ describe("MovementBlock cardio CRUD", () => {
     expect(wrapper.emitted("changed")).toHaveLength(1);
   });
 
+  it("prefills and patches a corrected heart rate from the edit row", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const client = makeClient({
+      patch: async (path, body) => {
+        calls.push({ path, body });
+        return { id: 7 };
+      },
+    });
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client,
+        cardio: [makeCardio({ id: 7, avg_hr: 150, duration_min: 30, est_kcal: 431 })],
+      },
+    });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    const hr = wrapper.find('[data-test="cardio-hr-input"]');
+    expect((hr.element as HTMLInputElement).value).toBe("150");
+    await hr.setValue("135");
+    await wrapper.find('[data-test="cardio-row-save"]').trigger("click");
+    await flushPromises();
+    expect(at(calls, 0).body).toMatchObject({ avg_hr: 135 });
+    // An untouched kcal box is not a claim on the figure, so leaving it out
+    // lets a server-derived one follow the corrected heart rate.
+    expect(at(calls, 0).body).not.toHaveProperty("est_kcal");
+  });
+
+  it("sends est_kcal only when the edit row's kcal box was changed", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const client = makeClient({
+      patch: async (path, body) => {
+        calls.push({ path, body });
+        return { id: 7 };
+      },
+    });
+    const wrapper = mount(MovementBlock, {
+      props: {
+        ...MB_BASE(),
+        client,
+        cardio: [makeCardio({ id: 7, avg_hr: 150, duration_min: 30, est_kcal: 431 })],
+      },
+    });
+    await wrapper.find('[data-test="cardio-row-edit"]').trigger("click");
+    await wrapper.find('[data-test="cardio-kcal-input"]').setValue("500");
+    await wrapper.find('[data-test="cardio-row-save"]').trigger("click");
+    await flushPromises();
+    expect(at(calls, 0).body).toMatchObject({ est_kcal: 500, avg_hr: 150 });
+  });
+
   it("deleting a row DELETEs by id and emits changed", async () => {
     const calls: string[] = [];
     const client = makeClient({
@@ -301,6 +379,82 @@ describe("MovementBlock cardio CRUD", () => {
     await flushPromises();
     expect(calls).toEqual(["/v1/cardio-sessions/7"]);
     expect(wrapper.emitted("changed")).toHaveLength(1);
+  });
+
+  it("posts avg_hr with no est_kcal when the user fills HR and duration only", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const client = makeClient({
+      post: async (path, body) => {
+        calls.push({ path, body });
+        return { id: 9 };
+      },
+    });
+    const wrapper = mount(MovementBlock, { props: { ...MB_BASE(), client } });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    await wrapper.find('[data-test="cardio-add-duration"]').setValue("30");
+    await wrapper.find('[data-test="cardio-add-hr"]').setValue("150");
+    await wrapper.find('[data-test="cardio-add-save"]').trigger("click");
+    await flushPromises();
+    expect(at(calls, 0).body).toMatchObject({ avg_hr: 150, duration_min: 30 });
+    expect(at(calls, 0).body).not.toHaveProperty("est_kcal");
+  });
+
+  it("still posts est_kcal when the user types one and leaves HR blank", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const client = makeClient({
+      post: async (path, body) => {
+        calls.push({ path, body });
+        return { id: 9 };
+      },
+    });
+    const wrapper = mount(MovementBlock, { props: { ...MB_BASE(), client } });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    await wrapper.find('[data-test="cardio-add-duration"]').setValue("30");
+    await wrapper.find('[data-test="cardio-add-kcal"]').setValue("400");
+    await wrapper.find('[data-test="cardio-add-save"]').trigger("click");
+    await flushPromises();
+    expect(at(calls, 0).body).toMatchObject({ est_kcal: 400, duration_min: 30, avg_hr: null });
+  });
+
+  it("enables Save on HR + duration alone, and on kcal alone", async () => {
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    const save = wrapper.find('[data-test="cardio-add-save"]');
+    expect((save.element as HTMLButtonElement).disabled).toBe(true);
+    await wrapper.find('[data-test="cardio-add-hr"]').setValue("150");
+    expect((save.element as HTMLButtonElement).disabled).toBe(true);
+    await wrapper.find('[data-test="cardio-add-duration"]').setValue("30");
+    expect((save.element as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("states the either-or rule while the form is open", async () => {
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toBe(
+      "Enter calories, or heart rate and we'll work them out.",
+    );
+  });
+
+  it("echoes the derivation once heart rate and duration are in", async () => {
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    await wrapper.find('[data-test="cardio-add-duration"]').setValue("30");
+    await wrapper.find('[data-test="cardio-add-hr"]').setValue("142");
+    expect(wrapper.find('[data-test="cardio-add-hint"]').text()).toContain("142 bpm over 30 min");
+  });
+
+  it("stacks activity above the numbers on mobile", async () => {
+    setViewportWidth(375);
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    expect(wrapper.find('[data-test="cardio-add-form"]').classes()).toContain("stacked");
+  });
+
+  it("keeps the add form on one row on desktop", async () => {
+    setViewportWidth(1280);
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    await wrapper.find('[data-test="cardio-add-button"]').trigger("click");
+    expect(wrapper.find('[data-test="cardio-add-form"]').classes()).not.toContain("stacked");
   });
 
   it("does not emit changed when an op fails, and shows an error", async () => {

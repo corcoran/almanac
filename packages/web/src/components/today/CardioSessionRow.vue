@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useIsMobile } from "../../composables/useIsMobile.js";
 
 type CardioSession = {
   id: number;
   modality: string | null;
   duration_min: number | null;
+  avg_hr: number | null;
   est_kcal: number;
 };
 
-type CardioEdit = { modality: string | null; duration_min: number | null; est_kcal: number };
+type CardioEdit = {
+  modality: string | null;
+  duration_min: number | null;
+  avg_hr: number | null;
+  /**
+   * Absent when the kcal box came back unedited. Sending the figure back
+   * unchanged would claim it as the user's and freeze it, so omitting it is
+   * what lets a server-derived number follow a corrected heart rate.
+   */
+  est_kcal?: number;
+};
 
 const props = withDefaults(defineProps<{ session: CardioSession; pending?: boolean }>(), {
   pending: false,
@@ -18,11 +30,14 @@ const emit = defineEmits<{
   (e: "delete", id: number): void;
 }>();
 
+const { isMobile } = useIsMobile();
+
 const isEditing = ref(false);
 const confirmingDelete = ref(false);
 
 const modalityDraft = ref("");
 const durationDraft = ref("");
+const hrDraft = ref("");
 const kcalDraft = ref("");
 
 const displayModality = computed<string>(() => {
@@ -34,27 +49,39 @@ function beginEdit(): void {
   modalityDraft.value = props.session.modality ?? "";
   durationDraft.value =
     props.session.duration_min === null ? "" : String(props.session.duration_min);
+  hrDraft.value = props.session.avg_hr === null ? "" : String(props.session.avg_hr);
   kcalDraft.value = String(props.session.est_kcal);
   confirmingDelete.value = false;
   isEditing.value = true;
 }
 
-const saveDisabled = computed(() => {
-  const k = Number(kcalDraft.value.trim());
-  return !(kcalDraft.value.trim() !== "" && Number.isInteger(k) && k >= 0);
+/** Positive integer or null, the shape the duration and heart-rate boxes parse to. */
+function posInt(raw: string): number | null {
+  const s = raw.trim();
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+const kcalValue = computed(() => {
+  const s = kcalDraft.value.trim();
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isInteger(n) && n >= 0 ? n : null;
 });
 
+const saveDisabled = computed(() => kcalValue.value === null);
+
 function onSave(): void {
-  const k = Number(kcalDraft.value.trim());
-  if (!(Number.isInteger(k) && k >= 0)) return;
+  const k = kcalValue.value;
+  if (k === null) return;
   const modality = modalityDraft.value.trim();
-  const durStr = durationDraft.value.trim();
-  const durNum = Number(durStr);
-  const duration_min = durStr !== "" && Number.isInteger(durNum) && durNum > 0 ? durNum : null;
+  const untouchedKcal = kcalDraft.value.trim() === String(props.session.est_kcal);
   emit("save", {
     modality: modality.length > 0 ? modality : null,
-    duration_min,
-    est_kcal: k,
+    duration_min: posInt(durationDraft.value),
+    avg_hr: posInt(hrDraft.value),
+    ...(untouchedKcal ? {} : { est_kcal: k }),
   });
   isEditing.value = false;
 }
@@ -103,7 +130,7 @@ function onConfirmYes(): void {
     </span>
   </li>
 
-  <li v-else class="form-row" data-test="cardio-edit-form">
+  <li v-else class="form-row" :class="{ stacked: isMobile }" data-test="cardio-edit-form">
     <input
       v-model="modalityDraft"
       type="text"
@@ -112,39 +139,50 @@ function onConfirmYes(): void {
       placeholder="modality"
       @keydown.esc="onCancel"
     />
-    <input
-      v-model="durationDraft"
-      type="text"
-      inputmode="numeric"
-      class="dur-input"
-      data-test="cardio-duration-input"
-      placeholder="—"
-      @keydown.esc="onCancel"
-    /><span class="u">min</span>
-    <input
-      v-model="kcalDraft"
-      type="text"
-      inputmode="numeric"
-      class="kcal-input"
-      data-test="cardio-kcal-input"
-      placeholder="kcal"
-      @keydown.enter.prevent="!saveDisabled && onSave()"
-      @keydown.esc="onCancel"
-    /><span class="u">kcal</span>
-    <button
-      type="button"
-      class="save"
-      data-test="cardio-row-save"
-      :disabled="saveDisabled || pending"
-      @click="onSave"
-    >Save</button>
-    <button
-      type="button"
-      class="cancel"
-      data-test="cardio-row-cancel"
-      aria-label="Cancel"
-      @click="onCancel"
-    >×</button>
+    <div class="numbers">
+      <input
+        v-model="durationDraft"
+        type="text"
+        inputmode="numeric"
+        class="dur-input"
+        data-test="cardio-duration-input"
+        placeholder="min"
+        @keydown.esc="onCancel"
+      /><span class="u">min</span>
+      <input
+        v-model="hrDraft"
+        type="text"
+        inputmode="numeric"
+        class="hr-input"
+        data-test="cardio-hr-input"
+        placeholder="HR"
+        @keydown.esc="onCancel"
+      /><span class="u">bpm</span>
+      <input
+        v-model="kcalDraft"
+        type="text"
+        inputmode="numeric"
+        class="kcal-input"
+        data-test="cardio-kcal-input"
+        placeholder="kcal"
+        @keydown.enter.prevent="!saveDisabled && onSave()"
+        @keydown.esc="onCancel"
+      /><span class="u">kcal</span>
+      <button
+        type="button"
+        class="save"
+        data-test="cardio-row-save"
+        :disabled="saveDisabled || pending"
+        @click="onSave"
+      >Save</button>
+      <button
+        type="button"
+        class="cancel"
+        data-test="cardio-row-cancel"
+        aria-label="Cancel"
+        @click="onCancel"
+      >×</button>
+    </div>
   </li>
 </template>
 
@@ -197,6 +235,7 @@ function onConfirmYes(): void {
 .form-row input:focus { outline: none; border-color: var(--accent, #4a7dff); }
 .form-row .modality-input { width: 92px; }
 .form-row .dur-input { width: 48px; }
+.form-row .hr-input { width: 48px; }
 .form-row .kcal-input { width: 60px; }
 .form-row .u { color: var(--ink-faint, #6b7180); font-size: 10px; }
 .form-row .save {
@@ -207,4 +246,13 @@ function onConfirmYes(): void {
 }
 .form-row .save:disabled { background: var(--line-2, #353a4a); color: var(--ink-faint, #6b7180); cursor: not-allowed; }
 .form-row .cancel { background: transparent; border: none; color: var(--ink-dim, #9aa0ad); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+/* The wrapper exists only so the stacked layout has something to group; on a
+   wide row its children are flex items of .form-row exactly as before. */
+.form-row .numbers { display: contents; }
+.form-row.stacked { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+.form-row.stacked .modality-input { width: 100%; }
+.form-row.stacked .numbers { display: flex; align-items: center; gap: 4px; }
+.form-row.stacked .dur-input { width: 42px; }
+.form-row.stacked .hr-input { width: 42px; }
+.form-row.stacked .kcal-input { width: 52px; }
 </style>
