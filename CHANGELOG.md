@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-08-11
+
 ### Added
 
 - **Cardio logs can leave the calorie figure out.** Give an average heart rate
