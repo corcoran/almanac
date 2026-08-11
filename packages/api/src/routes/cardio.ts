@@ -7,12 +7,14 @@ import {
   updateCardioSession,
 } from "@almanac/core/repos";
 import {
+  CardioKcalEstimateSchema,
   CardioSessionEnrichedResponseSchema,
   CardioSessionInputSchema,
   CardioSessionUpdateSchema,
   ListCardioSessionsQuerySchema,
 } from "@almanac/core/schemas";
 import { compareKcalEstimates, computeCardioKcalEstimate } from "@almanac/core/signals";
+import { currentUserDate, type EstKcalSource } from "@almanac/core/types";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireUser } from "../auth.js";
@@ -41,6 +43,7 @@ function enrichCardio<
     avg_hr: number | null;
     duration_min: number | null;
     est_kcal: number;
+    est_kcal_source: EstKcalSource | null;
     started_at: string;
   },
 >(
@@ -61,7 +64,12 @@ function enrichCardio<
     user: { dob: user.dob, sex: user.sex, weight_kg: latestWeightKg },
     asOf,
   });
-  const warning = compareKcalEstimates(session.est_kcal, estimate.est_kcal_hr);
+  // A server-computed est_kcal cannot disagree with the server's own
+  // estimate, so warning on it would fire on every session and mean nothing.
+  const warning =
+    session.est_kcal_source === null || session.est_kcal_source === "user"
+      ? compareKcalEstimates(session.est_kcal, estimate.est_kcal_hr)
+      : null;
   return { ...session, kcal_estimate: estimate, estimate_warning: warning };
 }
 
@@ -75,6 +83,30 @@ function latestWeightKg(db: Connection, userId: number): number | null {
     )
     .get(userId) as { weight_kg: number } | undefined;
   return row?.weight_kg ?? null;
+}
+
+/**
+ * Derive the burn from heart rate. Null when the session lacks either input,
+ * which is the only case where the caller has to supply `est_kcal` itself.
+ */
+function deriveEstKcal(
+  session: { avg_hr?: number | null; duration_min?: number | null; started_at: string },
+  user: EnrichmentUser,
+  weightKg: number | null,
+): { est_kcal: number; est_kcal_source: EstKcalSource } | null {
+  const { avg_hr, duration_min } = session;
+  if (avg_hr == null || duration_min == null) return null;
+  const estimate = computeCardioKcalEstimate({
+    avg_hr,
+    duration_min,
+    user: { dob: user.dob, sex: user.sex, weight_kg: weightKg },
+    asOf: session.started_at.slice(0, 10),
+  });
+  return {
+    est_kcal: estimate.est_kcal_hr,
+    est_kcal_source:
+      estimate.components.mets_basis === "zone_scaled" ? "server_zone" : "server_flat",
+  };
 }
 
 export const registerCardioRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -92,6 +124,32 @@ export const registerCardioRoutes: FastifyPluginAsyncZod = async (app) => {
       const sessions = listCardioSessions(app.db, user.id, { ...range, limit: req.query.limit });
       const weight = latestWeightKg(app.db, user.id);
       return sessions.map((s) => enrichCardio(s, user, weight));
+    },
+  );
+
+  // Must stay ahead of `/:id`: that route's params schema would reject the
+  // literal segment as a non-integer id.
+  app.get(
+    "/v1/cardio-sessions/kcal-preview",
+    {
+      schema: {
+        querystring: z.object({
+          avg_hr: z.coerce.number().int().positive(),
+          duration_min: z.coerce.number().int().positive(),
+          on_date: z.string().length(10).optional(),
+        }),
+        response: { 200: CardioKcalEstimateSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(app.db, req);
+      return computeCardioKcalEstimate({
+        avg_hr: req.query.avg_hr,
+        duration_min: req.query.duration_min,
+        user: { dob: user.dob, sex: user.sex, weight_kg: latestWeightKg(app.db, user.id) },
+        // Only feeds the age calculation, so a day either way is harmless.
+        asOf: req.query.on_date ?? currentUserDate(new Date(), user.timezone),
+      });
     },
   );
 
@@ -118,8 +176,22 @@ export const registerCardioRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req, reply) => {
       const user = requireUser(app.db, req);
       const body = normalizeTimestamp(req.body, "started_at", user.timezone);
-      const created = createCardioSession(app.db, { user_id: user.id, ...body });
-      reply.code(201).send(enrichCardio(created, user, latestWeightKg(app.db, user.id)));
+      const weight = latestWeightKg(app.db, user.id);
+      const resolved =
+        body.est_kcal === undefined
+          ? deriveEstKcal(body, user, weight)
+          : { est_kcal: body.est_kcal, est_kcal_source: "user" as const };
+      // The schema refinement already rejects this combination; the guard is
+      // what proves est_kcal is a number to the repo's input type.
+      if (resolved === null) {
+        throw new ApiError(
+          422,
+          "validation_failed",
+          "est_kcal is required unless both avg_hr and duration_min are given",
+        );
+      }
+      const created = createCardioSession(app.db, { user_id: user.id, ...body, ...resolved });
+      reply.code(201).send(enrichCardio(created, user, weight));
     },
   );
 
@@ -135,10 +207,27 @@ export const registerCardioRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const user = requireUser(app.db, req);
       const body = normalizeTimestamp(req.body, "started_at", user.timezone);
-      const updated = updateCardioSession(app.db, user.id, req.params.id, body);
+      const existing = findCardioSessionById(app.db, user.id, req.params.id);
+      if (!existing)
+        throw new ApiError(404, "not_found", `Cardio session ${req.params.id} not found`);
+      const weight = latestWeightKg(app.db, user.id);
+      // A number in the payload is the caller's, whoever owned the old one.
+      // Otherwise a server-owned figure follows its inputs; a caller-owned or
+      // legacy (null) one is left exactly as the caller last set it.
+      const owned = existing.est_kcal_source;
+      const claimed = body.est_kcal !== undefined;
+      const rederived =
+        !claimed && (owned === "server_zone" || owned === "server_flat")
+          ? deriveEstKcal({ ...existing, ...body }, user, weight)
+          : null;
+      const updated = updateCardioSession(app.db, user.id, req.params.id, {
+        ...body,
+        ...(claimed ? { est_kcal_source: "user" as const } : {}),
+        ...(rederived ?? {}),
+      });
       if (!updated)
         throw new ApiError(404, "not_found", `Cardio session ${req.params.id} not found`);
-      return enrichCardio(updated, user, latestWeightKg(app.db, user.id));
+      return enrichCardio(updated, user, weight);
     },
   );
 

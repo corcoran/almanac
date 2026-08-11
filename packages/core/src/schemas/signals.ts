@@ -409,6 +409,7 @@ export const TodayContextResponseSchema = z.object({
         id: IdSchema,
         modality: z.string().nullable(),
         duration_min: z.number().int().nullable(),
+        avg_hr: z.number().int().nullable(),
         est_kcal: z.number().int(),
       }),
     ),

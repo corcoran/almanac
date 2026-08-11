@@ -136,6 +136,7 @@ export type TodayContext = {
       id: number;
       modality: string | null;
       duration_min: number | null;
+      avg_hr: number | null;
       est_kcal: number;
     }>;
     alcohol: Array<{ id: number; drinks_count: number; est_kcal: number }>;
@@ -279,7 +280,7 @@ export function getTodayContext(
   }>;
   const cardioToday = db
     .prepare(
-      `SELECT id, started_at, modality, duration_min, est_kcal
+      `SELECT id, started_at, modality, duration_min, avg_hr, est_kcal
        FROM cardio_sessions
        WHERE user_id = ? AND started_at >= ? AND started_at < ?`,
     )
@@ -288,6 +289,7 @@ export function getTodayContext(
     started_at: string;
     modality: string | null;
     duration_min: number | null;
+    avg_hr: number | null;
     est_kcal: number;
   }>;
   const alcoholToday = db
@@ -750,6 +752,7 @@ export function getTodayContext(
         id: c.id,
         modality: c.modality,
         duration_min: c.duration_min,
+        avg_hr: c.avg_hr,
         est_kcal: c.est_kcal,
       })),
       alcohol: alcoholToday.map((a) => ({

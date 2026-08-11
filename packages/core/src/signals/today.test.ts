@@ -652,6 +652,20 @@ describe("getTodayContext", () => {
       expect(eb.net).toBe(1700 - ctx.tdee.kcal);
     });
 
+    it("today.cardio carries avg_hr so an edit form can round-trip it", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      createCardioSession(db, {
+        user_id: userId,
+        started_at: "2026-05-13T20:00:00Z",
+        modality: "bike",
+        duration_min: 30,
+        avg_hr: 142,
+        est_kcal: 384,
+      });
+      const ctx = getTodayContext(db, userId, new Date("2026-05-14T02:00:00Z"));
+      expect(defined(ctx.today.cardio[0], "cardio session").avg_hr).toBe(142);
+    });
+
     it("today.steps is null when no step log exists for the user-day", () => {
       // Distinguishes "didn't log steps today" from an explicit zero — same
       // rule meals_logged_today applies. energy_balance.steps_out is null (no

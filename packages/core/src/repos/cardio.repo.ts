@@ -1,8 +1,8 @@
 import type { Connection } from "../db/connection.js";
-import type { CardioSession } from "../domain/body.js";
+import type { CardioSession, EstKcalSource } from "../domain/body.js";
 
 const CARDIO_COLUMNS =
-  "id, user_id, started_at, duration_min, modality, avg_hr, distance_km, steps, est_kcal, notes, created_at";
+  "id, user_id, started_at, duration_min, modality, avg_hr, distance_km, steps, est_kcal, est_kcal_source, notes, created_at";
 
 // Plain event repo: no UNIQUE on the table, so `started_at` IS in the
 // allowlist — many sessions per day are allowed and mutating the start
@@ -15,6 +15,7 @@ const UPDATABLE_CARDIO_COLUMNS = [
   "distance_km",
   "steps",
   "est_kcal",
+  "est_kcal_source",
   "notes",
 ] as const satisfies readonly (keyof CardioSession)[];
 
@@ -27,6 +28,7 @@ export type CreateCardioSessionInput = {
   distance_km?: number | null;
   steps?: number | null;
   est_kcal: number;
+  est_kcal_source?: EstKcalSource | null;
   notes?: string | null;
 };
 
@@ -62,8 +64,8 @@ export function createCardioSession(
   return db
     .prepare(
       `INSERT INTO cardio_sessions
-        (user_id, started_at, duration_min, modality, avg_hr, distance_km, steps, est_kcal, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, started_at, duration_min, modality, avg_hr, distance_km, steps, est_kcal, est_kcal_source, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING ${CARDIO_COLUMNS}`,
     )
     .get(
@@ -75,6 +77,7 @@ export function createCardioSession(
       input.distance_km ?? null,
       input.steps ?? null,
       input.est_kcal,
+      input.est_kcal_source ?? null,
       input.notes ?? null,
     ) as CardioSession;
 }

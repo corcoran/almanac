@@ -37,9 +37,10 @@ into the LLM's system prompt. The instructions cover:
 - Date conventions: "today" is user-local with a day-start rollover, so trust
   `get_today_context.now` rather than computing it.
 - Idempotency: which log tools are safe to retry on network failure.
-- The warning protocol: when `log_cardio` returns an `estimate_warning`
-  (HR-derived kcal differs more than 20% from the user estimate), surface it
-  rather than silently accepting.
+- Cardio calories: give `log_cardio` an `avg_hr` and a `duration_min`, leave
+  `est_kcal` out, and the server derives the burn. An `estimate_warning` fires
+  only on a caller-supplied figure more than 20% from the server's own, and the
+  AI should surface it rather than silently accept it.
 - The nudge protocol: `get_day_status` returns nudge codes
   (`low_intake_today`, `stale_weight_log`, and others) with severities, and
   warn and concern should surface proactively.
@@ -297,8 +298,11 @@ to give the AI useful context in a single round-trip:
 - `log_meal` fetches the day's macro totals and target after inserting, so the
   response includes "day total: 1200/2400 (50%)" without requiring a second
   tool call.
-- `log_cardio` returns a `kcal_estimate` (HR-derived) alongside the user's
-  `est_kcal`, plus an `estimate_warning` if they diverge by more than 20%.
+- `log_cardio` returns a `kcal_estimate` worked out from heart rate against
+  age-predicted HRmax. Omit `est_kcal` and the server stores that figure,
+  tagging the row `est_kcal_source: server_zone`. A figure you pass yourself is
+  kept as-is, and the response carries an `estimate_warning` when it lands more
+  than 20% from the server's.
 - `get_today_context` is a composite read that returns the active phase,
   today's intake, week-to-date averages, TDEE, energy balance, and stim
   states, all in one call.

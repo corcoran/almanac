@@ -5,6 +5,20 @@ All notable changes to Almanac are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Cardio logs can leave the calorie figure out.** Give an average heart rate
+  and a duration and the server derives the burn itself, in the web form and
+  over MCP alike. The web form previews the figure as you type.
+
+### Changed
+
+- **Cardio calorie estimates now scale with heart rate.** The MET half of the
+  estimate reads off percentage of age-predicted HRmax instead of a flat
+  constant, which was under-reading a hard session by about a quarter.
+
 ## [1.37.0] - 2026-08-10
 
 ### Added
