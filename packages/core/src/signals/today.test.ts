@@ -462,6 +462,74 @@ describe("getTodayContext", () => {
       expect(after.week_to_date.avg_kcal_in.value).toBe(2000); // ...but the 7-day avg did NOT
     });
 
+    it("counts alcohol kcal in week-to-date avg intake (intake = meals + drinks)", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const now = new Date("2026-05-13T18:00:00Z"); // ~2pm ET on the 13th
+
+      // 7 complete prior days at 2000 food kcal each (2026-05-06 .. 2026-05-12).
+      for (const day of [
+        "2026-05-06",
+        "2026-05-07",
+        "2026-05-08",
+        "2026-05-09",
+        "2026-05-10",
+        "2026-05-11",
+        "2026-05-12",
+      ]) {
+        createMeal(db, {
+          user_id: userId,
+          eaten_at: `${day}T16:00:00Z`, // noon ET — unambiguously that user-day
+          kcal: 2000,
+          protein_g: 150,
+          carb_g: 200,
+          fat_g: 60,
+        });
+      }
+      // 700 kcal of drinks on ONE of those days (9pm ET on the 11th).
+      createAlcoholSession(db, {
+        user_id: userId,
+        started_at: "2026-05-12T01:00:00Z",
+        drinks_count: 4,
+        est_kcal: 700,
+      });
+
+      const ctx = getTodayContext(db, userId, now);
+      // 7 days × 2000 food + 700 alcohol = 14700 over 7 days.
+      expect(ctx.week_to_date.avg_kcal_in.value).toBe(2100);
+      expect(ctx.week_to_date.avg_kcal_in.days_with_data).toBe(7);
+      // Alcohol carries no protein, so the protein average is untouched.
+      expect(ctx.week_to_date.avg_protein_g.value).toBe(150);
+    });
+
+    it("counts a drinks-only day as a day with intake in week-to-date avg", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const now = new Date("2026-05-13T18:00:00Z");
+
+      createMeal(db, {
+        user_id: userId,
+        eaten_at: "2026-05-11T16:00:00Z",
+        kcal: 2000,
+        protein_g: 150,
+        carb_g: 200,
+        fat_g: 60,
+      });
+      // The 12th has drinks logged but no meals — still a day the user took in
+      // calories, so it counts in the denominator rather than vanishing.
+      createAlcoholSession(db, {
+        user_id: userId,
+        started_at: "2026-05-13T01:00:00Z",
+        drinks_count: 3,
+        est_kcal: 400,
+      });
+
+      const ctx = getTodayContext(db, userId, now);
+      expect(ctx.week_to_date.avg_kcal_in).toEqual({
+        value: 1200, // (2000 + 400) / 2
+        window_days: 7,
+        days_with_data: 2,
+      });
+    });
+
     it("a skipped exercise_instance does not refresh last_hit_at or contribute to stim volume", () => {
       // Regression for code-review C1: skipped rows are persisted with
       // skipped_at set so adherence/audit can see them, but they're NOT training

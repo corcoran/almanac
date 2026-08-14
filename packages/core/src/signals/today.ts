@@ -414,7 +414,7 @@ export function getTodayContext(
     .get(userId, today) as { hours: number; quality: number | null } | undefined;
 
   // Week aggregates over the COMPLETED-days window (the last 7 days ending
-  // yesterday, EXCLUSIVE of today) — meal/workout/cardio/alcohol roll-ups use
+  // yesterday, EXCLUSIVE of today) — intake/workout/cardio/alcohol roll-ups use
   // weekCompletedStartUtc/weekCompletedEndUtc so a partial in-progress day
   // doesn't drag the averages. Only the sleep aggregate stays today-inclusive
   // (a slept_on=today night is last night, already complete). Bucket via a UTC
@@ -440,9 +440,6 @@ export function getTodayContext(
     weekMealsByDay.set(d, cur);
   }
   const weekMeals = Array.from(weekMealsByDay.values());
-  // Tracked-only meal days for the "usual" kcal/protein averages — untracked
-  // days are dropped so a lightly-logged vacation doesn't pull them down.
-  const weekMealsTracked = weekMeals.filter((m) => !weekUntracked.has(m.d));
   // Two queries: total workout count vs days the user worked out.
   // For workouts_count: value = total workouts in window, days_with_data =
   // days the user trained (DISTINCT date). Twice in one day still counts
@@ -502,6 +499,24 @@ export function getTodayContext(
   const drinkingDays = new Set(weekAlcoholRows.map((r) => r.d)).size;
   const drinksCount = weekAlcoholRows.reduce((s, r) => s + r.drinks_count, 0);
   const alcoholKcal = weekAlcoholRows.reduce((s, r) => s + r.est_kcal, 0);
+
+  // Per-day intake for the week averages. kcal is meals + alcohol, matching
+  // `computeDayKcalIn` (today's total) and `computeDailyTargetForDate` (the
+  // 14-day grid) — an average that omitted drinks would contradict every
+  // per-day figure beside it. A drinks-only day counts toward the denominator.
+  const weekIntakeByDay = new Map(weekMeals.map((m) => [m.d, { d: m.d, k: m.k, p: m.p }] as const));
+  for (const a of weekAlcoholRows) {
+    const cur = weekIntakeByDay.get(a.d) ?? { d: a.d, k: 0, p: 0 };
+    weekIntakeByDay.set(a.d, { ...cur, k: cur.k + a.est_kcal });
+  }
+  // Tracked-only intake days for the "usual" kcal/protein averages — untracked
+  // days are dropped so a lightly-logged vacation doesn't pull them down.
+  const weekIntakeTracked = Array.from(weekIntakeByDay.values()).filter(
+    (m) => !weekUntracked.has(m.d),
+  );
+  // Protein's denominator stays meal-days: a drinks-only day has no protein data
+  // to average, and counting it as a 0 g day would understate the real intake.
+  const weekProteinTracked = weekMeals.filter((m) => !weekUntracked.has(m.d));
   const weekSleep = db
     .prepare(
       `SELECT slept_on, hours FROM sleep_logs
@@ -777,18 +792,18 @@ export function getTodayContext(
       alcohol_kcal: makeAggregate(alcoholKcal, WTD_WINDOW_DAYS, drinkingDays),
       drinking_days_count: makeAggregate(drinkingDays, WTD_WINDOW_DAYS, drinkingDays),
       avg_kcal_in: makeAggregate(
-        weekMealsTracked.length === 0
+        weekIntakeTracked.length === 0
           ? 0
-          : weekMealsTracked.reduce((a, b) => a + b.k, 0) / weekMealsTracked.length,
+          : weekIntakeTracked.reduce((a, b) => a + b.k, 0) / weekIntakeTracked.length,
         WTD_WINDOW_DAYS,
-        weekMealsTracked.length,
+        weekIntakeTracked.length,
       ),
       avg_protein_g: makeAggregate(
-        weekMealsTracked.length === 0
+        weekProteinTracked.length === 0
           ? 0
-          : weekMealsTracked.reduce((a, b) => a + b.p, 0) / weekMealsTracked.length,
+          : weekProteinTracked.reduce((a, b) => a + b.p, 0) / weekProteinTracked.length,
         WTD_WINDOW_DAYS,
-        weekMealsTracked.length,
+        weekProteinTracked.length,
       ),
       sleep_avg_hours: makeAggregate(
         Number(sleepAvg.toFixed(2)),

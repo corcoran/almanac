@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.1] - 2026-08-14
+
+### Fixed
+
+- **The 7-day average intake now counts alcohol.** It summed meals only, so
+  every drink you logged went missing from the average while still showing up
+  in the day-by-day history and in TDEE. The AI coach reads that average to
+  state your current deficit, and was overstating it by whatever you'd been
+  drinking. A day with drinks but no meals now counts as a day you ate, too.
+
 ## [1.38.0] - 2026-08-11
 
 ### Added
