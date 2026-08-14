@@ -99,9 +99,10 @@ describe("computePhaseAdherence", () => {
     expect(result.on_track_days).toBe(1);
   });
 
-  it("averages (intake − anchor) over logged days, rounded", () => {
+  it("averages (intake − anchor) over completed logged days, rounded", () => {
     const { db, userId } = setupCutPhase("2026-05-01");
-    // deltas vs 2400 anchor: -600, -400 → mean -500.
+    // deltas vs 2400 anchor: -600, -400 → mean -500. `today` is 05-03 so both
+    // logged days are complete and land in the average.
     mealOn(db, userId, "2026-05-01", 1800);
     mealOn(db, userId, "2026-05-02", 2000);
     const result = computePhaseAdherence(
@@ -109,9 +110,45 @@ describe("computePhaseAdherence", () => {
       userId,
       TZ,
       { started_on: "2026-05-01", tdee_at_phase_start: 2400 },
-      "2026-05-02",
+      "2026-05-03",
     );
     expect(result.avg_delta_kcal).toBe(-500);
+  });
+
+  it("keeps the in-progress day in X/N but out of the deficit average", () => {
+    const { db, userId } = setupCutPhase("2026-05-01");
+    // Two completed days at 1900 (delta -500 each vs the 2400 anchor).
+    mealOn(db, userId, "2026-05-01", 1900);
+    mealOn(db, userId, "2026-05-02", 1900);
+    // Today (05-03) is mid-morning: one 400 kcal meal so far. Counting it in the
+    // average would read as a 875/day deficit — an artifact of the day being
+    // half over, not of how the user ate.
+    mealOn(db, userId, "2026-05-03", 400);
+    const result = computePhaseAdherence(
+      db,
+      userId,
+      TZ,
+      { started_on: "2026-05-01", tdee_at_phase_start: 2400 },
+      "2026-05-03",
+    );
+    expect(result.logged_days).toBe(3); // today counts — it has intake logged
+    expect(result.on_track_days).toBe(3); // under target, no miss yet
+    expect(result.avg_delta_kcal).toBe(-500); // ...but the average skips today
+  });
+
+  it("returns null avg when only the in-progress day is logged", () => {
+    const { db, userId } = setupCutPhase("2026-05-01");
+    mealOn(db, userId, "2026-05-01", 400);
+    const result = computePhaseAdherence(
+      db,
+      userId,
+      TZ,
+      { started_on: "2026-05-01", tdee_at_phase_start: 2400 },
+      "2026-05-01",
+    );
+    expect(result.logged_days).toBe(1);
+    // No COMPLETED day has intake yet, so there is no honest average to report.
+    expect(result.avg_delta_kcal).toBeNull();
   });
 
   it("returns null avg when there are no logged days", () => {

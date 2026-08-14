@@ -12,6 +12,9 @@ import { computeDailyTargetForDate } from "./inputs.js";
  * (intake − tdee_at_phase_start) over the logged days (negative = deficit),
  * rounded; `null` when there are no logged days or no TDEE anchor.
  *
+ * The two halves cover different day sets on purpose: X/N includes the
+ * in-progress day, the average does not (see the loop).
+ *
  * The per-day status and intake come from `computeDailyTargetForDate`, the same
  * assembly the dashboard's daily target uses — so this aggregate can't drift
  * from the single-day number. The untracked-skip + no-meal-skip rules mirror the
@@ -36,6 +39,7 @@ export function computePhaseAdherence(
   let loggedDays = 0;
   let onTrackDays = 0;
   let deltaSum = 0;
+  let completedDays = 0;
 
   for (let cursor = phase.started_on; cursor <= today; cursor = addDaysIso(cursor, 1)) {
     if (untracked.has(cursor)) continue;
@@ -45,11 +49,19 @@ export function computePhaseAdherence(
     if (day.kind !== "ready" || day.mealCount === 0) continue;
     loggedDays += 1;
     if (day.dayTarget.observed.status === "on_track") onTrackDays += 1;
+    // The average covers COMPLETED days only. Today's intake is still partway
+    // through being logged, so its delta reads as a far bigger deficit than the
+    // user is running — at 9am every cut looks like a 2000/day deficit. The
+    // X/N ratio deliberately still counts today: it degrades gracefully (an
+    // under-target day is simply "no miss yet") and gives the box something
+    // live to respond to as the day fills in.
+    if (cursor === today) continue;
+    completedDays += 1;
     if (anchor != null) deltaSum += day.totals.kcal - anchor;
   }
 
   const avg_delta_kcal =
-    loggedDays > 0 && anchor != null ? Math.round(deltaSum / loggedDays) : null;
+    completedDays > 0 && anchor != null ? Math.round(deltaSum / completedDays) : null;
 
   return { logged_days: loggedDays, on_track_days: onTrackDays, avg_delta_kcal };
 }

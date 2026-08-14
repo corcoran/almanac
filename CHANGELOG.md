@@ -11,11 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+Both fixes correct averages the AI coach quotes back to you, and both were
+reading better than reality.
+
 - **The 7-day average intake now counts alcohol.** It summed meals only, so
-  every drink you logged went missing from the average while still showing up
-  in the day-by-day history and in TDEE. The AI coach reads that average to
-  state your current deficit, and was overstating it by whatever you'd been
-  drinking. A day with drinks but no meals now counts as a day you ate, too.
+  drinks vanished from the average while still showing up in the day-by-day
+  history and in TDEE, overstating your deficit by whatever you'd been
+  drinking. A day with drinks but no meals now counts as a day you ate.
+- **The phase "On Target" average no longer counts today.** Logging breakfast
+  used to swing the avg daily deficit wildly (a 400 kcal morning read as a
+  2,000/day deficit) because the day was only partly logged. The average now
+  covers completed days; the X-of-N ratio still counts today as you log.
 
 ## [1.38.0] - 2026-08-11
 
