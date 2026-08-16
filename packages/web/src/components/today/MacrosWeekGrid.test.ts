@@ -423,7 +423,7 @@ describe("MacrosWeekGrid", () => {
   //   (1) Today (rightmost column) is EXCLUDED — it's a WIP reading and would
   //       drag the average toward partial numbers.
   //   (2) For activity/net rows: no-phase days are SKIPPED (matches
-  //       `get-macros-range.ts:rolling_7d_avg_kcal_in`).
+  //       `get-macros-range.ts:avg_kcal_in_over_range`).
   // ---------------------------------------------------------------------------
 
   it("avg cell for kcal row excludes today (rightmost column) — prior days only", () => {

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`get_macros_range` renamed its average field.** `rolling_7d_avg_kcal_in`
+  never guaranteed seven days: on a shorter query it averaged only the days in
+  range and kept the `7d` name, so a 3-day mean read as a week. It is now
+  `avg_kcal_in_over_range`, alongside a `days_in_avg` count so the denominator
+  is visible. Still capped at the 7 most recent qualifying days.
+
+### Fixed
+
+- **Activity figures no longer read as target headroom.** The `cardio_kcal` /
+  `workout_kcal` / `steps_kcal` fields sit beside `vs_target` but are already
+  baked into TDEE, and the layout invited adding them a second time. Said so
+  plainly in the schema and in `get_macros_today`.
+
 ## [1.38.2] - 2026-08-16
 
 ### Fixed

@@ -50,7 +50,7 @@ const EM_DASH = "—";
  * data point — it's an "I wasn't tracking" data point. Counting it as 0
  * would systematically pull the weekly average down across the cold-start
  * period. Mirrors the precedent in `get-macros-range.ts`'s
- * `rolling_7d_avg_kcal_in` (filter out null-phase days, then average).
+ * `avg_kcal_in_over_range` (filter out null-phase days, then average).
  */
 function meanSkipNulls(values: Array<number | null | undefined>): number | null {
   const present = values.filter((v): v is number => v != null);

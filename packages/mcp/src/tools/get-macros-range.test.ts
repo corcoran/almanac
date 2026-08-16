@@ -55,18 +55,18 @@ describe("get_macros_range", () => {
     });
     const r = (await tool.handler({ from_date: "2026-05-08", to_date: "2026-05-09" })) as {
       days: Array<{ date: string; day_target: { target: { kcal: number } } | null }>;
-      rolling_7d_avg_kcal_in: number | null;
+      avg_kcal_in_over_range: number | null;
     };
     expect(r.days).toHaveLength(2);
     expect(defined(at(r.days, 0).day_target, "day_target").target.kcal).toBe(1900);
     // Both days have a phase active → avg of 1798 and 2100.
-    expect(r.rolling_7d_avg_kcal_in).toBe((1798 + 2100) / 2);
+    expect(r.avg_kcal_in_over_range).toBe((1798 + 2100) / 2);
     expect(nthCall(fetchImpl, 0)[0]).toBe(
       "http://x/api/v1/signals/macros?from_date=2026-05-08&to_date=2026-05-09",
     );
   });
 
-  it("rolling 7d average skips days with no active phase (day_target: null) so they don't dilute the mean", async () => {
+  it("range average skips days with no active phase (day_target: null) so they don't dilute the mean", async () => {
     const apiResponse = {
       days: [
         // Two no-phase days at the start — should NOT count in the average.
@@ -85,12 +85,12 @@ describe("get_macros_range", () => {
       currentToken: () => "alm_test",
     });
     const r = (await tool.handler({ from_date: "2026-05-01", to_date: "2026-05-04" })) as {
-      rolling_7d_avg_kcal_in: number | null;
+      avg_kcal_in_over_range: number | null;
     };
-    expect(r.rolling_7d_avg_kcal_in).toBe((2000 + 2200) / 2);
+    expect(r.avg_kcal_in_over_range).toBe((2000 + 2200) / 2);
   });
 
-  it("excludes untracked days from rolling_7d_avg_kcal_in", async () => {
+  it("excludes untracked days from avg_kcal_in_over_range", async () => {
     const apiResponse = {
       days: [
         // Tracked days at 2000 kcal — these define the expected mean.
@@ -110,14 +110,14 @@ describe("get_macros_range", () => {
       currentToken: () => "alm_test",
     });
     const r = (await tool.handler({ from_date: "2026-05-01", to_date: "2026-05-04" })) as {
-      rolling_7d_avg_kcal_in: number | null;
+      avg_kcal_in_over_range: number | null;
     };
     // Tracked-only mean of the three 2000-kcal days, NOT the untracked-inclusive
     // mean ((2000 + 2000 + 200 + 2000) / 4 = 1550).
-    expect(r.rolling_7d_avg_kcal_in).toBe(2000);
+    expect(r.avg_kcal_in_over_range).toBe(2000);
   });
 
-  it("rolling 7d average is null when every day has no active phase", async () => {
+  it("range average is null when every day has no active phase", async () => {
     const apiResponse = {
       days: [makeDay("2026-05-01", 1000, null), makeDay("2026-05-02", 1100, null)],
     };
@@ -129,8 +129,57 @@ describe("get_macros_range", () => {
       currentToken: () => "alm_test",
     });
     const r = (await tool.handler({ from_date: "2026-05-01", to_date: "2026-05-02" })) as {
-      rolling_7d_avg_kcal_in: number | null;
+      avg_kcal_in_over_range: number | null;
     };
-    expect(r.rolling_7d_avg_kcal_in).toBeNull();
+    expect(r.avg_kcal_in_over_range).toBeNull();
+  });
+
+  it("reports the true denominator on a range shorter than a week", async () => {
+    // The reported bug: a 3-day query returned a 3-day mean under a `7d` name,
+    // which reads as a week. The average is right; `days_in_avg` is what makes
+    // it legible.
+    const apiResponse = {
+      days: [
+        makeDay("2026-05-01", 2000, makeDayTarget(1900, 2000)),
+        makeDay("2026-05-02", 2400, makeDayTarget(1900, 2400)),
+        makeDay("2026-05-03", 2589, makeDayTarget(1900, 2589)),
+      ],
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(mockJsonResponse(200, apiResponse));
+    const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
+    const tool = makeGetMacrosRangeTool({
+      api,
+      currentUserId: async () => 1,
+      currentToken: () => "alm_test",
+    });
+    const r = (await tool.handler({ from_date: "2026-05-01", to_date: "2026-05-03" })) as {
+      avg_kcal_in_over_range: number | null;
+      days_in_avg: number;
+    };
+    expect(r.avg_kcal_in_over_range).toBe((2000 + 2400 + 2589) / 3);
+    expect(r.days_in_avg).toBe(3);
+  });
+
+  it("caps the average at the 7 most recent qualifying days", async () => {
+    // 10 qualifying days: the first three (at 500) must fall outside the window.
+    const days = [
+      ...[0, 1, 2].map((i) => makeDay(`2026-05-0${i + 1}`, 500, makeDayTarget(1900, 500))),
+      ...[3, 4, 5, 6, 7, 8, 9].map((i) =>
+        makeDay(`2026-05-0${i + 1}`, 2000, makeDayTarget(1900, 2000)),
+      ),
+    ];
+    const fetchImpl = vi.fn().mockResolvedValueOnce(mockJsonResponse(200, { days }));
+    const api = new ApiClient({ baseUrl: "http://x", fetchImpl });
+    const tool = makeGetMacrosRangeTool({
+      api,
+      currentUserId: async () => 1,
+      currentToken: () => "alm_test",
+    });
+    const r = (await tool.handler({ from_date: "2026-05-01", to_date: "2026-05-10" })) as {
+      avg_kcal_in_over_range: number | null;
+      days_in_avg: number;
+    };
+    expect(r.avg_kcal_in_over_range).toBe(2000);
+    expect(r.days_in_avg).toBe(7);
   });
 });

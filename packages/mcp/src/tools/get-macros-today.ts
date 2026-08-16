@@ -40,7 +40,7 @@ export function makeGetMacrosTodayTool(deps: ToolDeps): Tool<GetMacrosTodayInput
   return {
     name: "get_macros_today",
     description:
-      "Get today's calorie and full macro totals so far (kcal + protein/carb/fat eaten), alongside the current phase's static target (the phase anchor — does NOT shift with today's activity) and `observed` telemetry (today's activity breakdown, deltas vs. target and maintenance, on/off-track verdict). Returns a compact projection (`*_g_in` = eaten so far, `*_g_target` = phase target) plus a one-line `summary` suitable for direct surfacing. When no nutrition phase is active, `kcal_target` / macro targets / `observed` are null and `summary` reflects the no-phase state.",
+      "Get today's calorie and full macro totals so far (kcal + protein/carb/fat eaten), alongside the current phase's static target (the phase anchor — does NOT shift with today's activity) and `observed` telemetry (today's activity breakdown, deltas vs. target and maintenance, on/off-track verdict). The activity figures in `observed` (`cardio_kcal` / `workout_kcal` / `steps_kcal`) are informational only — TDEE is derived from intake and weight change, so that burn is already in the baseline. Do not add them to `vs_target` or treat them as extra headroom; doing so double-counts them. Returns a compact projection (`*_g_in` = eaten so far, `*_g_target` = phase target) plus a one-line `summary` suitable for direct surfacing. When no nutrition phase is active, `kcal_target` / macro targets / `observed` are null and `summary` reflects the no-phase state.",
     inputSchema: GetMacrosTodayInputSchema,
     annotations: {
       readOnlyHint: true,

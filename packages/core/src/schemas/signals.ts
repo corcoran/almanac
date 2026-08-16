@@ -145,8 +145,14 @@ export const MacrosSchema = z.object({
  * spec for the status thresholds.
  *
  * `vs_target` / `vs_maintenance` are signed deltas from intake (negative =
- * below reference). The activity breakdown (`cardio_kcal` / `workout_kcal` /
- * `steps_kcal`) is display-only.
+ * below reference).
+ *
+ * The activity breakdown (`cardio_kcal` / `workout_kcal` / `steps_kcal`) is
+ * display-only and is NOT an input to the deltas beside it. TDEE is
+ * back-calculated from intake and weight change, so activity is already
+ * absorbed into that baseline — adding these figures to `vs_target` counts the
+ * same burn twice. They sit here to show where the day's expenditure went, not
+ * to be summed.
  */
 export const ObservedSchema = z.object({
   cardio_kcal: z.number(),
