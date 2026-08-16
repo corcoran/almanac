@@ -7,7 +7,10 @@ import { listWorkoutsWithDetail } from "../repos/workouts.repo.js";
 const RPE_TREND_THRESHOLD = 0.5;
 const MIN_SESSIONS_FOR_TREND = 3;
 const DEVIATION_NOTABLE_RATE = 0.4;
-const LOAD_THRESHOLD_KG = 2.5;
+// Below a 5 lb dumbbell jump (2.27 kg), the smallest increment most racks
+// offer — a 2.5 kg bar read every one of those as flat. Stays above a 2.5 lb
+// micro-jump (1.13 kg) so plate-level wobble still counts as stalled.
+const LOAD_THRESHOLD_KG = 2;
 const LOAD_PROGRESSION_CAP = 5;
 
 function deviationStats(

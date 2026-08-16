@@ -408,6 +408,92 @@ describe("summarizeTrainingHistory", () => {
     expect(prog.to_kg).toBeGreaterThan(prog.from_kg);
   });
 
+  it("counts a 5 lb dumbbell jump as climbing, not stalled", () => {
+    const { db, userId, pushUp, tpl } = setup();
+
+    // 40 lb → 45 lb, the smallest dumbbell increment: 18.14 kg → 20.41 kg,
+    // a 2.27 kg delta. Anything at or above a 2.5 kg bar reads this as flat.
+    for (const [date, kg] of [
+      ["2026-06-20T10:00:00Z", 18.14],
+      ["2026-06-26T10:00:00Z", 20.41],
+    ] as const) {
+      createWorkout(db, {
+        user_id: userId,
+        template_id: tpl.id,
+        started_at: date,
+        duration_min: 45,
+        rpe: 8,
+        exercises: [
+          {
+            exercise_id: pushUp.id,
+            display_order: 1,
+            planned_sets: 2,
+            sets: [
+              { reps: 8, weight_kg: kg },
+              { reps: 8, weight_kg: kg },
+            ],
+          },
+        ],
+      });
+    }
+
+    const out = summarizeTrainingHistory(
+      db,
+      userId,
+      new Date("2026-06-28T12:00:00Z"),
+      "America/Toronto",
+      { days: 14 },
+    );
+    const prog = defined(
+      out.load_progression.find((l) => l.exercise_name === "Push-up"),
+      "Push-up progression",
+    );
+    expect(prog.direction).toBe("climbing");
+  });
+
+  it("still reads a 2.5 lb micro-jump as stalled", () => {
+    const { db, userId, pushUp, tpl } = setup();
+
+    // 40 lb → 42.5 lb = 18.14 → 19.28 kg (1.13 kg). Below any real increment;
+    // the threshold has to stay above this or every wobble reads as progress.
+    for (const [date, kg] of [
+      ["2026-06-20T10:00:00Z", 18.14],
+      ["2026-06-26T10:00:00Z", 19.28],
+    ] as const) {
+      createWorkout(db, {
+        user_id: userId,
+        template_id: tpl.id,
+        started_at: date,
+        duration_min: 45,
+        rpe: 8,
+        exercises: [
+          {
+            exercise_id: pushUp.id,
+            display_order: 1,
+            planned_sets: 2,
+            sets: [
+              { reps: 8, weight_kg: kg },
+              { reps: 8, weight_kg: kg },
+            ],
+          },
+        ],
+      });
+    }
+
+    const out = summarizeTrainingHistory(
+      db,
+      userId,
+      new Date("2026-06-28T12:00:00Z"),
+      "America/Toronto",
+      { days: 14 },
+    );
+    const prog = defined(
+      out.load_progression.find((l) => l.exercise_name === "Push-up"),
+      "Push-up progression",
+    );
+    expect(prog.direction).toBe("stalled");
+  });
+
   it("notes a frequency imbalance across splits", () => {
     const { db, userId, squat, legsTpl, pullTpl, row } = setupMultiSplit();
     const legsSets = [

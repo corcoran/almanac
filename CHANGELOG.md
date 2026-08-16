@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.2] - 2026-08-16
+
+### Fixed
+
+- **A 5 lb dumbbell jump now counts as progress.** The training-history load
+  classifier needed a 2.5 kg gain to call a lift "climbing", and 5 lb is 2.27 kg,
+  so every jump at the smallest dumbbell increment read as stalled. The AI coach
+  reads that field, and was calling real PRs flat.
+
 ## [1.38.1] - 2026-08-14
 
 ### Fixed
