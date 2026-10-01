@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-01
+
+### Added
+
+- **Recently used stored meals sit at the top.** Up to 10 meals you've logged
+  in the last 14 days come first, most-eaten first, above the A to Z list. The
+  list also stays open after you log from it, so adding several in a row no
+  longer means reopening it each time.
+
 ### Changed
 
 - **`get_macros_range` renamed its average field.** `rolling_7d_avg_kcal_in`
