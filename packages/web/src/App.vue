@@ -348,6 +348,8 @@ async function onMealsChanged(): Promise<void> {
     macrosStore.reload(client, sevenDaysAgo, today),
     // Logging a meal can resolve the low_intake_today nudge — refresh next steps.
     reloadNudge(nextBestActionStore, client),
+    // Recently-used stored meals are counted from logged meals by name.
+    storedMealsStore.reload(client),
   ]);
 }
 

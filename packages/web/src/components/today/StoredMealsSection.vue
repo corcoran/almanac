@@ -25,10 +25,10 @@ const props = defineProps<{
 }>();
 
 const storedStore = useStoredMealsStore();
-const { data: storedMeals } = storeToRefs(storedStore);
+const { data: storedMeals, recent, rest, expanded } = storeToRefs(storedStore);
 const count = computed(() => storedMeals.value.length);
+const grouped = computed(() => recent.value.length > 0);
 
-const expanded = ref(false);
 const adding = ref(false);
 const pending = ref(false);
 const error = ref<string | null>(null);
@@ -49,7 +49,7 @@ const addSeed = computed<StoredMeal>(() => ({
 }));
 
 function toggle(): void {
-  expanded.value = !expanded.value;
+  storedStore.toggleExpanded();
 }
 function openAdd(): void {
   error.value = null;
@@ -177,8 +177,23 @@ async function onLog(id: number): Promise<void> {
       <p v-if="count === 0 && !adding" class="empty" data-test="stored-empty">No saved meals yet.</p>
       <table v-if="count > 0 || adding" class="stored-table">
         <tbody>
+          <tr v-if="grouped" class="group" data-test="stored-group">
+            <th colspan="6">Recently used</th>
+          </tr>
           <StoredMealRow
-            v-for="m in storedMeals"
+            v-for="m in recent"
+            :key="m.id"
+            :stored-meal="m"
+            :pending="pending"
+            @log="onLog"
+            @save="(edit) => onEditSave(m.id, edit)"
+            @delete="onDelete"
+          />
+          <tr v-if="grouped && rest.length > 0" class="group" data-test="stored-group">
+            <th colspan="6">All saved</th>
+          </tr>
+          <StoredMealRow
+            v-for="m in rest"
             :key="m.id"
             :stored-meal="m"
             :pending="pending"
@@ -229,6 +244,11 @@ async function onLog(id: number): Promise<void> {
 .stored-body { margin-top: 8px; }
 .stored-body .empty { margin: 0; font-style: italic; color: var(--ink-faint, #6b7180); font-size: 12px; }
 .stored-table { width: 100%; border-collapse: collapse; }
+.group th {
+  text-align: left; font-weight: normal; padding: 8px 0 4px;
+  font-size: 10px; color: var(--ink-faint, #6b7180); text-transform: uppercase; letter-spacing: 0.6px;
+}
+.group:first-child th { padding-top: 0; }
 .overwrite { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--bad, #f08a8a); margin-top: 8px; }
 .overwrite button { border-radius: 5px; border: 1px solid var(--line-2, #353a4a); background: var(--surface-2, #1f2330); font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer; color: var(--ink-dim, #9aa0ad); }
 .overwrite button.yes { color: var(--bad, #f08a8a); border-color: var(--bad, #f08a8a); }
