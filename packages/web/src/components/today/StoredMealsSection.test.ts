@@ -15,6 +15,8 @@ function makeStored(overrides = {}) {
     fat_g: 18,
     description: null as string | null,
     created_at: "2026-06-01T00:00:00Z",
+    recent_uses: 0,
+    last_used_at: null as string | null,
     ...overrides,
   };
 }
@@ -208,5 +210,43 @@ describe("StoredMealsSection", () => {
       .trigger("click");
     await flushPromises();
     expect(wrapper.find('[data-test="stored-overwrite-confirm"]').exists()).toBe(false);
+  });
+
+  it("stays open after logging a meal remounts the section", async () => {
+    const store = useStoredMealsStore();
+    store.data = [makeStored({ id: 5 })];
+    store.status = "ready";
+    const first = mountSection();
+    await first.find('[data-test="stored-head"]').trigger("click");
+    await first.find('[data-test="stored-row-log"]').trigger("click");
+    await flushPromises();
+    first.unmount();
+    const second = mountSection();
+    expect(second.find('[data-test="stored-row"]').exists()).toBe(true);
+  });
+
+  it("lists recently used meals under their own header, ahead of the rest", async () => {
+    const store = useStoredMealsStore();
+    store.data = [
+      makeStored({ id: 1, name: "Apple oats" }),
+      makeStored({ id: 2, name: "Chili", recent_uses: 2, last_used_at: "2026-09-28T12:00:00Z" }),
+    ];
+    store.status = "ready";
+    const wrapper = mountSection();
+    await wrapper.find('[data-test="stored-head"]').trigger("click");
+    const rows = wrapper.findAll("tr").map((tr) => tr.text());
+    expect(rows[0]).toContain("Recently used");
+    expect(rows[1]).toContain("Chili");
+    expect(rows[2]).toContain("All saved");
+    expect(rows[3]).toContain("Apple oats");
+  });
+
+  it("shows no group headers when nothing was used recently", async () => {
+    const store = useStoredMealsStore();
+    store.data = [makeStored({ id: 1, name: "Apple oats" })];
+    store.status = "ready";
+    const wrapper = mountSection();
+    await wrapper.find('[data-test="stored-head"]').trigger("click");
+    expect(wrapper.find('[data-test="stored-group"]').exists()).toBe(false);
   });
 });

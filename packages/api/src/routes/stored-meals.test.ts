@@ -156,4 +156,25 @@ describe("/api/v1/stored-meals", () => {
     const after = await app.inject({ method: "GET", url: "/api/v1/stored-meals", headers: auth });
     expect(after.json()).toHaveLength(0);
   });
+
+  it("GET lists each stored meal's uses over the last 14 days", async () => {
+    app = setup();
+    await app.inject({ method: "POST", url: "/api/v1/stored-meals", headers: auth, payload: body });
+    const meal = { kcal: 350, protein_g: 25, carb_g: 30, fat_g: 15 };
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    const latest = daysAgo(1);
+    for (const eaten_at of [latest, daysAgo(3), daysAgo(20)]) {
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/meals",
+        headers: auth,
+        payload: { ...meal, name: "Breakfast", eaten_at },
+      });
+    }
+    const r = await app.inject({ method: "GET", url: "/api/v1/stored-meals", headers: auth });
+    expect(r.statusCode).toBe(200);
+    const [row] = r.json();
+    expect(row.recent_uses).toBe(2);
+    expect(Date.parse(row.last_used_at)).toBe(Date.parse(latest));
+  });
 });

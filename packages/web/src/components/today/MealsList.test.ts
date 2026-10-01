@@ -297,6 +297,8 @@ describe("MealsList stored-meals integration", () => {
         fat_g: 4,
         description: null,
         created_at: "2026-06-01T00:00:00Z",
+        recent_uses: 0,
+        last_used_at: null,
       },
     ];
     store.status = "ready";
