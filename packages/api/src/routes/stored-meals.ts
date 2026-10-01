@@ -3,11 +3,12 @@ import {
   deleteStoredMeal,
   findStoredMealById,
   findStoredMealByName,
-  listStoredMeals,
+  listStoredMealsWithUsage,
   updateStoredMeal,
 } from "@almanac/core/repos";
 import {
   StoredMealInputSchema,
+  StoredMealListItemSchema,
   StoredMealResponseSchema,
   StoredMealUpdateSchema,
 } from "@almanac/core/schemas";
@@ -17,13 +18,16 @@ import { requireUserId } from "../auth.js";
 import { ApiError } from "../errors.js";
 import { IdParamsSchema } from "../params.js";
 
+const RECENT_USE_WINDOW_DAYS = 14;
+
 export const registerStoredMealsRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
     "/v1/stored-meals",
-    { schema: { response: { 200: z.array(StoredMealResponseSchema) } } },
+    { schema: { response: { 200: z.array(StoredMealListItemSchema) } } },
     async (req) => {
       const userId = requireUserId(req);
-      return listStoredMeals(app.db, userId);
+      const since = new Date(Date.now() - RECENT_USE_WINDOW_DAYS * 86_400_000).toISOString();
+      return listStoredMealsWithUsage(app.db, userId, since);
     },
   );
 

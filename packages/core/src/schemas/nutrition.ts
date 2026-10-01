@@ -154,6 +154,11 @@ export const StoredMealResponseSchema = z.object({
   created_at: IsoDateTimeSchema,
 });
 
+export const StoredMealListItemSchema = StoredMealResponseSchema.extend({
+  recent_uses: z.number().int().nonnegative(),
+  last_used_at: IsoDateTimeSchema.nullable(),
+});
+
 /**
  * Structured 422 envelope for `start_nutrition_phase` when TDEE cannot be
  * resolved. There is exactly one cause: no body weight has ever been logged.

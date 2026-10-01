@@ -80,6 +80,40 @@ export function listStoredMeals(db: Connection, userId: number): StoredMeal[] {
     .all(userId) as StoredMeal[];
 }
 
+export type StoredMealWithUsage = StoredMeal & {
+  recent_uses: number;
+  last_used_at: string | null;
+};
+
+/**
+ * Stored meals ordered by name, each with how many of the user's meals eaten
+ * at or after `sinceIso` carry its name (case- and outer-whitespace-insensitive).
+ * Logged meals keep no link to the stored meal they came from, so the name is
+ * the only join key: renaming a stored meal resets its count.
+ */
+export function listStoredMealsWithUsage(
+  db: Connection,
+  userId: number,
+  sinceIso: string,
+): StoredMealWithUsage[] {
+  const columns = STORED_MEAL_COLUMNS.split(", ")
+    .map((c) => `s.${c}`)
+    .join(", ");
+  return db
+    .prepare(
+      `SELECT ${columns}, COUNT(m.id) AS recent_uses, MAX(m.eaten_at) AS last_used_at
+       FROM stored_meals s
+       LEFT JOIN meals m
+         ON m.user_id = s.user_id
+        AND lower(trim(m.name)) = lower(trim(s.name))
+        AND m.eaten_at >= ?
+       WHERE s.user_id = ?
+       GROUP BY s.id
+       ORDER BY s.name ASC`,
+    )
+    .all(sinceIso, userId) as StoredMealWithUsage[];
+}
+
 export function updateStoredMeal(
   db: Connection,
   userId: number,

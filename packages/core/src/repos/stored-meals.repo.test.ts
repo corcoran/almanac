@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { freshDb, seedUser } from "../test-support/db.js";
+import { createMeal } from "./meals.repo.js";
 import {
   createStoredMeal,
   deleteStoredMeal,
   findStoredMealById,
   findStoredMealByName,
   listStoredMeals,
+  listStoredMealsWithUsage,
   updateStoredMeal,
 } from "./stored-meals.repo.js";
 
@@ -120,5 +122,71 @@ describe("stored-meals.repo", () => {
     // Owner delete removes it.
     deleteStoredMeal(db, userA, meal.id);
     expect(findStoredMealById(db, userA, meal.id)).toBeNull();
+  });
+
+  describe("listStoredMealsWithUsage", () => {
+    const since = "2026-09-16T00:00:00.000Z";
+
+    function logMeal(
+      db: ReturnType<typeof freshDb>,
+      userId: number,
+      name: string,
+      eatenAt: string,
+    ) {
+      createMeal(db, {
+        user_id: userId,
+        eaten_at: eatenAt,
+        name,
+        kcal: 350,
+        protein_g: 25,
+        carb_g: 30,
+        fat_g: 15,
+      });
+    }
+
+    it("counts logged meals whose name matches, ignoring case and outer whitespace", () => {
+      const db = freshDb();
+      const userId = seedUser(db);
+      createStoredMeal(db, sampleInput(userId, "Oatmeal"));
+      logMeal(db, userId, "Oatmeal", "2026-09-20T12:00:00.000Z");
+      logMeal(db, userId, " oatmeal ", "2026-09-22T12:00:00.000Z");
+      logMeal(db, userId, "oatmeal with berries", "2026-09-23T12:00:00.000Z");
+      const [row] = listStoredMealsWithUsage(db, userId, since);
+      expect(row?.recent_uses).toBe(2);
+      expect(row?.last_used_at).toBe("2026-09-22T12:00:00.000Z");
+    });
+
+    it("ignores meals eaten before the cutoff", () => {
+      const db = freshDb();
+      const userId = seedUser(db);
+      createStoredMeal(db, sampleInput(userId, "oatmeal"));
+      logMeal(db, userId, "oatmeal", "2026-09-15T23:59:59.000Z");
+      const [row] = listStoredMealsWithUsage(db, userId, since);
+      expect(row?.recent_uses).toBe(0);
+      expect(row?.last_used_at).toBeNull();
+    });
+
+    it("ignores another user's meals with the same name", () => {
+      const db = freshDb();
+      const userA = seedUser(db);
+      const userB = seedUser(db, { name: "Other" });
+      createStoredMeal(db, sampleInput(userA, "oatmeal"));
+      logMeal(db, userB, "oatmeal", "2026-09-20T12:00:00.000Z");
+      const [row] = listStoredMealsWithUsage(db, userA, since);
+      expect(row?.recent_uses).toBe(0);
+    });
+
+    it("returns every stored meal ordered by name", () => {
+      const db = freshDb();
+      const userId = seedUser(db);
+      createStoredMeal(db, sampleInput(userId, "zucchini bowl"));
+      createStoredMeal(db, sampleInput(userId, "apple snack"));
+      logMeal(db, userId, "zucchini bowl", "2026-09-20T12:00:00.000Z");
+      const list = listStoredMealsWithUsage(db, userId, since);
+      expect(list.map((m) => [m.name, m.recent_uses])).toEqual([
+        ["apple snack", 0],
+        ["zucchini bowl", 1],
+      ]);
+    });
   });
 });
