@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export type InsightsEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 /**
  * Resolved, validated LLM configuration. Read once at boot. The provider is a
  * reserved seam — only "anthropic" is valid; a non-anthropic value fails fast
@@ -12,6 +14,8 @@ export type LlmConfig = {
   /** The model for the INSIGHTS coach (harder reasoning → a stronger model than
    *  the meal parser). Separate from `model` (meal chat). */
   insightsModel: string;
+  /** Thinking effort for the insights coach. */
+  insightsEffort: InsightsEffort;
   apiKey: string | undefined;
   defaultDailyTokenLimit: number | undefined;
   hardDailyTokenCap: number | undefined;
@@ -43,7 +47,11 @@ const Schema = z.object({
   ALMANAC_LLM_MODEL: z.string().default("claude-haiku-4-5"),
   ALMANAC_LLM_INSIGHTS_MODEL: z.preprocess(
     emptyToUndefined,
-    z.string().default("claude-sonnet-4-6"),
+    z.string().default("claude-sonnet-5-5"),
+  ),
+  ALMANAC_LLM_INSIGHTS_EFFORT: z.preprocess(
+    emptyToUndefined,
+    z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
   ),
   ANTHROPIC_API_KEY: z.string().optional(),
   ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT: z.preprocess(
@@ -71,6 +79,7 @@ export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
     provider: parsed.ALMANAC_LLM_PROVIDER as "anthropic",
     model: parsed.ALMANAC_LLM_MODEL,
     insightsModel: parsed.ALMANAC_LLM_INSIGHTS_MODEL,
+    insightsEffort: parsed.ALMANAC_LLM_INSIGHTS_EFFORT,
     apiKey: parsed.ANTHROPIC_API_KEY,
     defaultDailyTokenLimit: parsed.ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT,
     hardDailyTokenCap: parsed.ALMANAC_LLM_HARD_DAILY_TOKEN_CAP,

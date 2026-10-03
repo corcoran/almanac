@@ -5,7 +5,12 @@ import type { z } from "zod";
 
 type Balance = z.infer<typeof DailyBalanceSchema>;
 
-const props = defineProps<{ balance: Balance | null }>();
+const props = withDefaults(defineProps<{ balance: Balance | null; unit?: "logs" | "messages" }>(), {
+  unit: "logs",
+});
+
+const noun = computed(() => (props.unit === "messages" ? "message" : "log"));
+const leftLabel = (n: number) => `${n} ${n === 1 ? noun.value : `${noun.value}s`} left`;
 
 const expanded = ref(false);
 
@@ -15,7 +20,7 @@ const expanded = ref(false);
 const show = computed(() => props.balance !== null && props.balance.softLimit !== null);
 
 // Past the soft limit the counter stops meaning anything, so say that rather
-// than freezing at "~0 logs left".
+// than freezing at "~0 left".
 const meter = computed(() => {
   const b = props.balance;
   if (!b) return null;
@@ -65,12 +70,12 @@ const overK = computed(() => {
       @click="expanded = !expanded"
     >
       <span class="bar"><span class="bar-fill" :style="{ width: `${pct}%` }" /></span>
-      <span v-if="meter?.basis === 'soft'" class="pill-text">~{{ meter.count }} logs left</span>
+      <span v-if="meter?.basis === 'soft'" class="pill-text">~{{ leftLabel(meter.count) }}</span>
       <span v-else class="pill-text">over budget</span>
     </button>
 
     <div v-if="expanded" class="usage-card" data-test="usage-card">
-      <div v-if="meter?.basis === 'soft'" class="headline">~{{ meter.count }} logs left today</div>
+      <div v-if="meter?.basis === 'soft'" class="headline">~{{ leftLabel(meter.count) }} today</div>
       <div v-else class="headline">Over your daily budget</div>
 
       <div v-if="meter?.basis === 'soft'" class="pct">{{ pct }}% of daily balance</div>
@@ -78,7 +83,7 @@ const overK = computed(() => {
       <div class="detail">
         <template v-if="balance.overSoftLimit">{{ overK }}k over your {{ budgetK }}k budget</template>
         <template v-else>{{ usedK }}k of {{ budgetK }}k tokens used</template>
-        · avg ~{{ avgK }}k tokens/log · resets at {{ balance.resetsAt }}
+        · typical ~{{ avgK }}k tokens/{{ noun }} · resets at {{ balance.resetsAt }}
       </div>
 
       <div class="reassure">You can still log meals manually any time.</div>

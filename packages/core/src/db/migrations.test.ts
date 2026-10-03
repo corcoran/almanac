@@ -7,10 +7,12 @@ describe("migrations", () => {
     const db = openDb(":memory:");
     const newly = runMigrations(db);
     expect(newly).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28,
     ]);
     expect(appliedVersions(db)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28,
     ]);
     const tables = (
       db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{
@@ -28,7 +30,8 @@ describe("migrations", () => {
     const newly = runMigrations(db);
     expect(newly).toEqual([]);
     expect(appliedVersions(db)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28,
     ]);
   });
 
@@ -238,6 +241,38 @@ describe("migrations", () => {
       .get() as { web_search_requests: number; billed_tokens: number };
     expect(row.web_search_requests).toBe(0);
     expect(row.billed_tokens).toBe(1200);
+    db.close();
+  });
+
+  it("028 adds insights_points.kind defaulting to told and rejecting other values", () => {
+    const db = openDb(":memory:");
+    runMigrations(db);
+    db.prepare("INSERT INTO users (name) VALUES ('Test')").run();
+    const ins = (kind?: string) =>
+      db
+        .prepare(
+          `INSERT INTO insights_points (user_id, on_date, topic, gist, created_at${kind ? ", kind" : ""})
+           VALUES (1, '2026-10-01', 't', 'g', '2026-10-01T12:00:00.000Z'${kind ? `, '${kind}'` : ""})`,
+        )
+        .run();
+    ins();
+    ins("learned");
+    expect(() => ins("bogus")).toThrow();
+    const kinds = db.prepare("SELECT kind FROM insights_points ORDER BY id").all();
+    expect(kinds).toEqual([{ kind: "told" }, { kind: "learned" }]);
+    db.close();
+  });
+
+  it("027 adds a nullable lookups column to insights_chat_turns", () => {
+    const db = openDb(":memory:");
+    runMigrations(db);
+    const cols = db.prepare("PRAGMA table_info(insights_chat_turns)").all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    const lookups = cols.find((c) => c.name === "lookups");
+    expect(lookups).toBeDefined();
+    expect(lookups?.notnull).toBe(0);
     db.close();
   });
 

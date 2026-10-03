@@ -8,6 +8,7 @@ const onCfg: LlmConfig = {
   provider: "anthropic",
   model: "claude-haiku-4-5",
   insightsModel: "claude-sonnet-4-6",
+  insightsEffort: "medium",
   apiKey: "sk-test",
   defaultDailyTokenLimit: undefined,
   hardDailyTokenCap: undefined,

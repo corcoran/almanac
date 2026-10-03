@@ -46,6 +46,8 @@ services:
       - "--authenticated-emails-file=/emails/allowed-users.txt"
       - "--set-xauthrequest=true"
       - "--pass-user-headers=true"
+      # An insights-chat turn (thinking + searches) can outlast the 30s default.
+      - "--upstream-timeout=180s"
       # Skip auth for /mcp/* — machine clients (Claude Desktop / Code / ChatGPT)
       # can't do interactive OAuth, so they use personal access tokens (PATs)
       # minted from the web Settings UI. The API and MCP services validate
@@ -118,7 +120,9 @@ services:
       # Meal assistant (cheap parser) and insights coach (harder reasoning) run
       # on separate models.
       ALMANAC_LLM_MODEL: "${ALMANAC_LLM_MODEL:-claude-haiku-4-5}"
-      ALMANAC_LLM_INSIGHTS_MODEL: "${ALMANAC_LLM_INSIGHTS_MODEL:-claude-sonnet-4-6}"
+      ALMANAC_LLM_INSIGHTS_MODEL: "${ALMANAC_LLM_INSIGHTS_MODEL:-claude-sonnet-5-5}"
+      # Insights coach thinking effort: low | medium | high | xhigh | max.
+      ALMANAC_LLM_INSIGHTS_EFFORT: "${ALMANAC_LLM_INSIGHTS_EFFORT:-medium}"
       # Soft daily token limit (advisory; "~N logs left"; never blocks).
       ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT: "${ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT:-}"
       # Hard daily token ceiling (429 circuit-breaker). Unset = no hard cap.

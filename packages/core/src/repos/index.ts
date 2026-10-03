@@ -9,9 +9,15 @@ export {
   appendTurns,
   type ChatTurn,
   clearDay,
+  countPointsForTurn,
   findPriorDayTakeaway,
+  getTurnForHelpful,
+  type InsightsPoint,
+  insertPoints,
   listDaysWithTurns,
+  listRecentPoints,
   listTurnsForDay,
+  setTurnHelpful,
 } from "./insights-chat.repo.js";
 export * from "./meals.repo.js";
 export * from "./nutrition-phases.repo.js";

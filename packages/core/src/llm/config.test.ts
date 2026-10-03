@@ -54,7 +54,7 @@ describe("loadLlmConfig", () => {
 
   it("insightsModel defaults to sonnet, independent of the (haiku) meal model", () => {
     const c = loadLlmConfig({});
-    expect(c.insightsModel).toBe("claude-sonnet-4-6");
+    expect(c.insightsModel).toBe("claude-sonnet-5-5");
     expect(c.model).toBe("claude-haiku-4-5");
   });
 
@@ -66,7 +66,7 @@ describe("loadLlmConfig", () => {
 
   it("a blank ALMANAC_LLM_INSIGHTS_MODEL falls back to the sonnet default", () => {
     const c = loadLlmConfig({ ALMANAC_LLM_INSIGHTS_MODEL: "" });
-    expect(c.insightsModel).toBe("claude-sonnet-4-6");
+    expect(c.insightsModel).toBe("claude-sonnet-5-5");
   });
 
   // docker-compose maps optional caps as `"${VAR:-}"`, so an UNSET var arrives
@@ -85,5 +85,27 @@ describe("loadLlmConfig", () => {
     expect(cfg.hardDailySearchCap).toBeUndefined();
     // tokensPerSearch has a default — an empty string must fall back to it, not 0.
     expect(cfg.tokensPerSearch).toBe(2500);
+  });
+
+  it("defaults insightsModel to claude-sonnet-5-5 and insightsEffort to medium", () => {
+    const cfg = loadLlmConfig({} as NodeJS.ProcessEnv);
+    expect(cfg.insightsModel).toBe("claude-sonnet-5-5");
+    expect(cfg.insightsEffort).toBe("medium");
+  });
+
+  it("parses ALMANAC_LLM_INSIGHTS_EFFORT", () => {
+    const cfg = loadLlmConfig({ ALMANAC_LLM_INSIGHTS_EFFORT: "high" } as NodeJS.ProcessEnv);
+    expect(cfg.insightsEffort).toBe("high");
+  });
+
+  it("treats a blank ALMANAC_LLM_INSIGHTS_EFFORT as unset", () => {
+    const cfg = loadLlmConfig({ ALMANAC_LLM_INSIGHTS_EFFORT: "" } as NodeJS.ProcessEnv);
+    expect(cfg.insightsEffort).toBe("medium");
+  });
+
+  it("rejects an unknown ALMANAC_LLM_INSIGHTS_EFFORT", () => {
+    expect(() =>
+      loadLlmConfig({ ALMANAC_LLM_INSIGHTS_EFFORT: "turbo" } as NodeJS.ProcessEnv),
+    ).toThrow();
   });
 });

@@ -1,6 +1,7 @@
 import { type CreateMessage, recordLlmUsage } from "@almanac/core/llm";
-import { appendTurns, listTurnsForDay, updateUser } from "@almanac/core/repos";
+import { appendTurns, insertPoints, listTurnsForDay, updateUser } from "@almanac/core/repos";
 import { DailyBalanceSchema } from "@almanac/core/schemas";
+import { defined } from "@almanac/core/test-support";
 import { currentUserDate } from "@almanac/core/types";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +53,7 @@ describe("/api/v1/llm/meal-chat", () => {
           provider: "anthropic",
           model: "claude-haiku-4-5",
           insightsModel: "claude-sonnet-4-6",
+          insightsEffort: "medium",
           apiKey: "sk-test",
           defaultDailyTokenLimit: undefined,
           hardDailyTokenCap: undefined,
@@ -150,6 +152,7 @@ describe("/api/v1/llm/meal-chat hard backstop", () => {
           provider: "anthropic",
           model: "claude-haiku-4-5",
           insightsModel: "claude-sonnet-4-6",
+          insightsEffort: "medium",
           apiKey: "sk-test",
           defaultDailyTokenLimit: opts.defaultDailyTokenLimit,
           hardDailyTokenCap: opts.hardDailyTokenCap,
@@ -317,6 +320,7 @@ describe("/api/v1/llm/usage", () => {
           provider: "anthropic",
           model: "claude-haiku-4-5",
           insightsModel: "claude-sonnet-4-6",
+          insightsEffort: "medium",
           apiKey: "sk-test",
           defaultDailyTokenLimit: opts.defaultDailyTokenLimit,
           hardDailyTokenCap: opts.hardDailyTokenCap,
@@ -517,6 +521,33 @@ describe("/api/v1/llm/usage", () => {
     expect(body.avgTokensPerLog).toBe(5000);
   });
 
+  it("estimates insights messages from the heavy end of recent history", async () => {
+    app = setup({ userFlag: 1, defaultDailyTokenLimit: 60000 });
+    for (const billed of [1500, 2500, 9500]) {
+      recordLlmUsage(app.db, {
+        userId: 1,
+        createdAt: new Date().toISOString(),
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        feature: "insights_chat",
+        usage: {
+          input_tokens: billed,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+        },
+        webSearchRequests: 0,
+        billedTokens: billed,
+      });
+    }
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/llm/usage?feature=insights_chat",
+      headers: auth,
+    });
+    expect(DailyBalanceSchema.parse(res.json()).avgTokensPerLog).toBe(9500);
+  });
+
   it("422s on an invalid feature value", async () => {
     app = setup({ userFlag: 1, defaultDailyTokenLimit: 60000 });
     const res = await app.inject({
@@ -549,6 +580,7 @@ describe("/api/v1/llm/insights-chat", () => {
     createMessage?: CreateMessage;
     hardDailyTokenCap?: number;
     aboutMe?: string;
+    insightsModel?: string;
   }) {
     const a = buildApp({
       dbPath: ":memory:",
@@ -558,7 +590,8 @@ describe("/api/v1/llm/insights-chat", () => {
           enabled: true,
           provider: "anthropic",
           model: "claude-haiku-4-5",
-          insightsModel: "claude-sonnet-4-6",
+          insightsModel: opts.insightsModel ?? "claude-sonnet-4-6",
+          insightsEffort: "medium",
           apiKey: "sk-test",
           defaultDailyTokenLimit: undefined,
           hardDailyTokenCap: opts.hardDailyTokenCap,
@@ -576,6 +609,516 @@ describe("/api/v1/llm/insights-chat", () => {
       .run(opts.userFlag, opts.aboutMe ?? null);
     return a;
   }
+
+  const post = (a: FastifyInstance) =>
+    a.inject({
+      method: "POST",
+      url: "/api/v1/llm/insights-chat",
+      headers: auth,
+      payload: { message: "hi", history: [] },
+    });
+
+  it("sends adaptive thinking, the configured effort and insights limits", async () => {
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage, insightsModel: "claude-sonnet-5-5" });
+    await post(app);
+    const args = defined(createMessage.mock.calls[0]?.[0], "call");
+    expect(args.thinking).toEqual({ type: "adaptive" });
+    expect(args.output_config).toEqual({ effort: "medium" });
+    expect(args.max_tokens).toBe(16000);
+    expect(args.fallbacks).toBe("default");
+  });
+
+  it("offers web search under the cap and records searches", async () => {
+    const searched: CreateMessage = async () => ({
+      content: [
+        { type: "server_tool_use", id: "s", name: "web_search", input: {} },
+        { type: "text", text: "ans" },
+      ],
+      usage: { input_tokens: 900, output_tokens: 140, server_tool_use: { web_search_requests: 1 } },
+      stop_reason: "end_turn",
+    });
+    const createMessage = vi.fn(searched);
+    app = setup({ userFlag: 1, createMessage });
+    await post(app);
+    const tools = defined(createMessage.mock.calls[0]?.[0], "call").tools as Array<{
+      name?: string;
+    }>;
+    expect(tools.some((t) => t.name === "web_search")).toBe(true);
+    const row = app.db
+      .prepare("SELECT web_search_requests FROM llm_usage WHERE feature = 'insights_chat'")
+      .get() as { web_search_requests: number };
+    expect(row.web_search_requests).toBe(1);
+  });
+
+  it("persists remembered points against the assistant turn and returns its id", async () => {
+    let call = 0;
+    const createMessage: CreateMessage = async () =>
+      call++ === 0
+        ? {
+            content: [
+              {
+                type: "tool_use",
+                id: "t1",
+                name: "remember_point",
+                input: { topic: "x", gist: "y" },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "tool_use",
+          }
+        : {
+            content: [{ type: "text", text: "done" }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "end_turn",
+          };
+    app = setup({ userFlag: 1, createMessage });
+    const res = await post(app);
+    const turnId = res.json().assistant_turn_id as number;
+    const pts = app.db.prepare("SELECT topic, turn_id FROM insights_points").all() as Array<{
+      topic: string;
+      turn_id: number;
+    }>;
+    expect(pts).toEqual([{ topic: "x", turn_id: turnId }]);
+  });
+
+  it("persists the kind of a remembered point", async () => {
+    let call = 0;
+    const createMessage: CreateMessage = async () =>
+      call++ === 0
+        ? {
+            content: [
+              {
+                type: "tool_use",
+                id: "t1",
+                name: "remember_point",
+                input: { topic: "x", gist: "y", kind: "learned" },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "tool_use",
+          }
+        : {
+            content: [{ type: "text", text: "done" }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "end_turn",
+          };
+    app = setup({ userFlag: 1, createMessage });
+    await post(app);
+    const pts = app.db.prepare("SELECT topic, kind FROM insights_points").all();
+    expect(pts).toEqual([{ topic: "x", kind: "learned" }]);
+  });
+
+  it("saves and returns the lookups behind a reply, leaving out remember_point", async () => {
+    let call = 0;
+    const createMessage: CreateMessage = async () =>
+      call++ === 0
+        ? {
+            content: [
+              { type: "tool_use", id: "t1", name: "get_training_history", input: { days: 35 } },
+              {
+                type: "tool_use",
+                id: "t2",
+                name: "remember_point",
+                input: { topic: "x", gist: "y" },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "tool_use",
+          }
+        : {
+            content: [{ type: "text", text: "done" }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "end_turn",
+          };
+    app = setup({ userFlag: 1, createMessage });
+    const res = await post(app);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().lookups).toEqual(["get_training_history(days=35)"]);
+    const today = currentUserDate(new Date(), "America/New_York");
+    const turns = listTurnsForDay(app.db, 1, today);
+    expect(turns[0]?.lookups).toBeUndefined();
+    expect(turns[1]?.lookups).toEqual(["get_training_history(days=35)"]);
+    expect(turns[1]?.content).toBe("done");
+  });
+
+  it("returns an empty lookups array when the reply used no tools", async () => {
+    app = setup({ userFlag: 1 });
+    const res = await post(app);
+    expect(res.json().lookups).toEqual([]);
+  });
+
+  it("a reloaded overview-only reply keeps lookups: [] from the history endpoint", async () => {
+    app = setup({ userFlag: 1 });
+    await post(app);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/llm/insights-chat/history",
+      headers: auth,
+    });
+    const turns = res.json().turns as Array<{ role: string; lookups?: string[] }>;
+    expect(turns.map((t) => t.role)).toEqual(["user", "assistant"]);
+    expect("lookups" in defined(turns[0], "user turn")).toBe(false);
+    expect(turns[1]?.lookups).toEqual([]);
+  });
+
+  it("tells the model which lookups were behind each earlier reply", async () => {
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage, insightsModel: "claude-sonnet-5-5" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/insights-chat",
+      headers: auth,
+      payload: {
+        message: "really?",
+        history: [
+          { role: "user", content: "q1" },
+          { role: "assistant", content: "a1", lookups: ["get_report", "get_tdee"] },
+          { role: "user", content: "q2" },
+          { role: "assistant", content: "a2", lookups: [] },
+          { role: "user", content: "q3" },
+          { role: "assistant", content: "a3" },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const msgs = defined(createMessage.mock.calls[0]?.[0], "call").messages;
+    expect(msgs).toEqual([
+      { role: "user", content: "q1" },
+      { role: "system", content: "Lookups behind the next reply: get_report; get_tdee" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "q2" },
+      { role: "system", content: "The next reply used only the overview; no lookups." },
+      { role: "assistant", content: "a2" },
+      { role: "user", content: "q3" },
+      { role: "assistant", content: "a3" },
+      { role: "user", content: "really?" },
+    ]);
+    const today = currentUserDate(new Date(), "America/New_York");
+    const stored = listTurnsForDay(app.db, 1, today).map((t) => t.content);
+    expect(stored).toEqual(["really?", "you're on track"]);
+  });
+
+  it("falls back to the canned text when the reply is only a lookups line", async () => {
+    const createMessage = vi.fn<CreateMessage>(async () => ({
+      content: [{ type: "text", text: "[Lookups: x, y]" }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      stop_reason: "end_turn",
+    }));
+    app = setup({ userFlag: 1, createMessage, insightsModel: "claude-sonnet-5-5" });
+    const res = await post(app);
+    expect(res.json().text).toBe("I couldn't generate an analysis just now.");
+  });
+
+  it("strips a model-written lookups line from the reply it stores and returns", async () => {
+    const createMessage = vi.fn<CreateMessage>(async () => ({
+      content: [{ type: "text", text: "you're on track\n\n[Lookups: x, y]" }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      stop_reason: "end_turn",
+    }));
+    app = setup({ userFlag: 1, createMessage, insightsModel: "claude-sonnet-5-5" });
+    const res = await post(app);
+    expect(res.json().text).toBe("you're on track");
+    const today = currentUserDate(new Date(), "America/New_York");
+    const stored = listTurnsForDay(app.db, 1, today).map((t) => t.content);
+    expect(stored).toEqual(["hi", "you're on track"]);
+  });
+
+  it("replays an earlier reply without its trailing lookups line", async () => {
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage, insightsModel: "claude-sonnet-5-5" });
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/llm/insights-chat",
+      headers: auth,
+      payload: {
+        message: "more",
+        history: [
+          { role: "user", content: "q1" },
+          { role: "assistant", content: "a1\n\n[Lookups: training history (35 days)]" },
+        ],
+      },
+    });
+    const msgs = defined(createMessage.mock.calls[0]?.[0], "call").messages;
+    expect(msgs.map((m) => m.content)).toEqual(["q1", "a1", "more"]);
+  });
+
+  it("keeps the answer written before remember_point when the final response is empty", async () => {
+    let call = 0;
+    const createMessage = vi.fn<CreateMessage>(async () =>
+      call++ === 0
+        ? {
+            content: [
+              { type: "text", text: "full answer" },
+              {
+                type: "tool_use",
+                id: "t1",
+                name: "remember_point",
+                input: { topic: "x", gist: "y" },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "tool_use",
+          }
+        : { content: [], usage: { input_tokens: 10, output_tokens: 0 }, stop_reason: "end_turn" },
+    );
+    app = setup({ userFlag: 1, createMessage });
+    const res = await post(app);
+    expect(res.json().text).toBe("full answer");
+    expect(defined(createMessage.mock.calls[0]?.[0], "call").tool_choice).toEqual({
+      type: "auto",
+    });
+    const n = (app.db.prepare("SELECT COUNT(*) AS n FROM insights_points").get() as { n: number })
+      .n;
+    expect(n).toBe(1);
+  });
+
+  it("writes no points when the model call fails", async () => {
+    let call = 0;
+    app = setup({
+      userFlag: 1,
+      createMessage: async () => {
+        if (call++ > 0) throw new Error("boom");
+        return {
+          content: [
+            {
+              type: "tool_use",
+              id: "t1",
+              name: "remember_point",
+              input: { topic: "x", gist: "y" },
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5 },
+          stop_reason: "tool_use",
+        };
+      },
+    });
+    const res = await post(app);
+    expect(res.statusCode).toBe(500);
+    expect(call).toBe(2);
+    expect(
+      (app.db.prepare("SELECT COUNT(*) AS n FROM insights_points").get() as { n: number }).n,
+    ).toBe(0);
+    expect(
+      (app.db.prepare("SELECT COUNT(*) AS n FROM insights_chat_turns").get() as { n: number }).n,
+    ).toBe(0);
+  });
+
+  it("PATCH helpful toggles the caller's assistant turn", async () => {
+    app = setup({ userFlag: 1 });
+    const res = await post(app);
+    const id = res.json().assistant_turn_id as number;
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/llm/insights-chat/turns/${id}`,
+      headers: auth,
+      payload: { helpful: true },
+    });
+    expect(patch.statusCode).toBe(204);
+    const hist = await app.inject({
+      method: "GET",
+      url: "/api/v1/llm/insights-chat/history",
+      headers: auth,
+    });
+    expect(hist.json().turns[1].helpful).toBe(true);
+  });
+
+  describe("helpful tap writes notes", () => {
+    const noteResponse = {
+      content: [
+        {
+          type: "tool_use",
+          id: "n1",
+          name: "save_notes",
+          input: { notes: [{ topic: "tdee-up", gist: "TDEE rose to 2727" }] },
+        },
+      ],
+      usage: { input_tokens: 300, output_tokens: 30 },
+      stop_reason: "tool_use",
+    };
+    // Chat calls answer in text; the forced save_notes call returns notes.
+    const stub = () =>
+      vi.fn<CreateMessage>(async (args) =>
+        args.tool_choice?.type === "tool" ? noteResponse : await answerStub(args),
+      );
+    const noteCalls = (cm: ReturnType<typeof stub>) =>
+      cm.mock.calls.filter(([a]) => a.tool_choice?.type === "tool");
+    const tap = (a: FastifyInstance, id: number, helpful: boolean) =>
+      a.inject({
+        method: "PATCH",
+        url: `/api/v1/llm/insights-chat/turns/${id}`,
+        headers: auth,
+        payload: { helpful },
+      });
+    const pointRows = (a: FastifyInstance) =>
+      a.db.prepare("SELECT topic, on_date, helpful, turn_id FROM insights_points").all();
+    const usageRows = (a: FastifyInstance) =>
+      a.db
+        .prepare("SELECT model, billed_tokens FROM llm_usage WHERE feature = 'insights_chat'")
+        .all() as Array<{ model: string; billed_tokens: number }>;
+
+    it("tapping a reply with no notes makes one forced call and stores a helpful note", async () => {
+      const createMessage = stub();
+      app = setup({ userFlag: 1, createMessage });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      const usageBefore = usageRows(app).length;
+      expect((await tap(app, id, true)).statusCode).toBe(204);
+      const calls = noteCalls(createMessage);
+      expect(calls).toHaveLength(1);
+      const args = defined(calls[0]?.[0], "call");
+      expect(args.model).toBe("claude-haiku-4-5");
+      expect(args.tool_choice).toEqual({ type: "tool", name: "save_notes" });
+      expect(args.thinking).toBeUndefined();
+      const turnDate = (
+        app.db.prepare("SELECT on_date FROM insights_chat_turns WHERE id = ?").get(id) as {
+          on_date: string;
+        }
+      ).on_date;
+      expect(pointRows(app)).toEqual([
+        { topic: "tdee-up", on_date: turnDate, helpful: 1, turn_id: id },
+      ]);
+      const usage = usageRows(app);
+      expect(usage).toHaveLength(usageBefore + 1);
+      expect(usage[usage.length - 1]).toEqual({ model: "claude-haiku-4-5", billed_tokens: 330 });
+    });
+
+    it("tapping a reply that already has notes makes no call and flags them", async () => {
+      const createMessage = stub();
+      app = setup({ userFlag: 1, createMessage });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      insertPoints(
+        app.db,
+        1,
+        id,
+        "2026-10-01",
+        [{ topic: "have", gist: "g" }],
+        new Date().toISOString(),
+      );
+      expect((await tap(app, id, true)).statusCode).toBe(204);
+      expect(noteCalls(createMessage)).toHaveLength(0);
+      expect(pointRows(app)).toMatchObject([{ topic: "have", helpful: 1 }]);
+    });
+
+    it("untap makes no call and clears the notes' flag", async () => {
+      const createMessage = stub();
+      app = setup({ userFlag: 1, createMessage });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      await tap(app, id, true);
+      expect(noteCalls(createMessage)).toHaveLength(1);
+      expect((await tap(app, id, false)).statusCode).toBe(204);
+      expect(noteCalls(createMessage)).toHaveLength(1);
+      expect(pointRows(app)).toMatchObject([{ helpful: 0 }]);
+    });
+
+    it("untapping a reply with no notes makes no model call", async () => {
+      const createMessage = stub();
+      app = setup({ userFlag: 1, createMessage });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      expect((await tap(app, id, false)).statusCode).toBe(204);
+      expect(noteCalls(createMessage)).toHaveLength(0);
+      expect(pointRows(app)).toEqual([]);
+    });
+
+    it("a failing note call still returns 204 with the flag saved and no notes", async () => {
+      const createMessage = vi.fn<CreateMessage>(async (args) => {
+        if (args.tool_choice?.type === "tool") throw new Error("boom");
+        return await answerStub(args);
+      });
+      app = setup({ userFlag: 1, createMessage });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      expect((await tap(app, id, true)).statusCode).toBe(204);
+      expect(pointRows(app)).toEqual([]);
+      const hist = await app.inject({
+        method: "GET",
+        url: "/api/v1/llm/insights-chat/history",
+        headers: auth,
+      });
+      expect(hist.json().turns[1].helpful).toBe(true);
+    });
+
+    it("skips the note call when the hard cap is reached", async () => {
+      const createMessage = stub();
+      app = setup({ userFlag: 1, createMessage, hardDailyTokenCap: 1000 });
+      const id = (await post(app)).json().assistant_turn_id as number;
+      // The chat itself billed 1040 tokens, which is over the 1000 cap.
+      expect((await tap(app, id, true)).statusCode).toBe(204);
+      expect(noteCalls(createMessage)).toHaveLength(0);
+      expect(pointRows(app)).toEqual([]);
+    });
+  });
+
+  it("PATCH helpful 404s for an unknown turn and 422s for a user turn", async () => {
+    app = setup({ userFlag: 1 });
+    const res = await post(app);
+    const id = res.json().assistant_turn_id as number;
+    const patch = (turn: number) =>
+      app?.inject({
+        method: "PATCH",
+        url: `/api/v1/llm/insights-chat/turns/${turn}`,
+        headers: auth,
+        payload: { helpful: true },
+      });
+    expect((await patch(99999))?.statusCode).toBe(404);
+    expect((await patch(id - 1))?.statusCode).toBe(422);
+  });
+
+  it("PATCH helpful 404s for another user's assistant turn", async () => {
+    app = setup({ userFlag: 1 });
+    app.db
+      .prepare(
+        `INSERT INTO users (name, dob, height_cm, sex, email, timezone, preferred_unit_system, llm_logging_enabled)
+         VALUES ('Other','1990-01-01',170,'female','other@example.com','America/New_York','metric', 1)`,
+      )
+      .run();
+    const otherId = (
+      app.db.prepare("SELECT id FROM users WHERE email = 'other@example.com'").get() as {
+        id: number;
+      }
+    ).id;
+    const [, theirs] = appendTurns(
+      app.db,
+      otherId,
+      "2026-09-30",
+      [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "a" },
+      ],
+      new Date().toISOString(),
+    );
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/llm/insights-chat/turns/${defined(theirs, "turn id")}`,
+      headers: auth,
+      payload: { helpful: true },
+    });
+    expect(patch.statusCode).toBe(404);
+    const row = app.db
+      .prepare("SELECT helpful FROM insights_chat_turns WHERE id = ?")
+      .get(defined(theirs, "turn id")) as { helpful: number | null };
+    expect(row.helpful).not.toBe(1);
+  });
+
+  it("feeds recent points into the volatile system block", async () => {
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage });
+    const now = new Date().toISOString();
+    const [, t] = appendTurns(
+      app.db,
+      1,
+      "2026-09-30",
+      [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "a" },
+      ],
+      now,
+    );
+    insertPoints(app.db, 1, t ?? -1, "2026-09-30", [{ topic: "seen-topic", gist: "g" }], now);
+    await post(app);
+    const system = defined(createMessage.mock.calls[0]?.[0], "call").system as Array<{
+      text: string;
+    }>;
+    expect(system[1]?.text).toContain("seen-topic");
+  });
 
   it("threads user.about_me into the insights system prompt (fenced, in the cached stable block)", async () => {
     const createMessage = vi.fn(answerStub);
@@ -671,7 +1214,7 @@ describe("/api/v1/llm/insights-chat", () => {
 
     const today = currentUserDate(new Date(), "America/New_York");
     const turns = listTurnsForDay(app.db, 1, today);
-    expect(turns).toEqual([
+    expect(turns).toMatchObject([
       { role: "user", content: "how am I doing?" },
       { role: "assistant", content: "you're on track" },
     ]);
@@ -690,7 +1233,7 @@ describe("/api/v1/llm/insights-chat", () => {
     expect(res.json().kind).toBe("answer");
 
     const past = listTurnsForDay(app.db, 1, onDate);
-    expect(past).toEqual([
+    expect(past).toMatchObject([
       { role: "user", content: "how was that day?" },
       { role: "assistant", content: "you're on track" },
     ]);
@@ -784,7 +1327,7 @@ describe("/api/v1/llm/insights-chat", () => {
       headers: auth,
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({
+    expect(res.json()).toMatchObject({
       on_date: today,
       turns: [
         { role: "user", content: "hi" },
@@ -804,7 +1347,10 @@ describe("/api/v1/llm/insights-chat", () => {
       headers: auth,
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ on_date: onDate, turns: [{ role: "user", content: "old" }] });
+    expect(res.json()).toMatchObject({
+      on_date: onDate,
+      turns: [{ role: "user", content: "old" }],
+    });
   });
 
   it("GET /history returns empty turns for a fresh day", async () => {
@@ -983,6 +1529,7 @@ describe("/api/v1/llm/meal-chat web search", () => {
           provider: "anthropic",
           model: "claude-haiku-4-5",
           insightsModel: "claude-sonnet-4-6",
+          insightsEffort: "medium",
           apiKey: "sk-test",
           defaultDailyTokenLimit: undefined,
           hardDailyTokenCap: undefined,

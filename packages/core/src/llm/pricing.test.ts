@@ -2,17 +2,24 @@ import { describe, expect, it } from "vitest";
 import { computeCostUsd } from "./pricing.js";
 
 describe("computeCostUsd", () => {
-  it("prices haiku 4.5 across the four token buckets", () => {
-    // Haiku 4.5: input $1.00/1M, output $5.00/1M.
-    // cache read ~0.1x input ($0.10/1M); cache write ~1.25x input ($1.25/1M).
+  it("prices claude-haiku-4-5 with the 1h cache-write rate", () => {
     const cost = computeCostUsd("anthropic", "claude-haiku-4-5", {
       input_tokens: 1_000_000,
       output_tokens: 1_000_000,
       cache_read_tokens: 1_000_000,
       cache_creation_tokens: 1_000_000,
     });
-    // 1.00 + 5.00 + 0.10 + 1.25 = 7.35
-    expect(cost).toBeCloseTo(7.35, 5);
+    expect(cost).toBeCloseTo(1 + 5 + 0.1 + 2, 5);
+  });
+
+  it("prices claude-sonnet-5-5", () => {
+    const cost = computeCostUsd("anthropic", "claude-sonnet-5-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 1_000_000,
+      cache_creation_tokens: 1_000_000,
+    });
+    expect(cost).toBeCloseTo(2 + 10 + 0.2 + 4, 5);
   });
 
   it("returns 0 for an all-zero usage", () => {

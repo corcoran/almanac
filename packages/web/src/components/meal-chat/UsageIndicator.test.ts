@@ -35,6 +35,25 @@ describe("UsageIndicator", () => {
     expect(w.find('[data-test="usage-pill"]').text()).toMatch(/20\s*logs left/i);
   });
 
+  it("uses the messages unit when asked, singular at one", async () => {
+    const w = mount(UsageIndicator, { props: { balance, unit: "messages" } });
+    expect(w.find('[data-test="usage-pill"]').text()).toMatch(/20\s*messages left/);
+    const one = mount(UsageIndicator, {
+      props: { balance: { ...balance, logsLeftEstimate: 1 }, unit: "messages" },
+    });
+    expect(one.find('[data-test="usage-pill"]').text()).toMatch(/~1 message left/);
+    await one.find('[data-test="usage-pill"]').trigger("click");
+    expect(one.find('[data-test="usage-card"]').text()).toMatch(/~1 message left today/);
+    expect(one.find('[data-test="usage-card"]').text()).toMatch(/tokens\/message/);
+  });
+
+  it("defaults to logs, singular at one", () => {
+    const w = mount(UsageIndicator, {
+      props: { balance: { ...balance, logsLeftEstimate: 1 } },
+    });
+    expect(w.find('[data-test="usage-pill"]').text()).toMatch(/~1 log left/);
+  });
+
   it("renders nothing when balance is null", () => {
     const w = mount(UsageIndicator, { props: { balance: null } });
     expect(w.find('[data-test="usage-pill"]').exists()).toBe(false);

@@ -1,3 +1,4 @@
+import { defined } from "@almanac/core/test-support";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,6 +45,8 @@ function makeClient(
     historyTurns?: Array<{
       role: "user" | "assistant";
       content: string;
+      id?: number;
+      helpful?: boolean;
       sources?: Array<{ url: string; title: string; domain: string }>;
     }>;
     onDate?: string;
@@ -59,7 +62,7 @@ function makeClient(
   const onDate = opts.onDate ?? "2026-06-24";
   const days = opts.days ?? (historyTurns.length > 0 ? [onDate] : []);
   return {
-    post: vi.fn().mockResolvedValue({ text, usage: usage(opts.sources) }),
+    post: vi.fn().mockResolvedValue({ text, usage: usage(opts.sources), assistant_turn_id: 2 }),
     get: vi.fn((path: string) => {
       if (path.startsWith("/v1/llm/insights-chat/history")) {
         return Promise.resolve({ on_date: onDate, turns: historyTurns });
@@ -70,6 +73,7 @@ function makeClient(
       return Promise.resolve({ report: true });
     }),
     delete: vi.fn().mockResolvedValue(undefined),
+    patch: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -101,17 +105,13 @@ describe("InsightsChatPanel", () => {
     expect(wrapper.find('[data-test="insights-panel"]').exists()).toBe(true);
   });
 
-  it("auto-sends the synthetic opener on mount with empty turns", async () => {
-    const client = makeClient();
-    mountPanel(client);
-    await flushPromises();
-    expect(client.post).toHaveBeenCalledTimes(1);
-    const body = client.post.mock.calls[0]?.[1] as { message: string };
-    expect(body.message).toBe("Give me a quick read on how I'm doing.");
-  });
-
   it("renders the assistant answer as an assistant turn", async () => {
-    const client = makeClient("Trend is solid; keep it up.");
+    const client = makeClient("x", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "Trend is solid; keep it up." },
+      ],
+    });
     const wrapper = mountPanel(client);
     await flushPromises();
     const turns = wrapper.findAll('[data-test="insights-assistant-turn"]');
@@ -120,9 +120,15 @@ describe("InsightsChatPanel", () => {
   });
 
   it("renders assistant markdown (bold + list) as HTML", async () => {
-    const client = makeClient(
-      "You're **on track** for your cut.\n\n- weight down 1.2kg\n- net -260/day",
-    );
+    const client = makeClient("x", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        {
+          role: "assistant",
+          content: "You're **on track** for your cut.\n\n- weight down 1.2kg\n- net -260/day",
+        },
+      ],
+    });
     const wrapper = mountPanel(client);
     await flushPromises();
     const turn = wrapper.find('[data-test="insights-assistant-turn"]');
@@ -133,7 +139,12 @@ describe("InsightsChatPanel", () => {
   });
 
   it("escapes raw HTML in assistant content (XSS-safe, html:false)", async () => {
-    const client = makeClient("<img src=x onerror=alert(1)><script>alert(1)</script>");
+    const client = makeClient("x", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "<img src=x onerror=alert(1)><script>alert(1)</script>" },
+      ],
+    });
     const wrapper = mountPanel(client);
     await flushPromises();
     const turn = wrapper.find('[data-test="insights-assistant-turn"]');
@@ -143,6 +154,45 @@ describe("InsightsChatPanel", () => {
     expect(html).toContain("&lt;img");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).not.toContain("<img src=x");
+  });
+
+  async function renderedAnchor(content: string) {
+    const client = makeClient("x", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content },
+      ],
+    });
+    const wrapper = mountPanel(client);
+    await flushPromises();
+    return wrapper.find('[data-test="insights-assistant-turn"] a');
+  }
+
+  it("shortens a bare long URL to a label of at most 40 chars, keeping the full href", async () => {
+    const url =
+      "https://www.researchgate.net/publication/318368028_A_systematic_review_meta-analysis";
+    const a = await renderedAnchor(`Link: ${url}`);
+    expect(a.attributes("href")).toBe(url);
+    expect(a.attributes("title")).toBe(url);
+    expect(a.attributes("target")).toBe("_blank");
+    expect(a.attributes("rel")).toContain("noopener");
+    const text = a.text();
+    expect(text.length).toBeLessThanOrEqual(40);
+    expect(text.startsWith("researchgate.net/")).toBe(true);
+    expect(text.endsWith("…")).toBe(true);
+  });
+
+  it("keeps the title text of a [title](url) link", async () => {
+    const url = "https://example.com/very/long/path/that/goes/on";
+    const a = await renderedAnchor(`[Morton 2018](${url})`);
+    expect(a.text()).toBe("Morton 2018");
+    expect(a.attributes("href")).toBe(url);
+    expect(a.attributes("target")).toBe("_blank");
+  });
+
+  it("shows a short bare URL without protocol and without an ellipsis", async () => {
+    const a = await renderedAnchor("https://e.com/a");
+    expect(a.text()).toBe("e.com/a");
   });
 
   it("renders the typed message as a user turn", async () => {
@@ -234,14 +284,6 @@ describe("InsightsChatPanel", () => {
     expect(loadSpy).toHaveBeenCalledWith(client, undefined);
   });
 
-  it("auto-opener fires when LOADED turns are empty", async () => {
-    const client = makeClient("hi", { historyTurns: [] });
-    const sendSpy = vi.spyOn(useInsightsChatStore(), "send");
-    mountPanel(client);
-    await flushPromises();
-    expect(sendSpy).toHaveBeenCalledWith(client, "Give me a quick read on how I'm doing.");
-  });
-
   it("auto-opener does NOT fire when LOADED turns are non-empty", async () => {
     const client = makeClient("hi", {
       historyTurns: [
@@ -327,26 +369,6 @@ describe("InsightsChatPanel", () => {
     await flushPromises();
     await wrapper.get('[data-test="insights-prev-day"]').trigger("click");
     expect(stepSpy).toHaveBeenCalledWith(client, -1);
-  });
-
-  it("Reset day (confirmed) calls store.newChat(client) and re-fires the auto-insight when empty", async () => {
-    // makeClient() seeds an empty transcript, so after newChat's DELETE+reload the
-    // store ends with zero turns — the panel must then re-fire the opener, exactly
-    // like opening a fresh day. The opener fires once on mount and once here.
-    // Reset day is destructive, so it confirms first — accept it.
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const client = makeClient();
-    const newChatSpy = vi.spyOn(useInsightsChatStore(), "newChat");
-    const sendSpy = vi.spyOn(useInsightsChatStore(), "send");
-    const wrapper = mountPanel(client);
-    await flushPromises();
-    sendSpy.mockClear();
-    await wrapper.get('[data-test="insights-new-chat"]').trigger("click");
-    await flushPromises();
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(newChatSpy).toHaveBeenCalledWith(client);
-    expect(sendSpy).toHaveBeenCalledWith(client, "Give me a quick read on how I'm doing.");
-    confirmSpy.mockRestore();
   });
 
   it("Reset day (cancelled) does NOT wipe the conversation", async () => {
@@ -471,5 +493,132 @@ describe("InsightsChatPanel", () => {
     mountPanel(client, { viewedDate: "2026-06-22", realToday: "2026-06-24" });
     await flushPromises();
     expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-send anything on mount", async () => {
+    const client = makeClient();
+    mountPanel(client);
+    await flushPromises();
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("shows the four starters on an empty today thread and sends the tapped one", async () => {
+    const client = makeClient();
+    const w = mountPanel(client);
+    await flushPromises();
+    const buttons = w.findAll('[data-test="insights-starter"]');
+    expect(buttons.map((b) => b.text())).toEqual([
+      "Quick read",
+      "What should I eat?",
+      "Review my training",
+      "What have you told me?",
+    ]);
+    await buttons[1]?.trigger("click");
+    await flushPromises();
+    const body = defined(client.post.mock.calls[0]?.[1], "body") as { message: string };
+    expect(body.message).toBe("What should I eat for the rest of today?");
+  });
+
+  it("hides starters once the thread has turns", async () => {
+    const client = makeClient("hi", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "a" },
+      ],
+    });
+    const w = mountPanel(client);
+    await flushPromises();
+    expect(w.find('[data-test="insights-starter"]').exists()).toBe(false);
+  });
+
+  it("hides starters on an empty past day", async () => {
+    const client = makeClient("hi", { historyTurns: [], onDate: "2026-06-22" });
+    const w = mountPanel(client, { viewedDate: "2026-06-22", realToday: "2026-06-24" });
+    await flushPromises();
+    expect(w.find('[data-test="insights-starter"]').exists()).toBe(false);
+  });
+
+  it("Reset day clears without auto-sending", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const client = makeClient("hi", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "a" },
+      ],
+    });
+    const newChatSpy = vi.spyOn(useInsightsChatStore(), "newChat");
+    const w = mountPanel(client);
+    await flushPromises();
+    await w.find('[data-test="insights-new-chat"]').trigger("click");
+    await flushPromises();
+    expect(newChatSpy).toHaveBeenCalledWith(client);
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("toggles Helpful on an assistant turn", async () => {
+    const client = makeClient("hi", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        { role: "assistant", content: "a", id: 9, helpful: false },
+      ],
+    });
+    const w = mountPanel(client);
+    await flushPromises();
+    await w.find('[data-test="insights-helpful"]').trigger("click");
+    await flushPromises();
+    expect(client.patch).toHaveBeenCalledWith(
+      "/v1/llm/insights-chat/turns/9",
+      { helpful: true },
+      expect.anything(),
+    );
+    expect(w.find('[data-test="insights-helpful"]').classes()).toContain("on");
+  });
+
+  it("renders the sources footnote under a turn that has sources", async () => {
+    const client = makeClient("hi", {
+      historyTurns: [
+        { role: "user", content: "q" },
+        {
+          role: "assistant",
+          content: "a",
+          id: 3,
+          sources: [{ url: "https://e.com", title: "E", domain: "e.com" }],
+        },
+      ],
+    });
+    const w = mountPanel(client);
+    await flushPromises();
+    expect(w.find('[data-test="insights-assistant-turn"] [data-test="web-sources"]').exists()).toBe(
+      true,
+    );
+  });
+
+  it("hides starters while the store is loading or pending", async () => {
+    const client = makeClient();
+    const w = mountPanel(client);
+    await flushPromises();
+    expect(w.find('[data-test="insights-starter"]').exists()).toBe(true);
+    const store = useInsightsChatStore();
+    store.loading = true;
+    await flushPromises();
+    expect(w.find('[data-test="insights-starter"]').exists()).toBe(false);
+    store.loading = false;
+    store.pending = true;
+    await flushPromises();
+    expect(w.find('[data-test="insights-starter"]').exists()).toBe(false);
+  });
+
+  it("does not warn about duplicate keys across two exchanges", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const client = makeClient();
+    const w = mountPanel(client);
+    await flushPromises();
+    for (const q of ["one", "two"]) {
+      await w.get('[data-test="insights-input"]').setValue(q);
+      await w.get("form").trigger("submit");
+      await flushPromises();
+    }
+    expect(w.findAll('[data-test="insights-assistant-turn"]').length).toBe(2);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("Duplicate keys"))).toBe(false);
   });
 });

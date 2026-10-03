@@ -7,6 +7,7 @@ import {
   getUsageForDay,
   perSearchPrice,
   recentAvgTokensPerCall,
+  recentTypicalTokensPerCall,
   recordLlmUsage,
 } from "./usage.repo.js";
 
@@ -159,8 +160,8 @@ describe("usage.repo", () => {
   });
 
   it("perSearchPrice falls back to the config flat rate when there is no non-search history", () => {
-    expect(perSearchPrice(db, 1, 2500)).toBe(2500);
-    expect(perSearchPrice(db, 1, 4000)).toBe(4000);
+    expect(perSearchPrice(db, 1, 2500, "meal_chat")).toBe(2500);
+    expect(perSearchPrice(db, 1, 4000, "meal_chat")).toBe(4000);
   });
 
   it("perSearchPrice = recent NON-SEARCH average chat cost (a search bills like one ordinary turn)", () => {
@@ -186,7 +187,7 @@ describe("usage.repo", () => {
       });
     }
     // A search bills the non-search average (650), NOT the fallback.
-    expect(perSearchPrice(db, 1, 2500)).toBe(650);
+    expect(perSearchPrice(db, 1, 2500, "meal_chat")).toBe(650);
   });
 
   it("perSearchPrice never compounds — search rows with huge input_tokens do not raise it", () => {
@@ -227,7 +228,7 @@ describe("usage.repo", () => {
         billedTokens: 650,
       });
     }
-    expect(perSearchPrice(db, 1, 2500)).toBe(650); // unmoved by the search rows
+    expect(perSearchPrice(db, 1, 2500, "meal_chat")).toBe(650); // unmoved by the search rows
   });
 
   it("recentAvgTokensPerCall excludes search calls (one search must not poison the logs-left estimate)", () => {
@@ -328,6 +329,50 @@ describe("usage.repo", () => {
     expect(recentAvgTokensPerCall(db, 1)).toBe(700);
   });
 
+  it("perSearchPrice prices a search at the calling feature's own average", () => {
+    for (const [feature, i, o] of [
+      ["meal_chat", 550, 50],
+      ["insights_chat", 5000, 200],
+    ] as const) {
+      recordLlmUsage(db, {
+        userId: 1,
+        createdAt: "2026-06-22T12:00:00.000Z",
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        feature,
+        usage: {
+          input_tokens: i,
+          output_tokens: o,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+        },
+        webSearchRequests: 0,
+        billedTokens: i + o,
+      });
+    }
+    expect(perSearchPrice(db, 1, 2500, "meal_chat")).toBe(600);
+    expect(perSearchPrice(db, 1, 2500, "insights_chat")).toBe(5200);
+  });
+
+  it("perSearchPrice falls back when the feature has no non-search history", () => {
+    recordLlmUsage(db, {
+      userId: 1,
+      createdAt: "2026-06-22T12:00:00.000Z",
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      feature: "meal_chat",
+      usage: {
+        input_tokens: 550,
+        output_tokens: 50,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      },
+      webSearchRequests: 0,
+      billedTokens: 600,
+    });
+    expect(perSearchPrice(db, 1, 2500, "insights_chat")).toBe(2500);
+  });
+
   it("recentAvgTokensPerCall scopes to meal_chat when feature is given", () => {
     // meal: 600, insights: 5200 → meal-only average is 600
     recordLlmUsage(db, {
@@ -416,5 +461,69 @@ describe("usage.repo", () => {
       billedTokens: 600,
     });
     expect(recentAvgTokensPerCall(db, 1, { feature: "meal_chat" })).toBe(600);
+  });
+});
+
+describe("recentTypicalTokensPerCall", () => {
+  let db: Connection;
+  beforeEach(() => {
+    db = openDb(":memory:");
+    runMigrations(db);
+    for (const email of ["a@e.com", "b@e.com"]) {
+      db.prepare(
+        "INSERT INTO users (name, dob, height_cm, sex, email) VALUES ('U','1990-01-01',180,'male',?)",
+      ).run(email);
+    }
+  });
+  afterEach(() => db.close());
+
+  function add(userId: number, feature: string, billed: number, searches = 0) {
+    recordLlmUsage(db, {
+      userId,
+      createdAt: "2026-06-22T12:00:00.000Z",
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      feature,
+      usage: {
+        input_tokens: billed,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      },
+      webSearchRequests: searches,
+      billedTokens: billed,
+    });
+  }
+
+  it("returns the nearest-rank 75th percentile of billed tokens", () => {
+    for (const t of [10000, 1000, 3000, 2000]) add(1, "insights_chat", t);
+    expect(recentTypicalTokensPerCall(db, 1)).toBe(3000);
+  });
+
+  it("returns null with no rows", () => {
+    expect(recentTypicalTokensPerCall(db, 1)).toBeNull();
+  });
+
+  it("excludes search calls", () => {
+    for (const t of [1000, 2000, 3000]) add(1, "insights_chat", t);
+    add(1, "insights_chat", 20000, 1);
+    expect(recentTypicalTokensPerCall(db, 1)).toBe(3000);
+  });
+
+  it("is scoped by user and by feature", () => {
+    add(1, "meal_chat", 600);
+    add(1, "insights_chat", 6000);
+    add(2, "insights_chat", 9000);
+    expect(recentTypicalTokensPerCall(db, 1, { feature: "meal_chat" })).toBe(600);
+    expect(recentTypicalTokensPerCall(db, 1, { feature: "insights_chat" })).toBe(6000);
+    expect(recentTypicalTokensPerCall(db, 1)).toBe(6000);
+    expect(recentTypicalTokensPerCall(db, 2)).toBe(9000);
+  });
+
+  it("looks only at the latest 20 calls by default", () => {
+    for (let i = 0; i < 10; i++) add(1, "insights_chat", 50000);
+    for (let i = 0; i < 20; i++) add(1, "insights_chat", 1000);
+    expect(recentTypicalTokensPerCall(db, 1)).toBe(1000);
+    expect(recentTypicalTokensPerCall(db, 1, { limit: 30 })).toBe(50000);
   });
 });
