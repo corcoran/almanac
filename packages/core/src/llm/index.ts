@@ -7,13 +7,17 @@ export {
   resolveDailyLimits,
 } from "./caps.js";
 export { createAnthropicClient } from "./client.js";
-export { type LlmConfig, loadLlmConfig } from "./config.js";
+export { type InsightsEffort, type LlmConfig, loadLlmConfig } from "./config.js";
 export { assembleMealContext, type MealContext } from "./context.js";
 export {
   buildInsightsSystemPrompt,
   INSIGHTS_TOOLS,
+  MAX_POINTS_PER_TURN,
   makeInsightsDispatch,
+  REMEMBER_POINT_TOOL,
+  stripLookupsLine,
 } from "./insights.js";
+export { NOTE_TOOL, notesFromReply } from "./note-from-reply.js";
 export { computeCostUsd, type TokenCounts } from "./pricing.js";
 export { buildMealSystemPrompt } from "./prompts.js";
 export {
@@ -22,6 +26,7 @@ export {
   type CreateMessage,
   type RunAgentArgs,
   runAgent,
+  supportsMidConversationSystem,
   type ToolOutcome,
 } from "./run-agent.js";
 export {
@@ -31,6 +36,7 @@ export {
   perSearchPrice,
   type RecordUsageInput,
   recentAvgTokensPerCall,
+  recentTypicalTokensPerCall,
   recordLlmUsage,
 } from "./usage.repo.js";
 export {

@@ -63,6 +63,9 @@ export const ChatTurnSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
   sources: z.array(WebSourceSchema).optional(),
+  id: z.number().int().optional(),
+  helpful: z.boolean().optional(),
+  lookups: z.array(z.string()).optional(),
 });
 
 export const MealChatRequestSchema = z.object({
@@ -102,13 +105,18 @@ export const InsightsHistoryResponseSchema = z.object({
 });
 export type InsightsHistoryResponse = z.infer<typeof InsightsHistoryResponseSchema>;
 
+export const InsightsHelpfulRequestSchema = z.object({ helpful: z.boolean() });
+export type InsightsHelpfulRequest = z.infer<typeof InsightsHelpfulRequestSchema>;
+
 export const InsightsDaysResponseSchema = z.object({ days: z.array(z.string()) });
 export type InsightsDaysResponse = z.infer<typeof InsightsDaysResponseSchema>;
 
 export const InsightsChatResponseSchema = z.object({
   kind: z.literal("answer"),
   text: z.string(),
+  assistant_turn_id: z.number().int(),
   usage: UsageSummarySchema,
+  lookups: z.array(z.string()),
 });
 export type InsightsChatResponse = z.infer<typeof InsightsChatResponseSchema>;
 
@@ -128,3 +136,16 @@ export const MealChatResponseSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type MealChatResponse = z.infer<typeof MealChatResponseSchema>;
+
+export const INSIGHTS_STARTERS = {
+  quickRead: { label: "Quick read", message: "Give me a quick read on how I'm doing." },
+  whatToEat: { label: "What should I eat?", message: "What should I eat for the rest of today?" },
+  reviewTraining: {
+    label: "Review my training",
+    message: "Review my training and suggest changes.",
+  },
+  recap: {
+    label: "What have you told me?",
+    message: "Recap what you've told me so far, starting with what I found helpful.",
+  },
+} as const;

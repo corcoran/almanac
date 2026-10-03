@@ -83,12 +83,10 @@ export function getUsageForDay(db: Connection, userId: number, tz: string, date:
  * falls back to a default).
  *
  * `feature` is opt-in. When OMITTED the average spans ALL chat features (meal +
- * insights) — the BLENDED form used by `perSearchPrice` to price a web search as
- * one ordinary turn. When GIVEN, the average is scoped to that surface so each
- * chat panel's "logs left" reflects its OWN per-call cost: meal-chat (~1k
- * tokens) and insights (~5k, it embeds the report briefing) differ ~5x, and
- * blending makes the meal panel show ~1/6th of the logs the user can actually
- * afford.
+ * insights). When GIVEN, the average is scoped to that surface so each chat
+ * panel's "logs left" and per-search price reflect its OWN per-call cost:
+ * meal-chat (~1k tokens) and insights (~5k, it embeds the report briefing)
+ * differ ~5x.
  *
  * Search calls are ALWAYS excluded (`web_search_requests = 0`), in both forms: a
  * search's `input_tokens` carries the web-result bloat (10k–20k+), so including
@@ -126,6 +124,41 @@ export function recentAvgTokensPerCall(
 }
 
 /**
+ * 75th percentile (nearest rank) of billed tokens over the same rows as
+ * `recentAvgTokensPerCall`: the user's latest N non-search calls, optionally
+ * scoped to one feature. Sizing "messages left" from the heavy end keeps one
+ * large call from collapsing the estimate. Null when there are no rows.
+ */
+export function recentTypicalTokensPerCall(
+  db: Connection,
+  userId: number,
+  opts: { feature?: string; limit?: number } = {},
+): number | null {
+  const limit = opts.limit ?? 20;
+  const feature = opts.feature;
+  const rows = (
+    feature
+      ? db
+          .prepare(
+            `SELECT billed_tokens FROM llm_usage
+             WHERE user_id = ? AND web_search_requests = 0 AND feature = ?
+             ORDER BY id DESC LIMIT ?`,
+          )
+          .all(userId, feature, limit)
+      : db
+          .prepare(
+            `SELECT billed_tokens FROM llm_usage
+             WHERE user_id = ? AND web_search_requests = 0
+             ORDER BY id DESC LIMIT ?`,
+          )
+          .all(userId, limit)
+  ) as { billed_tokens: number }[];
+  const sorted = rows.map((r) => r.billed_tokens).sort((a, b) => a - b);
+  const p75 = sorted[Math.ceil(0.75 * sorted.length) - 1];
+  return p75 ?? null;
+}
+
+/**
  * Sum of web_search_requests over one user-local day (4am rollover, tz-aware).
  * Mirrors getUsageForDay's UTC-range windowing.
  */
@@ -148,8 +181,9 @@ export function getSearchesForDay(
 
 /**
  * Per-search token charge debited from the daily budget: the cost of ONE
- * ordinary chat turn — `recentAvgTokensPerCall` over recent NON-SEARCH calls —
- * with `fallback` (config flat rate) until the user has non-search history.
+ * ordinary turn of the same chat — `recentAvgTokensPerCall` over that
+ * feature's recent NON-SEARCH calls — with `fallback` (config flat rate) until
+ * the user has non-search history for that feature.
  *
  * Design intent: a web search debits the budget the SAME as a normal chat turn,
  * no more. The expensive part of a search (the web-result tokens fused into
@@ -167,6 +201,11 @@ export function getSearchesForDay(
  * search's true incremental cost is unobservable, so we price it as a normal
  * turn — the one cost we CAN measure cleanly (non-search rows).
  */
-export function perSearchPrice(db: Connection, userId: number, fallback: number): number {
-  return recentAvgTokensPerCall(db, userId) ?? fallback;
+export function perSearchPrice(
+  db: Connection,
+  userId: number,
+  fallback: number,
+  feature: string,
+): number {
+  return recentAvgTokensPerCall(db, userId, { feature }) ?? fallback;
 }

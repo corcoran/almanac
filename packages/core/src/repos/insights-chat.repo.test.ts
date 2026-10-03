@@ -4,9 +4,14 @@ import { runMigrations } from "../db/migrations.js";
 import {
   appendTurns,
   clearDay,
+  countPointsForTurn,
   findPriorDayTakeaway,
+  getTurnForHelpful,
+  insertPoints,
   listDaysWithTurns,
+  listRecentPoints,
   listTurnsForDay,
+  setTurnHelpful,
 } from "./insights-chat.repo.js";
 
 describe("insights-chat.repo", () => {
@@ -68,6 +73,36 @@ describe("insights-chat.repo", () => {
     const turns = listTurnsForDay(db, 1, "2026-06-24");
     expect(turns[0]?.sources).toBeUndefined(); // user turn: no sources
     expect(turns[1]?.sources).toEqual([{ url: "https://x.com/a", title: "A", domain: "x.com" }]);
+  });
+
+  it("round-trips lookups on assistant turns, empty included; user turns have none", () => {
+    appendTurns(
+      db,
+      1,
+      "2026-06-22",
+      [
+        { role: "user", content: "q", lookups: ["ignored"] },
+        { role: "assistant", content: "a", lookups: ["get_report", "get_meals(limit=3)"] },
+        { role: "assistant", content: "b", lookups: [] },
+        { role: "assistant", content: "c" },
+      ],
+      "2026-06-22T15:00:00.000Z",
+    );
+    const turns = listTurnsForDay(db, 1, "2026-06-22");
+    expect(turns[0]?.lookups).toBeUndefined();
+    expect(turns[1]?.lookups).toEqual(["get_report", "get_meals(limit=3)"]);
+    expect(turns[2]?.lookups).toEqual([]);
+    expect(turns[3]?.lookups).toBeUndefined();
+    expect(turns[0] && "lookups" in turns[0]).toBe(false);
+    const raw = db
+      .prepare("SELECT lookups FROM insights_chat_turns WHERE user_id = 1 ORDER BY seq")
+      .all() as Array<{ lookups: string | null }>;
+    expect(raw.map((r) => r.lookups)).toEqual([
+      null,
+      '["get_report","get_meals(limit=3)"]',
+      "[]",
+      null,
+    ]);
   });
 
   it("persists NULL sources as undefined on read", () => {
@@ -196,5 +231,177 @@ describe("insights-chat.repo", () => {
       );
       expect(findPriorDayTakeaway(db, 1, "2026-06-24")).toBeNull();
     });
+  });
+});
+
+function pointsSetup() {
+  const db = openDb(":memory:");
+  runMigrations(db);
+  const add = (email: string) =>
+    Number(
+      db.prepare("INSERT INTO users (name, email) VALUES ('U', ?)").run(email).lastInsertRowid,
+    );
+  return { db, a: add("a@x.com"), b: add("b@x.com") };
+}
+const T = "2026-10-01T12:00:00.000Z";
+const pair = (answer: string) => [
+  { role: "user" as const, content: "q" },
+  { role: "assistant" as const, content: answer },
+];
+
+describe("insights points and helpful", () => {
+  it("appendTurns returns ids and listTurnsForDay exposes id + helpful", () => {
+    const { db, a } = pointsSetup();
+    const ids = appendTurns(db, a, "2026-10-01", pair("ans"), T);
+    expect(ids).toHaveLength(2);
+    const turns = listTurnsForDay(db, a, "2026-10-01");
+    expect(turns[1]).toMatchObject({ id: ids[1], helpful: false });
+  });
+
+  it("setTurnHelpful toggles own assistant turns only", () => {
+    const { db, a, b } = pointsSetup();
+    const [q, ans] = appendTurns(db, a, "2026-10-01", pair("ans"), T);
+    expect(setTurnHelpful(db, a, ans ?? -1, true)).toBe("ok");
+    expect(listTurnsForDay(db, a, "2026-10-01")[1]?.helpful).toBe(true);
+    expect(setTurnHelpful(db, b, ans ?? -1, true)).toBe("not_found");
+    expect(setTurnHelpful(db, a, q ?? -1, true)).toBe("not_assistant");
+  });
+
+  it("lists recent points helpful-first, scoped, within the window and limit", () => {
+    const { db, a, b } = pointsSetup();
+    const old = "2026-09-01T12:00:00.000Z";
+    const [, t1] = appendTurns(db, a, "2026-09-01", pair("x"), old);
+    const [, t2] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    const [, tb] = appendTurns(db, b, "2026-10-01", pair("z"), T);
+    insertPoints(db, a, t1 ?? -1, "2026-09-01", [{ topic: "old", gist: "g" }], old);
+    insertPoints(
+      db,
+      a,
+      t2 ?? -1,
+      "2026-10-01",
+      [
+        { topic: "new", gist: "g" },
+        { topic: "liked", gist: "g" },
+      ],
+      T,
+    );
+    insertPoints(db, b, tb ?? -1, "2026-10-01", [{ topic: "other-user", gist: "g" }], T);
+    setTurnHelpful(db, a, t1 ?? -1, true);
+
+    const all = listRecentPoints(db, a, "2026-08-01T00:00:00.000Z", 30);
+    expect(all.map((p) => p.topic)).toEqual(["old", "new", "liked"]);
+    expect(all[0]?.helpful).toBe(true);
+    expect(all.map((p) => p.on_date)).toEqual(["2026-09-01", "2026-10-01", "2026-10-01"]);
+
+    const windowed = listRecentPoints(db, a, "2026-09-15T00:00:00.000Z", 30);
+    expect(windowed.map((p) => p.topic).sort()).toEqual(["liked", "new"]);
+    expect(listRecentPoints(db, a, "2026-08-01T00:00:00.000Z", 1)).toHaveLength(1);
+  });
+
+  it("round-trips point kind (default told) and shares the cap across kinds", () => {
+    const { db, a } = pointsSetup();
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p1", gist: "g" }], T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p2", gist: "g", kind: "learned" }], T);
+    const all = listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 30);
+    expect(all.map((p) => [p.topic, p.kind])).toEqual([
+      ["p1", "told"],
+      ["p2", "learned"],
+    ]);
+    expect(listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 1)).toHaveLength(1);
+  });
+
+  it("clearDay keeps points and their helpful flags; turn_id becomes NULL", () => {
+    const { db, a } = pointsSetup();
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p", gist: "g" }], T);
+    setTurnHelpful(db, a, t ?? -1, true);
+    clearDay(db, a, "2026-10-01");
+    expect(listTurnsForDay(db, a, "2026-10-01")).toEqual([]);
+    const pts = listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 30);
+    expect(pts).toHaveLength(1);
+    expect(pts[0]).toMatchObject({ topic: "p", helpful: true, on_date: "2026-10-01" });
+    const row = db.prepare("SELECT turn_id FROM insights_points").get() as {
+      turn_id: number | null;
+    };
+    expect(row.turn_id).toBeNull();
+  });
+
+  it("clearDay nulls turn_id itself when foreign keys are off", () => {
+    const { db, a } = pointsSetup();
+    db.pragma("foreign_keys = OFF");
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p", gist: "g" }], T);
+    clearDay(db, a, "2026-10-01");
+    const row = db.prepare("SELECT turn_id FROM insights_points").get() as {
+      turn_id: number | null;
+    };
+    expect(row.turn_id).toBeNull();
+    expect(listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 30)).toHaveLength(1);
+  });
+
+  it("setTurnHelpful propagates to the turn's points and back on un-tap", () => {
+    const { db, a } = pointsSetup();
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    const [, other] = appendTurns(db, a, "2026-10-01", pair("z"), T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p", gist: "g" }], T);
+    insertPoints(db, a, other ?? -1, "2026-10-01", [{ topic: "q", gist: "g" }], T);
+    setTurnHelpful(db, a, t ?? -1, true);
+    const helpfulOf = () =>
+      Object.fromEntries(
+        listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 30).map((p) => [p.topic, p.helpful]),
+      );
+    expect(helpfulOf()).toEqual({ p: true, q: false });
+    setTurnHelpful(db, a, t ?? -1, false);
+    expect(helpfulOf()).toEqual({ p: false, q: false });
+  });
+
+  it("insertPoints can write helpful points", () => {
+    const { db, a } = pointsSetup();
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    insertPoints(db, a, t ?? -1, "2026-10-01", [{ topic: "p", gist: "g" }], T, true);
+    expect(listRecentPoints(db, a, "2026-01-01T00:00:00.000Z", 30)[0]?.helpful).toBe(true);
+  });
+
+  it("countPointsForTurn counts one turn's points, user-scoped", () => {
+    const { db, a, b } = pointsSetup();
+    const [, t] = appendTurns(db, a, "2026-10-01", pair("y"), T);
+    expect(countPointsForTurn(db, a, t ?? -1)).toBe(0);
+    insertPoints(
+      db,
+      a,
+      t ?? -1,
+      "2026-10-01",
+      [
+        { topic: "p", gist: "g" },
+        { topic: "q", gist: "g" },
+      ],
+      T,
+    );
+    expect(countPointsForTurn(db, a, t ?? -1)).toBe(2);
+    expect(countPointsForTurn(db, b, t ?? -1)).toBe(0);
+  });
+
+  it("getTurnForHelpful returns the reply with the preceding user message", () => {
+    const { db, a, b } = pointsSetup();
+    appendTurns(db, a, "2026-10-01", pair("first"), T);
+    const [, t] = appendTurns(
+      db,
+      a,
+      "2026-10-01",
+      [
+        { role: "user", content: "second q" },
+        { role: "assistant", content: "second a" },
+      ],
+      T,
+    );
+    expect(getTurnForHelpful(db, a, t ?? -1)).toEqual({
+      content: "second a",
+      on_date: "2026-10-01",
+      prior_user_message: "second q",
+    });
+    expect(getTurnForHelpful(db, b, t ?? -1)).toBeNull();
+    const [lone] = appendTurns(db, a, "2026-10-02", [{ role: "assistant", content: "solo" }], T);
+    expect(getTurnForHelpful(db, a, lone ?? -1)?.prior_user_message).toBeNull();
   });
 });

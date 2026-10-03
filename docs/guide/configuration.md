@@ -146,8 +146,8 @@ production `docker-compose.yml` already forwards these from the host `.env` to
 the `almanac-api` service.
 
 The two surfaces use **separate models**: meal parsing is a cheap extraction
-task and stays on Haiku, while the coach does harder multi-signal reasoning and
-defaults to Sonnet.
+task and stays on Haiku, while the coach does harder multi-signal reasoning, thinks
+before it answers, and defaults to Sonnet.
 
 **Anthropic is currently the only supported provider.** `ALMANAC_LLM_PROVIDER`
 exists as a seam and is validated at boot, but `anthropic` is the only accepted
@@ -161,11 +161,12 @@ plausible future change, not something that works today.
 | `ANTHROPIC_API_KEY` | Anthropic key. Without it both AI surfaces are hidden (`llm_available=false`). | none |
 | `ALMANAC_LLM_PROVIDER` | Provider seam. Only `anthropic` is supported; any other value fails at boot. | `anthropic` |
 | `ALMANAC_LLM_MODEL` | Model for the **meal assistant** (the cheap parser) | `claude-haiku-4-5` |
-| `ALMANAC_LLM_INSIGHTS_MODEL` | Model for the **insights coach**, which does harder reasoning and gets a stronger default | `claude-sonnet-4-6` |
-| `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` | Soft daily token limit that drives the "~N logs left" indicator. Warns but never blocks | unset (no soft limit) |
+| `ALMANAC_LLM_INSIGHTS_MODEL` | Model for the **insights coach**, which does harder reasoning and gets a stronger default. It must support adaptive thinking; Sonnet 5.5 is the tested one. | `claude-sonnet-5-5` |
+| `ALMANAC_LLM_INSIGHTS_EFFORT` | How hard the insights coach thinks: `low`, `medium`, `high`, `xhigh` or `max`. Higher costs more output tokens per answer. | `medium` |
+| `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT` | Soft daily token limit that drives the "~N left" indicator in each chat. Warns but never blocks | unset (no soft limit) |
 | `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP` | Hard daily token ceiling, a 429 circuit-breaker | unset (falls back to 1.5x the soft limit) |
-| `ALMANAC_LLM_TOKENS_PER_SEARCH` | Flat token charge per web search when there's no recent search history to average | `2500` |
-| `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day. At the cap, search is disabled for the turn but meals still log. | unset (uncapped) |
+| `ALMANAC_LLM_TOKENS_PER_SEARCH` | What a turn that searches is charged when that chat has no recent turns to average | `2500` |
+| `ALMANAC_LLM_HARD_DAILY_SEARCH_CAP` | Max web searches per user-local day, shared by the meal assistant and the insights coach. At the cap, search is disabled for the turn and both chats keep working without it. | unset (uncapped) |
 
 ::: warning `ALMANAC_LLM_PROVIDER` has no effect under Compose
 It is read by the application (`packages/core/src/llm/config.ts`) but
@@ -184,10 +185,21 @@ meal parsing on Haiku and only the coach reaching for Sonnet, and the system
 prompts are split so the large stable part is served from Anthropic's 1-hour
 prompt cache instead of being re-billed on every turn.
 
-In practice, dogfooding over a couple of months, **an active user costs roughly
-5–10¢ on a day they use it**, and nothing on days they don't. Your mileage will
-vary with usage and current model pricing, so treat that as an order of
-magnitude, not a quote.
+Measured on real use at current model prices:
+
+| Action | Cost |
+| --- | --- |
+| Logging a meal with the assistant | about 0.7¢ |
+| A coach message | about 2–5¢ (a quick follow-up is under 2¢; a training review or an answer that searches the web is 4–5¢) |
+| The first coach message in an hour | about 6¢, since it writes the prompt cache |
+| Marking a coach reply Helpful | about 0.1¢ when it writes a note |
+
+A daily quick read plus a couple of follow-ups comes to roughly $2–3 a month,
+and nothing on days you don't use it. Treat these as an order of magnitude, not
+a quote.
+
+Coach messages are bigger than meal logs, so they draw more from the daily
+budget: a 50k soft limit covers roughly 8 to 10 coach messages a day.
 
 ### The guardrails
 
@@ -195,7 +207,7 @@ There are two token tiers, and they do different jobs:
 
 | Tier | Set by | Scope | What it does |
 |---|---|---|---|
-| Soft limit | `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT`, or per user with `admin_set_user_soft_limit` | per user | Drives the "~N logs left" counter and its amber warning. Never blocks. |
+| Soft limit | `ALMANAC_LLM_DEFAULT_DAILY_TOKEN_LIMIT`, or per user with `admin_set_user_soft_limit` | per user | Drives the "~N left" counter and its amber warning. Never blocks. |
 | Hard cap | `ALMANAC_LLM_HARD_DAILY_TOKEN_CAP`, or per user with `admin_set_user_hard_cap` | per user | Returns 429 once a user's own day passes it. The only thing that stops a chat. |
 
 Neither cap is a shared pool: a 75k ceiling gives every account its own 75k,
@@ -303,9 +315,10 @@ Web search is enabled per-organization in the [Anthropic
 Console](https://console.anthropic.com/) under **Settings → Privacy**. Until
 it's on there, the AI surfaces still work, but searches just fail.
 
-Searches draw a **flat charge** from the same daily token budget
-(`ALMANAC_LLM_TOKENS_PER_SEARCH`, default `2500`). The real token cost is still
-recorded for accounting; the budget is billed the flat amount.
+Search results inflate a turn's input tokens, so a turn that searches is charged
+that chat's recent average per turn instead of its raw count. A chat with no
+history yet is charged `ALMANAC_LLM_TOKENS_PER_SEARCH` (default `2500`). The
+real token cost is still recorded for accounting.
 
 ## Next steps
 

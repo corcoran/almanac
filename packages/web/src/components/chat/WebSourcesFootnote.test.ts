@@ -28,6 +28,13 @@ describe("WebSourcesFootnote", () => {
     expect(links[0]?.attributes("target")).toBe("_blank");
   });
 
+  it("exposes each full title on its link", async () => {
+    const w = mount(WebSourcesFootnote, { props: { sources } });
+    await w.find('[data-test="web-sources-toggle"]').trigger("click");
+    const links = w.findAll('[data-test="web-source-link"]');
+    expect(links.map((l) => l.attributes("title"))).toEqual(sources.map((s) => s.title));
+  });
+
   it("falls back to a monogram when a favicon errors", async () => {
     const w = mount(WebSourcesFootnote, { props: { sources } });
     const img = w.find('[data-test="web-source-favicon"]');

@@ -1,24 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrations.js";
+import { createAlcoholSession } from "../repos/alcohol.repo.js";
+import { createCardioSession } from "../repos/cardio.repo.js";
 import { createGroup } from "../repos/exercise-groups.repo.js";
 import { createExercise } from "../repos/exercises.repo.js";
 import { createMeal } from "../repos/meals.repo.js";
+import { createSleepLog } from "../repos/sleep.repo.js";
+import { createOrUpdateStepLog } from "../repos/step-logs.repo.js";
 import { createStoredMeal } from "../repos/stored-meals.repo.js";
+import { createUntrackedPeriod } from "../repos/untracked-periods.repo.js";
 import { createTemplate } from "../repos/workout-templates.repo.js";
 import { createWorkout } from "../repos/workouts.repo.js";
 import { defined } from "../test-support/index.js";
 import {
   buildReadDispatch,
+  getAccomplishmentsTool,
+  getAlcoholRecentTool,
+  getCardioRecentTool,
+  getDayStatusTool,
   getMacrosRangeTool,
   getPhaseHistoryTool,
+  getRecentWorkoutsTool,
   getReportTool,
+  getSleepRecentTool,
+  getStepsRecentTool,
+  getTdeeTool,
   getTrainingHistoryTool,
+  getUserProfileTool,
   getWeightTrendTool,
   getWorkoutForDayTool,
   getWorkoutRecommendationTool,
   listMealsForDayTool,
   listStoredMealsTool,
+  listUntrackedPeriodsTool,
+  listWorkoutTemplatesTool,
   MAX_MACROS_RANGE_DAYS,
   type ReadTool,
 } from "./read-tools.js";
@@ -522,5 +538,217 @@ describe("get_workout_for_day", () => {
     const out = getWorkoutForDayTool.handler(CTX(db))({ date: "2026-06-26" });
     const sessions = (out as { toolResult: unknown[] }).toolResult;
     expect(sessions).toHaveLength(0);
+  });
+});
+
+describe("parity read tools: logged data", () => {
+  function seedUser(db: ReturnType<typeof freshDb>, email: string): number {
+    const r = db
+      .prepare(
+        "INSERT INTO users (name, dob, height_cm, sex, email, timezone) VALUES ('U','1990-01-01',180,'male',?, 'America/New_York')",
+      )
+      .run(email);
+    return Number(r.lastInsertRowid);
+  }
+  const NOW = new Date("2026-09-30T16:00:00Z");
+  const ctxFor = (db: ReturnType<typeof freshDb>, userId: number) => ({
+    db,
+    userId,
+    tz: "America/New_York",
+    now: NOW,
+  });
+  const run = (tool: ReadTool, ctx: ReturnType<typeof ctxFor>, input: unknown = {}) => {
+    const out = tool.handler(ctx)(input);
+    if (out.kind !== "continue") throw new Error("expected continue");
+    return out.toolResult as unknown;
+  };
+  function twoUsers() {
+    const db = freshDb();
+    return { db, a: seedUser(db, "a@x.com"), b: seedUser(db, "b@x.com") };
+  }
+
+  it("get_sleep_recent returns only the caller's nights, inclusive of to_date", () => {
+    const { db, a, b } = twoUsers();
+    createSleepLog(db, { user_id: a, slept_on: "2026-09-29", hours: 7.5 });
+    createSleepLog(db, { user_id: a, slept_on: "2026-09-30", hours: 8 });
+    createSleepLog(db, { user_id: b, slept_on: "2026-09-30", hours: 6 });
+    const res = run(getSleepRecentTool, ctxFor(db, a), {
+      from_date: "2026-09-29",
+      to_date: "2026-09-30",
+    }) as Array<{ slept_on: string }>;
+    expect(res.map((r) => r.slept_on).sort()).toEqual(["2026-09-29", "2026-09-30"]);
+  });
+
+  it("get_sleep_recent rejects a malformed date", () => {
+    const { db, a } = twoUsers();
+    expect(run(getSleepRecentTool, ctxFor(db, a), { from_date: "yesterday" })).toEqual({
+      error: "from_date and to_date must be YYYY-MM-DD",
+    });
+  });
+
+  it("get_steps_recent returns only the caller's rows", () => {
+    const { db, a, b } = twoUsers();
+    createOrUpdateStepLog(db, { user_id: a, on_date: "2026-09-30", steps: 9000 });
+    createOrUpdateStepLog(db, { user_id: b, on_date: "2026-09-30", steps: 4000 });
+    const res = run(getStepsRecentTool, ctxFor(db, a)) as Array<{ steps: number }>;
+    expect(res.map((r) => r.steps)).toEqual([9000]);
+  });
+
+  it("get_cardio_recent returns only the caller's sessions", () => {
+    const { db, a, b } = twoUsers();
+    createCardioSession(db, { user_id: a, started_at: "2026-09-30T12:00:00.000Z", est_kcal: 300 });
+    createCardioSession(db, { user_id: b, started_at: "2026-09-30T12:00:00.000Z", est_kcal: 500 });
+    const res = run(getCardioRecentTool, ctxFor(db, a)) as Array<{ est_kcal: number }>;
+    expect(res.map((r) => r.est_kcal)).toEqual([300]);
+  });
+
+  it("get_alcohol_recent returns only the caller's sessions", () => {
+    const { db, a, b } = twoUsers();
+    createAlcoholSession(db, {
+      user_id: a,
+      started_at: "2026-09-30T00:30:00.000Z",
+      drinks_count: 2,
+      est_kcal: 300,
+    });
+    createAlcoholSession(db, {
+      user_id: b,
+      started_at: "2026-09-30T00:30:00.000Z",
+      drinks_count: 5,
+      est_kcal: 700,
+    });
+    const res = run(getAlcoholRecentTool, ctxFor(db, a)) as Array<{ drinks_count: number }>;
+    expect(res.map((r) => r.drinks_count)).toEqual([2]);
+  });
+
+  it("get_recent_workouts lists only the caller's and fetches one by id", () => {
+    const { db, a, b } = twoUsers();
+    const g = createGroup(db, { user_id: a, name: "Back" });
+    const ex = createExercise(db, { user_id: a, name: "Row", group_id: g.id });
+    const gb = createGroup(db, { user_id: b, name: "Back" });
+    const exb = createExercise(db, { user_id: b, name: "Row", group_id: gb.id });
+    const mine = createWorkout(db, {
+      user_id: a,
+      started_at: "2026-09-30T12:00:00.000Z",
+      rpe: 7,
+      exercises: [
+        {
+          exercise_id: ex.id,
+          display_order: 0,
+          planned_sets: 1,
+          sets: [{ reps: 8, weight_kg: 60 }],
+        },
+      ],
+    });
+    const theirs = createWorkout(db, {
+      user_id: b,
+      started_at: "2026-09-30T12:00:00.000Z",
+      rpe: 8,
+      exercises: [
+        {
+          exercise_id: exb.id,
+          display_order: 0,
+          planned_sets: 1,
+          sets: [{ reps: 5, weight_kg: 100 }],
+        },
+      ],
+    });
+    const list = run(getRecentWorkoutsTool, ctxFor(db, a)) as Array<{ id: number }>;
+    expect(list.map((w) => w.id)).toEqual([mine.id]);
+    expect(run(getRecentWorkoutsTool, ctxFor(db, a), { id: mine.id })).toMatchObject({
+      id: mine.id,
+    });
+    expect(run(getRecentWorkoutsTool, ctxFor(db, a), { id: theirs.id })).toEqual({
+      error: `workout ${theirs.id} not found`,
+    });
+  });
+
+  it("list_untracked_periods returns overlapping periods for the caller", () => {
+    const { db, a, b } = twoUsers();
+    createUntrackedPeriod(db, {
+      user_id: a,
+      started_on: "2026-09-10",
+      ended_on: "2026-09-17",
+      reason: "vacation",
+    });
+    createUntrackedPeriod(db, {
+      user_id: b,
+      started_on: "2026-09-10",
+      ended_on: "2026-09-17",
+      reason: "sick",
+    });
+    const res = run(listUntrackedPeriodsTool, ctxFor(db, a)) as Array<{ reason: string }>;
+    expect(res.map((p) => p.reason)).toEqual(["vacation"]);
+  });
+
+  it("list_workout_templates inlines exercise names", () => {
+    const { db, a } = twoUsers();
+    const g = createGroup(db, { user_id: a, name: "Back" });
+    const ex = createExercise(db, { user_id: a, name: "Barbell Row", group_id: g.id });
+    createTemplate(db, {
+      user_id: a,
+      name: "PULL",
+      items: [{ exercise_id: ex.id, display_order: 0, default_sets: 3, default_reps: 10 }],
+    });
+    const res = run(listWorkoutTemplatesTool, ctxFor(db, a)) as Array<{
+      name: string;
+      exercises: Array<{ exercise: string; sets: number }>;
+    }>;
+    expect(res[0]?.name).toBe("PULL");
+    expect(res[0]?.exercises[0]).toMatchObject({ exercise: "Barbell Row", sets: 3 });
+  });
+
+  it("get_user_profile returns the caller's profile without email or flags", () => {
+    const { db, a } = twoUsers();
+    const res = run(getUserProfileTool, ctxFor(db, a)) as Record<string, unknown>;
+    expect(res.dob).toBe("1990-01-01");
+    expect(res).not.toHaveProperty("email");
+    expect(res).not.toHaveProperty("llm_logging_enabled");
+  });
+
+  it("get_tdee returns a TDEE with a basis", () => {
+    const { db, a } = twoUsers();
+    const res = run(getTdeeTool, ctxFor(db, a)) as { basis?: string };
+    expect(typeof res.basis).toBe("string");
+  });
+
+  it("get_day_status returns status and next best action", () => {
+    const { db, a } = twoUsers();
+    const res = run(getDayStatusTool, ctxFor(db, a)) as Record<string, unknown>;
+    expect(res).toHaveProperty("day_status");
+    expect(res).toHaveProperty("next_best_action");
+  });
+
+  it("get_accomplishments returns recent wins and history", () => {
+    const { db, a } = twoUsers();
+    const res = run(getAccomplishmentsTool, ctxFor(db, a)) as Record<string, unknown>;
+    expect(res).toHaveProperty("recent");
+    expect(res).toHaveProperty("history");
+  });
+
+  it("list_stored_meals includes 14-day usage", () => {
+    const { db, a } = twoUsers();
+    createStoredMeal(db, {
+      user_id: a,
+      name: "Shake",
+      kcal: 300,
+      protein_g: 40,
+      carb_g: 20,
+      fat_g: 5,
+    });
+    createMeal(db, {
+      user_id: a,
+      eaten_at: "2026-09-29T14:00:00.000Z",
+      name: "shake",
+      kcal: 300,
+      protein_g: 40,
+      carb_g: 20,
+      fat_g: 5,
+    });
+    const res = run(listStoredMealsTool, ctxFor(db, a)) as Array<{
+      recent_uses: number;
+      last_used_at: string | null;
+    }>;
+    expect(res[0]?.recent_uses).toBe(1);
+    expect(res[0]?.last_used_at).toBe("2026-09-29T14:00:00.000Z");
   });
 });

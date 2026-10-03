@@ -92,9 +92,14 @@ function buildLlmDepsFromEnv(): { config: LlmConfig; createMessage: CreateMessag
     config.enabled && config.apiKey
       ? async (args) => {
           const client = createAnthropicClient(config.apiKey);
-          return (await client.messages.create(
-            args as Parameters<typeof client.messages.create>[0],
-          )) as Awaited<ReturnType<CreateMessage>>;
+          const { betas, ...rest } = args;
+          return (await (betas
+            ? client.beta.messages.create({ ...rest, betas } as Parameters<
+                typeof client.beta.messages.create
+              >[0])
+            : client.messages.create(
+                rest as Parameters<typeof client.messages.create>[0],
+              ))) as Awaited<ReturnType<CreateMessage>>;
         }
       : async () => {
           throw new Error("LLM not configured");

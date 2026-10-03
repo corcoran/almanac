@@ -169,6 +169,11 @@ describe("web source schemas", () => {
     });
     expect(t.sources?.length).toBe(1);
   });
+
+  it("ChatTurnSchema keeps optional lookups", () => {
+    const t = ChatTurnSchema.parse({ role: "assistant", content: "hi", lookups: ["get_report"] });
+    expect(t.lookups).toEqual(["get_report"]);
+  });
 });
 
 describe("InsightsChatResponseSchema", () => {
@@ -176,6 +181,7 @@ describe("InsightsChatResponseSchema", () => {
     const ok = InsightsChatResponseSchema.safeParse({
       kind: "answer",
       text: "You're trending down ~0.4kg/wk.",
+      assistant_turn_id: 7,
       usage: {
         input_tokens: 1,
         output_tokens: 1,
@@ -185,8 +191,27 @@ describe("InsightsChatResponseSchema", () => {
         cost_usd: 0,
         model: "claude-haiku-4-5",
       },
+      lookups: ["get_report"],
     });
     expect(ok.success).toBe(true);
+  });
+
+  it("requires lookups", () => {
+    const r = InsightsChatResponseSchema.safeParse({
+      kind: "answer",
+      text: "t",
+      assistant_turn_id: 7,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+        web_search_requests: 0,
+        cost_usd: 0,
+        model: "m",
+      },
+    });
+    expect(r.success).toBe(false);
   });
 });
 

@@ -14,7 +14,15 @@ import { isApiError } from "../api/errors.js";
  * A single chat turn. Insights answers are plain text, so there is no
  * proposal/question variant the way meal-chat has — both roles carry a string.
  */
-export type Turn = { role: "user" | "assistant"; content: string; sources?: WebSource[] };
+export type Turn = {
+  role: "user" | "assistant";
+  content: string;
+  sources?: WebSource[];
+  id?: number;
+  helpful?: boolean;
+  /** Sent back with history so the model sees what its reply looked up; never displayed. */
+  lookups?: string[];
+};
 
 /**
  * Pull the human-facing `message` out of the API's error envelope
@@ -92,6 +100,9 @@ export const useInsightsChatStore = defineStore("insightsChat", {
           role: t.role,
           content: t.content,
           ...(t.sources ? { sources: t.sources } : {}),
+          ...(t.id !== undefined ? { id: t.id } : {}),
+          ...(t.helpful !== undefined ? { helpful: t.helpful } : {}),
+          ...(t.lookups ? { lookups: t.lookups } : {}),
         }));
         this.viewedDate = h.on_date;
         const d = await client.get("/v1/llm/insights-chat/days", InsightsDaysResponseSchema);
@@ -109,7 +120,11 @@ export const useInsightsChatStore = defineStore("insightsChat", {
       this.error = null;
       // History is the prior turns (oldest first); the newest user message is
       // sent as `message`, NOT folded into history.
-      const history = this.turns.map((t) => ({ role: t.role, content: t.content }));
+      const history = this.turns.map((t) => ({
+        role: t.role,
+        content: t.content,
+        ...(t.lookups ? { lookups: t.lookups } : {}),
+      }));
       this.turns.push({ role: "user", content: trimmed });
       this.pending = true;
       try {
@@ -122,6 +137,9 @@ export const useInsightsChatStore = defineStore("insightsChat", {
         this.turns.push({
           role: "assistant",
           content: res.text,
+          id: res.assistant_turn_id,
+          helpful: false,
+          lookups: res.lookups,
           ...(res.usage.sources.length > 0 ? { sources: res.usage.sources } : {}),
         });
         // A reply on a viewed day that wasn't yet in the day list means this is
@@ -166,6 +184,17 @@ export const useInsightsChatStore = defineStore("insightsChat", {
       if (this.loading) return;
       await client.delete("/v1/llm/insights-chat/history", z.undefined());
       await this.load(client);
+    },
+    async setHelpful(client: ApiClient, turnId: number, helpful: boolean): Promise<void> {
+      const turn = this.turns.find((t) => t.id === turnId);
+      if (!turn) return;
+      const prev = turn.helpful ?? false;
+      turn.helpful = helpful;
+      try {
+        await client.patch(`/v1/llm/insights-chat/turns/${turnId}`, { helpful }, z.undefined());
+      } catch {
+        turn.helpful = prev;
+      }
     },
     reset(): void {
       this.turns = [];

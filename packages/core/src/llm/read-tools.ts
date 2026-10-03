@@ -1,14 +1,27 @@
 import type { Connection } from "../db/connection.js";
 import { addDaysIso, currentUserDate, userDayWindow } from "../domain/user-day.js";
+import { listAlcoholSessions } from "../repos/alcohol.repo.js";
 import { listBodyWeights } from "../repos/body-weights.repo.js";
+import { listCardioSessions } from "../repos/cardio.repo.js";
 import { listExercises } from "../repos/exercises.repo.js";
 import { listMeals } from "../repos/meals.repo.js";
 import { listPhases } from "../repos/nutrition-phases.repo.js";
-import { listStoredMeals } from "../repos/stored-meals.repo.js";
+import { listSleepLogs } from "../repos/sleep.repo.js";
+import { listStepLogs } from "../repos/step-logs.repo.js";
+import { listStoredMealsWithUsage } from "../repos/stored-meals.repo.js";
+import { listUntrackedPeriods } from "../repos/untracked-periods.repo.js";
+import { findUserById } from "../repos/users.repo.js";
 import { listTemplates } from "../repos/workout-templates.repo.js";
-import { listWorkoutsWithDetail } from "../repos/workouts.repo.js";
+import {
+  findWorkoutByIdForUser,
+  listWorkoutsInRange,
+  listWorkoutsWithDetail,
+} from "../repos/workouts.repo.js";
+import { getAccomplishmentHistory, getRecentAccomplishments } from "../signals/accomplishments.js";
+import { computeDayStatus } from "../signals/day-status.js";
 import { recommendTemplateForUser, summarizeTrainingHistory } from "../signals/index.js";
-import { computeDailyTargetForDate } from "../signals/inputs.js";
+import { computeDailyTargetForDate, computeTdeeForUser } from "../signals/inputs.js";
+import { computeNextBestAction } from "../signals/next-best-action.js";
 import { assembleReport } from "../signals/report.js";
 import { buildReportMarkdown } from "../signals/report-markdown.js";
 import { computeTrendWeight } from "../signals/trend-weight.js";
@@ -314,13 +327,16 @@ export const listStoredMealsTool: ReadTool = {
       "The user's saved meal library (their reusable meals/recipes with macros). Use when " +
       "the user asks what's in one of their stored/saved meals, or to reference a saved " +
       "meal's macros — the overview does NOT include the saved-meal library. Takes no " +
-      "arguments. Returns an array of { id, name, kcal, protein_g, carb_g, fat_g, description }.",
+      "arguments. Returns an array of { id, name, kcal, protein_g, carb_g, fat_g, description, " +
+      "recent_uses, last_used_at }. `recent_uses` counts meals with the same name eaten in the " +
+      "last 14 days; a high count marks a staple, zero marks a one-off the user may not have on hand.",
     input_schema: { type: "object", properties: {} },
   },
   handler:
-    ({ db, userId }) =>
+    ({ db, userId, now }) =>
     () => {
-      const meals = listStoredMeals(db, userId).map((m) => ({
+      const since = new Date(now.getTime() - 14 * 86_400_000).toISOString();
+      const meals = listStoredMealsWithUsage(db, userId, since).map((m) => ({
         id: m.id,
         name: m.name,
         kcal: m.kcal,
@@ -328,6 +344,8 @@ export const listStoredMealsTool: ReadTool = {
         carb_g: m.carb_g,
         fat_g: m.fat_g,
         description: m.description,
+        recent_uses: m.recent_uses,
+        last_used_at: m.last_used_at,
       }));
       return { kind: "continue", toolResult: meals };
     },
@@ -463,4 +481,273 @@ export const getTrainingHistoryTool: ReadTool = {
         toolResult: summarizeTrainingHistory(db, userId, now, tz, { days }),
       };
     },
+};
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Inclusive user-local [from, to] dates from optional input, defaulting to the last `days` days. */
+function resolveDays(
+  input: unknown,
+  ctx: ReadToolCtx,
+  defaultDays: number,
+): { from: string; to: string } | { error: string } {
+  const i = (input ?? {}) as { from_date?: unknown; to_date?: unknown };
+  const today = currentUserDate(ctx.now, ctx.tz);
+  const from = i.from_date ?? addDaysIso(today, -(defaultDays - 1));
+  const to = i.to_date ?? today;
+  if (
+    typeof from !== "string" ||
+    !DATE_RE.test(from) ||
+    typeof to !== "string" ||
+    !DATE_RE.test(to)
+  ) {
+    return { error: "from_date and to_date must be YYYY-MM-DD" };
+  }
+  return { from, to };
+}
+
+const DATE_RANGE_SCHEMA = {
+  type: "object",
+  properties: {
+    from_date: {
+      type: "string",
+      description: "YYYY-MM-DD inclusive (default: 13 days ago, so the range is the last 14 days).",
+    },
+    to_date: { type: "string", description: "YYYY-MM-DD inclusive (default: today)." },
+  },
+};
+
+function instantRange(r: { from: string; to: string }, tz: string): { from: string; to: string } {
+  return {
+    from: userDayWindow(r.from, tz).startUtc.toISOString(),
+    to: userDayWindow(r.to, tz).endUtc.toISOString(),
+  };
+}
+
+export const getSleepRecentTool: ReadTool = {
+  definition: {
+    name: "get_sleep_recent",
+    description:
+      "Nightly sleep logs (hours, quality 1-5, notes) for a date range. The overview only has " +
+      "the weekly average and sleep debt; use this for night-by-night patterns.",
+    input_schema: DATE_RANGE_SCHEMA,
+  },
+  handler: (ctx) => (input) => {
+    const r = resolveDays(input, ctx, 14);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    const logs = listSleepLogs(ctx.db, ctx.userId, {
+      from: r.from,
+      to: addDaysIso(r.to, 1),
+      limit: 200,
+    });
+    return { kind: "continue", toolResult: logs };
+  },
+};
+
+export const getStepsRecentTool: ReadTool = {
+  definition: {
+    name: "get_steps_recent",
+    description: "Daily step counts for a date range.",
+    input_schema: DATE_RANGE_SCHEMA,
+  },
+  handler: (ctx) => (input) => {
+    const r = resolveDays(input, ctx, 14);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    const logs = listStepLogs(ctx.db, ctx.userId, {
+      from: r.from,
+      to: addDaysIso(r.to, 1),
+      limit: 200,
+    });
+    return { kind: "continue", toolResult: logs };
+  },
+};
+
+export const getCardioRecentTool: ReadTool = {
+  definition: {
+    name: "get_cardio_recent",
+    description:
+      "Individual cardio sessions (type, duration, distance, avg heart rate, est kcal) for a date " +
+      "range. The overview only has weekly totals.",
+    input_schema: DATE_RANGE_SCHEMA,
+  },
+  handler: (ctx) => (input) => {
+    const r = resolveDays(input, ctx, 14);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    const sessions = listCardioSessions(ctx.db, ctx.userId, {
+      ...instantRange(r, ctx.tz),
+      limit: 200,
+    });
+    return { kind: "continue", toolResult: sessions };
+  },
+};
+
+export const getAlcoholRecentTool: ReadTool = {
+  definition: {
+    name: "get_alcohol_recent",
+    description:
+      "Individual drinking sessions (drinks, est kcal, time) for a date range. The overview only " +
+      "has weekly drink counts.",
+    input_schema: DATE_RANGE_SCHEMA,
+  },
+  handler: (ctx) => (input) => {
+    const r = resolveDays(input, ctx, 14);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    const sessions = listAlcoholSessions(ctx.db, ctx.userId, {
+      ...instantRange(r, ctx.tz),
+      limit: 200,
+    });
+    return { kind: "continue", toolResult: sessions };
+  },
+};
+
+export const getRecentWorkoutsTool: ReadTool = {
+  definition: {
+    name: "get_recent_workouts",
+    description:
+      "Workout sessions in a date range (template, start/end, notes). Pass `id` instead to get " +
+      "one session in full (exercises, sets, reps, weight, RPE).",
+    input_schema: {
+      type: "object",
+      properties: {
+        ...DATE_RANGE_SCHEMA.properties,
+        id: { type: "integer", description: "A workout id from a previous call." },
+      },
+    },
+  },
+  handler: (ctx) => (input) => {
+    const id = (input as { id?: unknown } | null)?.id;
+    if (typeof id === "number") {
+      const w = findWorkoutByIdForUser(ctx.db, ctx.userId, id);
+      return { kind: "continue", toolResult: w ?? { error: `workout ${id} not found` } };
+    }
+    const r = resolveDays(input, ctx, 14);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    const workouts = listWorkoutsInRange(ctx.db, ctx.userId, {
+      ...instantRange(r, ctx.tz),
+      limit: 200,
+    });
+    return { kind: "continue", toolResult: workouts };
+  },
+};
+
+export const listUntrackedPeriodsTool: ReadTool = {
+  definition: {
+    name: "list_untracked_periods",
+    description:
+      "Periods the user marked as not tracked (vacation, illness). Days inside them are excluded " +
+      "from averages and TDEE. Check this before reading a gap in logging as lapsed tracking.",
+    input_schema: {
+      type: "object",
+      properties: {
+        from_date: {
+          type: "string",
+          description:
+            "YYYY-MM-DD inclusive (default: 89 days ago, so the range is the last 90 days).",
+        },
+        to_date: { type: "string", description: "YYYY-MM-DD inclusive (default: today)." },
+      },
+    },
+  },
+  handler: (ctx) => (input) => {
+    const r = resolveDays(input, ctx, 90);
+    if ("error" in r) return { kind: "continue", toolResult: r };
+    return { kind: "continue", toolResult: listUntrackedPeriods(ctx.db, ctx.userId, r) };
+  },
+};
+
+export const listWorkoutTemplatesTool: ReadTool = {
+  definition: {
+    name: "list_workout_templates",
+    description:
+      "The user's active workout templates with each exercise's prescription (sets, reps, " +
+      "default weight in kg, notes) in order. Use when reviewing or suggesting changes to a program.",
+    input_schema: { type: "object", properties: {} },
+  },
+  handler: (ctx) => () => {
+    const names = new Map(
+      listExercises(ctx.db, ctx.userId, { includeArchived: true }).map((e) => [e.id, e.name]),
+    );
+    const templates = listTemplates(ctx.db, ctx.userId).map((t) => ({
+      id: t.id,
+      name: t.name,
+      notes: t.notes,
+      exercises: (t.items ?? []).map((it) => ({
+        exercise: names.get(it.exercise_id) ?? `exercise ${it.exercise_id}`,
+        sets: it.default_sets,
+        reps: it.default_reps,
+        weight_kg: it.default_weight_kg,
+        notes: it.notes,
+      })),
+    }));
+    return { kind: "continue", toolResult: templates };
+  },
+};
+
+/** The caller's profile, minus email and account flags. */
+export const getUserProfileTool: ReadTool = {
+  definition: {
+    name: "get_user_profile",
+    description:
+      "The user's profile: name, date of birth, height, sex, unit system, timezone, activity level. " +
+      "Use for age/sex/bodyweight-relative comparisons. Weights from tools are kg; speak in the " +
+      "user's unit system.",
+    input_schema: { type: "object", properties: {} },
+  },
+  handler: (ctx) => () => {
+    const u = findUserById(ctx.db, ctx.userId);
+    if (!u) return { kind: "continue", toolResult: { error: "profile not found" } };
+    const { name, dob, height_cm, sex, preferred_unit_system, timezone, activity_level } = u;
+    return {
+      kind: "continue",
+      toolResult: { name, dob, height_cm, sex, preferred_unit_system, timezone, activity_level },
+    };
+  },
+};
+
+export const getTdeeTool: ReadTool = {
+  definition: {
+    name: "get_tdee",
+    description:
+      "The current calculated TDEE with its basis (profile_baseline while calibrating, " +
+      "measured_intake once enough weigh-ins and meal days exist) and the inputs behind it.",
+    input_schema: { type: "object", properties: {} },
+  },
+  handler: (ctx) => () => ({
+    kind: "continue",
+    toolResult: computeTdeeForUser(ctx.db, ctx.userId, ctx.now),
+  }),
+};
+
+export const getDayStatusTool: ReadTool = {
+  definition: {
+    name: "get_day_status",
+    description:
+      "Today's status against target plus the nudges the app is currently showing and its next " +
+      "best action. Use to know what the dashboard is already telling the user.",
+    input_schema: { type: "object", properties: {} },
+  },
+  handler: (ctx) => () => ({
+    kind: "continue",
+    toolResult: {
+      day_status: computeDayStatus(ctx.db, ctx.userId, ctx.now),
+      next_best_action: computeNextBestAction(ctx.db, ctx.userId, ctx.now),
+    },
+  }),
+};
+
+export const getAccomplishmentsTool: ReadTool = {
+  definition: {
+    name: "get_accomplishments",
+    description:
+      "The user's wins: recent accomplishments (last 7 days) and the full history with totals. " +
+      "Weights inside are kg.",
+    input_schema: { type: "object", properties: {} },
+  },
+  handler: (ctx) => () => ({
+    kind: "continue",
+    toolResult: {
+      recent: getRecentAccomplishments(ctx.db, ctx.userId, ctx.now),
+      history: getAccomplishmentHistory(ctx.db, ctx.userId, ctx.now),
+    },
+  }),
 };

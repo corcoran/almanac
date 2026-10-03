@@ -12,6 +12,7 @@ function fakeClient(responses: unknown[]) {
 const answerResponse = {
   kind: "answer",
   text: "you're on track",
+  assistant_turn_id: 1,
   usage: {
     input_tokens: 1,
     output_tokens: 1,
@@ -21,6 +22,7 @@ const answerResponse = {
     cost_usd: 0,
     model: "claude-haiku-4-5",
   },
+  lookups: [],
 };
 
 describe("insights-chat store", () => {
@@ -34,7 +36,13 @@ describe("insights-chat store", () => {
 
     expect(store.turns).toHaveLength(2);
     expect(store.turns[0]).toEqual({ role: "user", content: "how am I doing?" });
-    expect(store.turns[1]).toEqual({ role: "assistant", content: "you're on track" });
+    expect(store.turns[1]).toEqual({
+      role: "assistant",
+      content: "you're on track",
+      id: 1,
+      helpful: false,
+      lookups: [],
+    });
     expect(store.pending).toBe(false);
   });
 
@@ -52,7 +60,50 @@ describe("insights-chat store", () => {
     expect(secondCallBody.message).toBe("second question");
     expect(secondCallBody.history).toEqual([
       { role: "user", content: "first question" },
-      { role: "assistant", content: "you're on track" },
+      { role: "assistant", content: "you're on track", lookups: [] },
+    ]);
+  });
+
+  it("sends a reply's lookups back with the next message's history", async () => {
+    const store = useInsightsChatStore();
+    const client = fakeClient([
+      { ...answerResponse, lookups: ["get_report", "get_tdee"] },
+      answerResponse,
+    ]);
+    await store.send(client, "first question");
+    expect(store.turns[1]?.lookups).toEqual(["get_report", "get_tdee"]);
+    await store.send(client, "second question");
+    const body = client.post.mock.calls[1]?.[1] as { history: unknown[] };
+    expect(body.history).toEqual([
+      { role: "user", content: "first question" },
+      { role: "assistant", content: "you're on track", lookups: ["get_report", "get_tdee"] },
+    ]);
+  });
+
+  it("hydrates lookups from history and sends them with the next message", async () => {
+    const store = useInsightsChatStore();
+    const get = vi.fn((path: string) => {
+      if (path.startsWith("/v1/llm/insights-chat/history")) {
+        return Promise.resolve({
+          on_date: "2026-06-24",
+          turns: [
+            { role: "user", content: "q" },
+            { role: "assistant", content: "a", lookups: ["get_weight_trend"] },
+            { role: "assistant", content: "b" },
+          ],
+        });
+      }
+      return Promise.resolve({ days: ["2026-06-24"] });
+    });
+    const post = vi.fn().mockResolvedValueOnce(InsightsChatResponseSchema.parse(answerResponse));
+    const client = { get, post } as unknown as import("../api/client.js").ApiClient;
+    await store.load(client);
+    await store.send(client, "really?");
+    const body = post.mock.calls[0]?.[1] as { history: unknown[] };
+    expect(body.history).toEqual([
+      { role: "user", content: "q" },
+      { role: "assistant", content: "a", lookups: ["get_weight_trend"] },
+      { role: "assistant", content: "b" },
     ]);
   });
 
@@ -111,6 +162,7 @@ describe("insights-chat store", () => {
     const sourcedResponse = {
       kind: "answer",
       text: "a",
+      assistant_turn_id: 1,
       usage: {
         input_tokens: 1,
         output_tokens: 1,
@@ -121,6 +173,7 @@ describe("insights-chat store", () => {
         cost_usd: 0,
         model: "m",
       },
+      lookups: [],
     };
     const client = fakeClient([sourcedResponse, answerResponse]);
 
@@ -129,15 +182,14 @@ describe("insights-chat store", () => {
     const assistant = store.turns.at(-1);
     expect(assistant?.sources).toEqual([{ url: "https://x.com/a", title: "A", domain: "x.com" }]);
 
-    // The NEXT send's outbound history must be role+content only — sources are
-    // display-only and are NEVER sent back to the model.
+    // Sources are display-only and are NEVER sent back to the model.
     await store.send(client, "second question");
     const secondBody = client.post.mock.calls[1]?.[1] as {
       history: { role: string; content: string }[];
     };
     for (const h of secondBody.history) {
-      expect(Object.keys(h).sort()).toEqual(["content", "role"]);
       expect("sources" in h).toBe(false);
+      expect(Object.keys(h).filter((k) => !["content", "lookups", "role"].includes(k))).toEqual([]);
     }
   });
 
@@ -371,5 +423,37 @@ describe("insights-chat store", () => {
     expect(del).toHaveBeenCalled();
     expect(del.mock.calls[0]?.[0]).toBe("/v1/llm/insights-chat/history");
     expect(store.turns).toHaveLength(0);
+  });
+
+  it("keeps the assistant turn id from the response", async () => {
+    const client = fakeClient([{ ...answerResponse, assistant_turn_id: 42 }]);
+    const store = useInsightsChatStore();
+    await store.send(client, "hi");
+    expect(store.turns[1]).toMatchObject({ role: "assistant", id: 42, helpful: false });
+  });
+
+  it("setHelpful patches and updates the turn", async () => {
+    const store = useInsightsChatStore();
+    store.turns = [{ role: "assistant", content: "a", id: 7, helpful: false }];
+    const client = {
+      patch: vi.fn().mockResolvedValue(undefined),
+    } as unknown as import("../api/client.js").ApiClient;
+    await store.setHelpful(client, 7, true);
+    expect(client.patch).toHaveBeenCalledWith(
+      "/v1/llm/insights-chat/turns/7",
+      { helpful: true },
+      expect.anything(),
+    );
+    expect(store.turns[0]?.helpful).toBe(true);
+  });
+
+  it("setHelpful reverts on failure", async () => {
+    const store = useInsightsChatStore();
+    store.turns = [{ role: "assistant", content: "a", id: 7, helpful: false }];
+    const client = {
+      patch: vi.fn().mockRejectedValue({ kind: "http", status: 500, body: "" }),
+    } as unknown as import("../api/client.js").ApiClient;
+    await store.setHelpful(client, 7, true);
+    expect(store.turns[0]?.helpful).toBe(false);
   });
 });

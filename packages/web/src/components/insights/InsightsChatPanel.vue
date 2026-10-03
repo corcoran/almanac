@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ShareReportSchema } from "@almanac/core/schemas";
+import { INSIGHTS_STARTERS, ShareReportSchema } from "@almanac/core/schemas";
 import { buildReportMarkdown } from "@almanac/core/signals";
 import MarkdownIt from "markdown-it";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { ApiClient } from "../../api/client.js";
 import { useIsMobile } from "../../composables/useIsMobile.js";
 import { useVisualViewportHeight } from "../../composables/useVisualViewportHeight.js";
-import { useInsightsChatStore } from "../../stores/insights-chat.store.js";
+import { type Turn, useInsightsChatStore } from "../../stores/insights-chat.store.js";
 import { useLlmUsageStore } from "../../stores/llm-usage.store.js";
 import WebSourcesFootnote from "../chat/WebSourcesFootnote.vue";
 import UsageIndicator from "../meal-chat/UsageIndicator.vue";
@@ -27,10 +27,30 @@ const md = new MarkdownIt({
   breaks: true,
 });
 
-// The auto-insight opener, fired on a brand-new empty day. Shared by onMounted
-// (opening a fresh day) and onNewChat (clearing today's thread) so the two paths
-// stay identical and the literal can't drift.
-const OPENER = "Give me a quick read on how I'm doing.";
+const MAX_LINK_LABEL = 40;
+
+function shortLinkLabel(href: string): string {
+  const label = href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^www\./i, "");
+  return label.length <= MAX_LINK_LABEL ? label : `${label.slice(0, MAX_LINK_LABEL - 1)}…`;
+}
+
+// Every link opens in a new tab. A link whose visible text is its own URL gets a
+// shortened label (full URL stays in href and title) so it can't outgrow the bubble.
+md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
+  const token = tokens[idx];
+  const text = tokens[idx + 1];
+  if (!token || !text) return self.renderToken(tokens, idx, options);
+  const href = token.attrGet("href") ?? "";
+  const bare = text.content.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  const hrefBare = href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  if (href && (text.content === href || bare === hrefBare)) {
+    text.content = shortLinkLabel(href);
+    token.attrSet("title", href);
+  }
+  token.attrSet("target", "_blank");
+  token.attrSet("rel", "noopener noreferrer");
+  return self.renderToken(tokens, idx, options);
+};
 
 function renderMarkdown(text: string): string {
   return md.render(text);
@@ -97,6 +117,20 @@ const isPastView = computed(() => {
   return d !== null && today !== undefined && today !== "" && d < today;
 });
 
+const starters = Object.values(INSIGHTS_STARTERS);
+const showStarters = computed(
+  () =>
+    !isPastView.value &&
+    store.loaded &&
+    !store.loading &&
+    !store.pending &&
+    store.turns.length === 0,
+);
+
+function onHelpful(turn: Turn): void {
+  if (turn.id !== undefined) void store.setHelpful(props.client, turn.id, !turn.helpful);
+}
+
 // Show the viewed date (compact MM/DD) only when viewing a past day. Same signal
 // as isPastView. The full ISO date pushed the header buttons off-screen on a
 // phone; `d` is a validated YYYY-MM-DD so slicing month/day is safe.
@@ -123,22 +157,15 @@ function scrollToBottom(): void {
 onMounted(() => {
   panelRef.value?.focus();
   void usageStore.refresh(props.client, "insights_chat");
-  // Hydrate the server-persisted transcript FIRST (zero tokens), THEN gate the
-  // auto-opener on the LOADED turns — so reopening a day that already has a
-  // conversation (or stepping to a past day) never re-fires the insight; only a
-  // brand-new empty day surfaces one with no typing.
+  // Hydrate the server-persisted transcript (zero tokens).
   void (async () => {
     // Open the SELECTED calendar day when it's a PAST day; otherwise (today, or
-    // no traversal) load today. A past day is read-only and must NOT auto-fire
-    // the opener — only a brand-new empty TODAY surfaces one with no typing.
+    // no traversal) load today.
     const initialDate =
       props.viewedDate && props.realToday && props.viewedDate < props.realToday
         ? props.viewedDate
         : undefined;
     await store.load(props.client, initialDate);
-    if (initialDate === undefined && store.turns.length === 0) {
-      void send(OPENER);
-    }
     void nextTick(scrollToBottom);
   })();
 });
@@ -179,9 +206,8 @@ async function onSend(): Promise<void> {
 }
 
 // "Reset day" permanently DELETES today's server-side thread (store.newChat does
-// a hard clearDay), then re-fires the auto-insight — mirroring onMounted's
-// load-then-gate so the fresh thread behaves like opening a brand-new day. It's
-// destructive (the day's conversation is gone, not recoverable), so confirm first.
+// a hard clearDay). It's destructive (the day's conversation is gone, not
+// recoverable), so confirm first.
 async function onResetDay(): Promise<void> {
   if (store.loading) return;
   const ok = window.confirm(
@@ -189,9 +215,6 @@ async function onResetDay(): Promise<void> {
   );
   if (!ok) return;
   await store.newChat(props.client);
-  if (store.turns.length === 0) {
-    void send(OPENER);
-  }
   void nextTick(scrollToBottom);
 }
 
@@ -199,7 +222,6 @@ async function onResetDay(): Promise<void> {
 async function onJumpToday(): Promise<void> {
   if (store.loading) return;
   await store.load(props.client); // no date → today; resets viewedDate
-  if (store.turns.length === 0) void send(OPENER); // fresh today → opener
   void nextTick(scrollToBottom);
 }
 
@@ -272,7 +294,7 @@ async function onCopy(): Promise<void> {
           :disabled="store.loading"
           @click="onResetDay"
         >Reset day</button>
-        <UsageIndicator :balance="usageStore.balance" />
+        <UsageIndicator :balance="usageStore.balance" unit="messages" />
         <button
           type="button"
           class="copy-btn"
@@ -303,26 +325,49 @@ async function onCopy(): Promise<void> {
       <div ref="chatBodyRef" class="chat-body">
         <div
           v-for="(turn, i) in store.turns"
-          :key="i"
+          :key="`${turn.role}-${turn.id ?? `i${i}`}`"
           class="turn"
           :class="turn.role === 'user' ? 'turn-user' : 'turn-assistant'"
           :data-test="turn.role === 'user' ? 'insights-user-turn' : 'insights-assistant-turn'"
         >
           <p v-if="turn.role === 'user'" class="bubble bubble-user">{{ turn.content }}</p>
           <!-- v-html is safe here: renderMarkdown uses markdown-it with html:false, which escapes any literal HTML in the model output (no <script>/<img onerror> can slip through). -->
-          <div v-else class="bubble markdown" v-html="renderMarkdown(turn.content)"></div>
-          <!-- Dormant until insights web search is enabled: turn.sources is [] today
-               (the coach runs with searchEnabled:false), so this never renders. Kept
-               wired so sources work with zero further change the day search flips on. -->
-          <WebSourcesFootnote
-            v-if="turn.sources && turn.sources.length > 0"
-            :sources="turn.sources"
-          />
+          <div v-else class="assistant-col">
+            <div class="bubble markdown" v-html="renderMarkdown(turn.content)"></div>
+            <WebSourcesFootnote
+              v-if="turn.sources && turn.sources.length > 0"
+              :sources="turn.sources"
+            />
+            <button
+              v-if="turn.id !== undefined"
+              type="button"
+              class="helpful-btn"
+              :class="{ on: turn.helpful }"
+              data-test="insights-helpful"
+              :aria-pressed="turn.helpful ? 'true' : 'false'"
+              @click="onHelpful(turn)"
+            >
+              Helpful ✨
+            </button>
+          </div>
         </div>
         <p v-if="store.pending || store.loading" class="pending" data-test="insights-pending">
           {{ store.pending ? "Thinking…" : "Loading…" }}
         </p>
         <p v-if="store.error" class="error" data-test="insights-error">{{ store.error }}</p>
+      </div>
+
+      <div v-if="showStarters" class="starters">
+        <button
+          v-for="s in starters"
+          :key="s.message"
+          type="button"
+          class="starter-btn"
+          data-test="insights-starter"
+          @click="send(s.message)"
+        >
+          {{ s.label }}
+        </button>
       </div>
 
       <form v-if="!isPastView" class="input-bar" @submit.prevent="onSend">
@@ -450,6 +495,13 @@ async function onCopy(): Promise<void> {
 /* User turns are plain text — preserve their newlines. Assistant markdown
    handles line breaks via markdown-it (breaks:true), so it must NOT pre-wrap. */
 .bubble-user { white-space: pre-wrap; }
+.assistant-col { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; max-width: 85%; }
+.assistant-col .bubble { max-width: 100%; }
+.helpful-btn { background: transparent; border: 1px solid var(--line-2, #353a4a); color: var(--ink-faint, #6b7180); border-radius: 999px; font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.helpful-btn.on { color: var(--ink, #e6e8ee); border-color: var(--ink-dim, #9aa0ad); }
+.starters { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 8px; }
+.starter-btn { background: var(--surface-2, #1f2330); border: 1px solid var(--line-2, #353a4a); color: var(--ink, #e6e8ee); border-radius: 999px; font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer; }
+.starter-btn:hover { border-color: var(--ink-dim, #9aa0ad); }
 .turn-user .bubble { background: var(--accent, #5b7cfa); color: #fff; }
 .turn-assistant .bubble { background: var(--bg, #0e1016); border: 1px solid var(--line, #262a36); }
 .markdown :deep(p) { margin: 0 0 8px; }
@@ -461,6 +513,7 @@ async function onCopy(): Promise<void> {
   background: rgba(255, 255, 255, 0.08); padding: 1px 4px;
   border-radius: 4px; font-size: 12px;
 }
+.markdown { overflow-wrap: anywhere; }
 .markdown :deep(a) { color: var(--accent, #5b7cfa); }
 /* Headers: the model occasionally leads sections with ## / ###. Scale them down
    to fit a chat bubble rather than the default page-sized h1/h2. */
