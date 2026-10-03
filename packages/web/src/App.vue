@@ -436,21 +436,23 @@ watch(
       <button
         type="button"
         class="trophy-btn"
+        :class="{ labeled: !isMobile }"
         data-test="open-history"
         aria-label="Achievements"
         @click="showHistory = true"
       >
-        🏆
+        <span v-if="!isMobile" class="btn-label">Achievements</span>🏆
       </button>
       <button
         v-if="mealChatEnabled"
         type="button"
         class="trophy-btn"
+        :class="{ labeled: !isMobile }"
         data-test="open-insights"
-        aria-label="AI insights"
+        aria-label="Assistant"
         @click="showInsights = true"
       >
-        💬
+        <span v-if="!isMobile" class="btn-label">Assistant</span>💬
       </button>
       <UserMenu :me="authMe" :has-unseen="unseenCount > 0" @open-settings="openSettings" />
     </div>
@@ -576,6 +578,15 @@ watch(
   justify-content: center;
   padding: 0;
   margin-right: 8px;
+}
+.trophy-btn.labeled {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+}
+.trophy-btn .btn-label {
+  font-size: 13px;
+  color: var(--ink, #e6e8ee);
 }
 .trophy-btn:hover {
   filter: brightness(1.15);

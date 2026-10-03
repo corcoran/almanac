@@ -79,6 +79,7 @@ function monogramLetter(domain: string): string {
           target="_blank"
           rel="noopener noreferrer"
           class="ws-link"
+          :title="s.title"
           data-test="web-source-link"
         >
           <span class="ws-title">{{ s.title }}</span>
@@ -90,7 +91,7 @@ function monogramLetter(domain: string): string {
 </template>
 
 <style scoped>
-.web-sources { margin-top: 8px; }
+.web-sources { margin-top: 8px; max-width: 100%; min-width: 0; }
 .ws-toggle {
   display: inline-flex; align-items: center; gap: 8px;
   background: none; border: none; padding: 0; cursor: pointer;
@@ -108,9 +109,9 @@ function monogramLetter(domain: string): string {
   color: #fff; font-size: 10px; font-weight: 700;
 }
 .ws-caret { margin-left: 2px; }
-.ws-list { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line, #262a36); }
-.ws-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.ws-link { display: flex; align-items: baseline; gap: 8px; text-decoration: none; min-width: 0; }
-.ws-title { font-size: 12px; color: var(--ink, #c2cad6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ws-domain { color: var(--ink-faint, #6b7180); font-size: 11px; flex: 0 0 auto; }
+.ws-list { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line, #262a36); max-width: 100%; min-width: 0; overflow: hidden; }
+.ws-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-width: 0; }
+.ws-link { display: flex; align-items: baseline; gap: 8px; text-decoration: none; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.ws-title { font-size: 12px; color: var(--ink, #c2cad6); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-domain { color: var(--ink-faint, #6b7180); font-size: 11px; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
