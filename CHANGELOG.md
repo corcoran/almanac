@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The AI coach is rebuilt.** It runs on Sonnet 5.5 with thinking, can read
+  everything the MCP server can, and explains what your numbers mean instead of
+  reading them back, with linked sources when it searches the web. It starts
+  from buttons (Quick read, What should I eat?, Review my training, What have
+  you told me?) instead of an automatic read, remembers what it has told you
+  and what you've corrected it on, and learns from a Helpful tap on a reply.
+  `ALMANAC_LLM_INSIGHTS_EFFORT` sets how hard it thinks (default `medium`).
+  Deploy with the updated `docker-compose.yml`: it forwards the coach's settings
+  and gives oauth2-proxy a 180s timeout for longer coach turns.
+
+### Fixed
+
+- **Answers with web citations no longer break mid-sentence**, in both chats.
+- **AI cost accounting counts cache writes at the 1-hour rate** the app actually
+  uses, so recorded costs were slightly low before.
+
 ## [1.39.0] - 2026-10-01
 
 ### Added
