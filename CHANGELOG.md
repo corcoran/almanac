@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-10-05
+
 ### Changed
 
 - **"What should I eat?" works from your situation.** The coach asks what you
