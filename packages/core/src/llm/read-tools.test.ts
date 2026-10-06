@@ -360,6 +360,73 @@ describe("list_stored_meals", () => {
     const meals = (out as { toolResult: Array<{ name: string }> }).toolResult;
     expect(meals.some((m) => m.name === "Other's smoothie")).toBe(false);
   });
+
+  describe("per-day usage", () => {
+    function shakeRow(logs: Array<string | [string, string | null]>) {
+      const db = seededDb();
+      createStoredMeal(db, {
+        user_id: 1,
+        name: "Shake",
+        kcal: 300,
+        protein_g: 40,
+        carb_g: 20,
+        fat_g: 5,
+      });
+      for (const l of logs) {
+        const [at, name] = typeof l === "string" ? [l, "shake"] : l;
+        createMeal(db, {
+          user_id: 1,
+          eaten_at: at,
+          name,
+          kcal: 300,
+          protein_g: 40,
+          carb_g: 20,
+          fat_g: 5,
+        });
+      }
+      const { dispatch } = buildReadDispatch([listStoredMealsTool], CTX(db));
+      const out = dispatch("list_stored_meals", {}) as {
+        toolResult: Array<Record<string, unknown>>;
+      };
+      return defined(out.toolResult[0], "row");
+    }
+
+    it("counts distinct user-local days before today", () => {
+      const row = shakeRow([
+        "2026-06-20T12:00:00Z",
+        "2026-06-20T16:00:00Z",
+        "2026-06-21T12:00:00Z",
+      ]);
+      expect(row).toMatchObject({
+        days_eaten_14d: 2,
+        last_eaten_on: "2026-06-21",
+        eaten_today: false,
+      });
+    });
+
+    it("buckets an evening meal to its user-local day", () => {
+      const row = shakeRow(["2026-06-22T01:30:00Z"]);
+      expect(row).toMatchObject({ days_eaten_14d: 1, last_eaten_on: "2026-06-21" });
+    });
+
+    it("flags today's meal without counting it", () => {
+      const row = shakeRow(["2026-06-23T13:00:00Z"]);
+      expect(row).toMatchObject({ days_eaten_14d: 0, last_eaten_on: null, eaten_today: true });
+    });
+
+    it("ignores meals older than 14 days", () => {
+      const row = shakeRow(["2026-06-08T16:00:00Z", "2026-06-09T16:00:00Z"]);
+      expect(row).toMatchObject({ days_eaten_14d: 1, last_eaten_on: "2026-06-09" });
+    });
+
+    it("matches names ignoring case and outer whitespace, and skips unnamed meals", () => {
+      const row = shakeRow([
+        ["2026-06-21T16:00:00Z", " SHAKE "],
+        ["2026-06-22T16:00:00Z", null],
+      ]);
+      expect(row).toMatchObject({ days_eaten_14d: 1, last_eaten_on: "2026-06-21" });
+    });
+  });
 });
 
 describe("get_workout_recommendation", () => {
@@ -725,7 +792,7 @@ describe("parity read tools: logged data", () => {
     expect(res).toHaveProperty("history");
   });
 
-  it("list_stored_meals includes 14-day usage", () => {
+  it("list_stored_meals includes per-day usage", () => {
     const { db, a } = twoUsers();
     createStoredMeal(db, {
       user_id: a,
@@ -745,10 +812,9 @@ describe("parity read tools: logged data", () => {
       fat_g: 5,
     });
     const res = run(listStoredMealsTool, ctxFor(db, a)) as Array<{
-      recent_uses: number;
-      last_used_at: string | null;
+      days_eaten_14d: number;
+      last_eaten_on: string | null;
     }>;
-    expect(res[0]?.recent_uses).toBe(1);
-    expect(res[0]?.last_used_at).toBe("2026-09-29T14:00:00.000Z");
+    expect(res[0]).toMatchObject({ days_eaten_14d: 1, last_eaten_on: "2026-09-29" });
   });
 });
