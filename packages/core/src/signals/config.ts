@@ -180,7 +180,7 @@ export type SleepConfig = {
 };
 
 export const DEFAULT_SLEEP_CONFIG: SleepConfig = {
-  windowDays: 7,
+  windowDays: 14,
   baselineHours: 8,
 };
 

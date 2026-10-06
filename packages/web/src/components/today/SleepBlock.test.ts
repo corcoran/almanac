@@ -180,15 +180,15 @@ describe("SleepBlock", () => {
     expect(style).toMatch(/bottom:\s*88\.8/);
   });
 
-  it("renders the debt line in green when user is ahead (negative debt)", () => {
+  it("renders zero debt as 'no debt' in green, never 'ahead'", () => {
     const wrapper = mount(SleepBlock, {
       props: {
         sleepDebt: {
-          debt_hours: -2.5,
-          window_days: 7,
+          debt_hours: 0,
+          window_days: 14,
           baseline_hours: 8,
           avg_hours: 8.4,
-          nights_logged: 7,
+          nights_logged: 14,
         },
         nights: makeNights(),
         windowDates,
@@ -197,7 +197,7 @@ describe("SleepBlock", () => {
       },
     });
     const delta = wrapper.find(".delta");
-    expect(delta.text().toLowerCase()).toContain("ahead");
+    expect(delta.text()).toBe("no debt / 14d");
     expect(delta.classes()).toContain("dn");
     expect(delta.classes()).not.toContain("up");
   });

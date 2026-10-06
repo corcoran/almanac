@@ -346,7 +346,7 @@ export function buildReportMarkdown(report: ShareReport): string {
   );
   const sd = week_to_date.sleep_debt;
   lines.push(
-    `- Sleep: avg ${week_to_date.sleep_avg_hours.value} h/night · debt ${sd.debt_hours} h (${sd.baseline_hours} h baseline)`,
+    `- Sleep: avg ${week_to_date.sleep_avg_hours.value} h/night · debt ${sd.debt_hours} h over the last ${sd.window_days} nights (${sd.baseline_hours} h baseline)`,
   );
   lines.push("");
 

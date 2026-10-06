@@ -94,9 +94,8 @@ const lastNightQuality = computed<number | null>(() => {
 
 const debtLabel = computed(() => {
   const debt = props.sleepDebt;
-  const sign = debt.debt_hours > 0 ? "debt" : "ahead";
-  const abs = Math.abs(debt.debt_hours).toFixed(1);
-  return `${sign} ${abs}h / ${debt.window_days}d`;
+  if (debt.debt_hours <= 0) return `no debt / ${debt.window_days}d`;
+  return `debt ${debt.debt_hours.toFixed(1)}h / ${debt.window_days}d`;
 });
 
 // ── Inline edit ─────────────────────────────────────────────────────────────
@@ -198,7 +197,7 @@ async function onSave(): Promise<void> {
       class="sleep-empty"
       data-test="sleep-empty"
     >
-      No sleep logged this week.
+      No sleep logged in the last {{ windowDates.length }} nights.
     </p>
     <div v-else class="sleep-bars">
       <div
@@ -328,7 +327,8 @@ async function onSave(): Promise<void> {
 .sleep-bars {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
   height: 60px;
   margin-top: 8px;

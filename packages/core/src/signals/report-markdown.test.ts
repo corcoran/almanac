@@ -90,7 +90,7 @@ function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
         sleep_avg_hours: { value: 7.1, window_days: 7, days_with_data: 7 },
         sleep_debt: {
           debt_hours: 4.2,
-          window_days: 7,
+          window_days: 14,
           baseline_hours: 8,
           avg_hours: 7.1,
           nights_logged: 7,
@@ -302,7 +302,9 @@ describe("buildReportMarkdown", () => {
     // this week
     expect(md).toContain("Avg intake: 1,980 kcal");
     expect(md).toContain("avg protein 168 g");
-    expect(md).toContain("Sleep: avg 7.1 h/night · debt 4.2 h (8 h baseline)");
+    expect(md).toContain(
+      "Sleep: avg 7.1 h/night · debt 4.2 h over the last 14 nights (8 h baseline)",
+    );
   });
 
   it("pre-computes the actual recent deficit (current TDEE − recent avg intake)", () => {

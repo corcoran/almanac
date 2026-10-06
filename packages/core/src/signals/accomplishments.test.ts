@@ -1702,22 +1702,14 @@ describe("detectAccomplishments — sleep_recovery debt_cleared", () => {
     createSleepLog(db, { user_id: userId, slept_on, hours });
   }
 
-  it("fires when today's 7-night window has zero debt and yesterday's did not", () => {
+  it("fires when a long night pays off the debt", () => {
     const { db, userId } = setup();
-    // Today's window [05-15..05-21]: all logged nights >= 8h -> debt 0.
-    // Yesterday's window [05-14..05-20] includes a short 05-14 night -> debt > 0.
-    night(db, userId, "2026-05-14", 5); // short — only in yesterday's window
-    for (const d of [
-      "2026-05-15",
-      "2026-05-16",
-      "2026-05-17",
-      "2026-05-18",
-      "2026-05-19",
-      "2026-05-20",
-      "2026-05-21",
-    ]) {
+    // Yesterday: the 7h 05-20 night leaves 1h of debt. Today: 9h on 05-21 pays it off.
+    for (const d of ["2026-05-15", "2026-05-16", "2026-05-17", "2026-05-18", "2026-05-19"]) {
       night(db, userId, d, 8);
     }
+    night(db, userId, "2026-05-20", 7);
+    night(db, userId, "2026-05-21", 9);
     const wins = detectAccomplishments(db, userId, NOW);
     const debt = wins.filter(
       (w) =>
@@ -1763,28 +1755,15 @@ describe("detectAccomplishments — sleep_recovery debt_cleared", () => {
   });
 
   it("excludes untracked nights from debt so a vacation short-night doesn't block the win", () => {
-    // Without untracked exclusion: the short 05-18 night is inside today's window
-    // [05-15..05-21], giving today non-zero debt → win does NOT fire.
-    // WITH untracked exclusion: 05-18 is skipped, today's window debt = 0.
-    // The tracked short night 05-14 is only in yesterday's window [05-14..05-20],
-    // so yesterday still has debt → transition fires. The result DIFFERS from the
-    // no-exclusion case, making this a meaningful exercise of the exclusion path.
+    // The 7h 05-20 night gives yesterday 1h of debt; 9h on 05-21 pays it off.
+    // The 5h 05-18 night would leave 3h of debt today if it counted, blocking the
+    // win; it's untracked, so it doesn't.
     const { db, userId } = setup();
-    // Tracked short night — only in yesterday's window, gives yesterday debt regardless.
-    night(db, userId, "2026-05-14", 5);
-    // Good nights in both windows.
-    for (const d of [
-      "2026-05-15",
-      "2026-05-16",
-      "2026-05-17",
-      "2026-05-19",
-      "2026-05-20",
-      "2026-05-21",
-    ]) {
+    for (const d of ["2026-05-15", "2026-05-16", "2026-05-17", "2026-05-19"]) {
       night(db, userId, d, 8);
     }
-    // Short night INSIDE today's window — if tracked, today would have debt and the
-    // win would be blocked. Marking it untracked excludes it → today is debt-free.
+    night(db, userId, "2026-05-20", 7);
+    night(db, userId, "2026-05-21", 9);
     night(db, userId, "2026-05-18", 5);
     createUntrackedPeriod(db, {
       user_id: userId,
@@ -1831,19 +1810,13 @@ describe("sleep_recovery persistence + messageFor", () => {
 
   it("density + debt_cleared on the same day persist as two distinct rows", () => {
     const { db, userId } = setup();
-    // 05-14 short → contributes debt to yesterday's debt window [05-14..05-20]
-    //              → only 3 good nights in yesterday's density window [05-14..05-20]
-    // 05-18..05-21 good → today's density window [05-15..05-21] has 4 good (met)
-    //                   → yesterday's density window [05-14..05-20] has 3 good (not met)
-    // → density edge-trigger fires
-    // Today's debt window [05-15..05-21]: 4 logged good nights → debt=0 → cleared
-    // Yesterday's debt window [05-14..05-20]: 05-14 short → debt>0 → not cleared
-    // → debt_cleared edge-trigger fires
-    night(db, userId, "2026-05-14", 5);
+    // Density: 4 good nights in today's window [05-15..05-21], 3 in yesterday's.
+    // Debt: the 7h 05-15 night leaves yesterday 1h short; 9h on 05-21 pays it off.
+    night(db, userId, "2026-05-15", 7);
     night(db, userId, "2026-05-18", 8);
     night(db, userId, "2026-05-19", 8);
     night(db, userId, "2026-05-20", 8);
-    night(db, userId, "2026-05-21", 8);
+    night(db, userId, "2026-05-21", 9);
     const inserted = persistNewAccomplishments(db, userId, NOW).filter(
       (c) => c.code === "sleep_recovery",
     );

@@ -1005,6 +1005,33 @@ describe("getTodayContext", () => {
       });
     });
 
+    it("sleep debt spans 14 nights while the week sleep average stays at 7", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      createSleepLog(db, { user_id: userId, slept_on: "2026-05-02", hours: 5, quality: 2 });
+      createSleepLog(db, { user_id: userId, slept_on: "2026-05-04", hours: 4, quality: 2 });
+      createUntrackedPeriod(db, {
+        user_id: userId,
+        started_on: "2026-05-04",
+        ended_on: "2026-05-04",
+        reason: "vacation",
+      });
+      createSleepLog(db, { user_id: userId, slept_on: "2026-05-12", hours: 8, quality: 4 });
+
+      const ctx = getTodayContext(db, userId, new Date("2026-05-12T18:00:00Z"));
+      // 05-02 is 10 nights back: in the debt window, outside the week average.
+      // 05-04 is untracked, so it counts toward neither.
+      expect(ctx.week_to_date.sleep_debt).toMatchObject({
+        debt_hours: 3,
+        window_days: 14,
+        nights_logged: 2,
+      });
+      expect(ctx.week_to_date.sleep_avg_hours).toEqual({
+        value: 8,
+        window_days: 7,
+        days_with_data: 1,
+      });
+    });
+
     it("phase.days_in counts user-local days since started_on (Gap 28)", () => {
       // Phase fixture started 2026-05-01 (set up by setupTzScenario).
       // Asking "today" at 2026-05-14T18:00:00Z → user-local date 2026-05-14
