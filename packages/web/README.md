@@ -44,7 +44,7 @@ The right pane is a read-only at-a-glance dashboard composed of five blocks:
 - **Macros — last 7 days** — daily totals grid with today rightmost.
 - **Weight** — today's reading + EMA trend + 14-day sparkline (respects
   your kg/lb preference).
-- **Sleep** — last night + 7-day debt + 7-night histogram with an 8h
+- **Sleep** — last night + 14-night debt + 14-night histogram with an 8h
   target line.
 
 All five blocks render from data the API already exposes; no logging

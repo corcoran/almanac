@@ -472,7 +472,7 @@ function main(): void {
       });
     }
 
-    // Sleep every night, so the 7-night histogram has no ghost bars. The last
+    // Sleep every night, so the 14-night histogram has no ghost bars. The last
     // stretch trends good to trigger the sleep_recovery edge win.
     const goodStretch = i >= days - 8;
     const hours = goodStretch

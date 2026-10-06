@@ -185,8 +185,8 @@ onMounted(() => {
     // Sleep + body-weight repos treat `to` as EXCLUSIVE (slept_on /
     // measured_on < to), so we pad with tomorrow's user-date to include
     // today's just-logged entry in the histogram / sparkline.
-    void sleepLogsStore.load(client, sevenDaysAgo, tomorrow);
-    sleepWindowDates.value = Array.from({ length: 7 }, (_, i) => daysAgoUserDate(now, 6 - i, tz));
+    void sleepLogsStore.load(client, fourteenDaysAgo, tomorrow);
+    sleepWindowDates.value = Array.from({ length: 14 }, (_, i) => daysAgoUserDate(now, 13 - i, tz));
     void weightsStore.load(client, fourteenDaysAgo, tomorrow);
     // Today's meals — the `/v1/meals` route uses TimestampRangeQuery which
     // resolves `from_date=X&to_date=X` to a single user-day window

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have or where you're eating, steers by what's left of the day's macros, and
   stops suggesting meals you already ate. Copy stats now includes today's
   meals.
+- **Sleep debt works like other sleep apps.** It covers the last 14 nights,
+  long nights pay it down, and it never goes below zero. The sleep chart shows
+  the same 14 nights.
 
 ### Fixed
 
