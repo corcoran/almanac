@@ -1120,6 +1120,17 @@ describe("/api/v1/llm/insights-chat", () => {
     expect(system[1]?.text).toContain("seen-topic");
   });
 
+  it("tells the coach the user's local time in the volatile block", async () => {
+    const createMessage = vi.fn(answerStub);
+    app = setup({ userFlag: 1, createMessage });
+    await post(app);
+    const system = defined(createMessage.mock.calls[0]?.[0], "call").system as Array<{
+      text: string;
+    }>;
+    expect(system[1]?.text).toMatch(/It's \d{1,2}:\d{2} (AM|PM) on \d{4}-\d{2}-\d{2}/);
+    expect(system[0]?.text).not.toMatch(/It's \d{1,2}:\d{2} (AM|PM)/);
+  });
+
   it("threads user.about_me into the insights system prompt (fenced, in the cached stable block)", async () => {
     const createMessage = vi.fn(answerStub);
     const aboutMe = "I'm training for a marathon and prefer vegetarian meals.";

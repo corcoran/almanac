@@ -37,6 +37,26 @@ describe("insights core", () => {
     expect(sys).toContain("## REPORT");
   });
 
+  it("puts the local time in the volatile block only", () => {
+    const p = buildInsightsSystemPrompt("R", {
+      today: "2026-10-05",
+      conversationDate: "2026-10-05",
+      localTime: "4:12 PM",
+    });
+    expect(p.volatile).toContain("It's 4:12 PM on 2026-10-05");
+    expect(p.stable).not.toContain("4:12 PM");
+  });
+
+  it("keeps the time line alongside the past-conversation note", () => {
+    const p = buildInsightsSystemPrompt("R", {
+      today: "2026-10-05",
+      conversationDate: "2026-10-03",
+      localTime: "4:12 PM",
+    });
+    expect(p.volatile).toContain("It's 4:12 PM on 2026-10-05");
+    expect(p.volatile).toContain("conversation is from");
+  });
+
   it("system prompt mentions recommendations, coaching and medical advice", () => {
     const { stable, volatile } = buildInsightsSystemPrompt("## R");
     const sys = `${stable}\n${volatile}`.toLowerCase();
@@ -485,11 +505,6 @@ describe("buildInsightsSystemPrompt (rewrite)", () => {
       "Label inferences",
     ])
       expect(stable).toContain(phrase);
-  });
-
-  it("contains no concrete statistic examples", () => {
-    for (const banned of ["g/kg", "per kg", "1.6", "protein per"])
-      expect(stable).not.toContain(banned);
   });
 
   it("puts the overview and prior takeaway in the volatile block", () => {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **"What should I eat?" works from your situation.** The coach asks what you
+  have or where you're eating, steers by what's left of the day's macros, and
+  stops suggesting meals you already ate. Copy stats now includes today's
+  meals.
+
 ### Fixed
 
 - **Past days keep their own phase's targets.** Starting a new phase used to

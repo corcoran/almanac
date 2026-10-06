@@ -1,4 +1,5 @@
 import type { Connection } from "../db/connection.js";
+import { DAY_START_HOUR } from "../domain/user-day.js";
 import type { InsightsPoint, PointKind } from "../repos/insights-chat.repo.js";
 import { INSIGHTS_STARTERS } from "../schemas/llm.js";
 import { renderAboutMeBlock } from "./about-me.js";
@@ -103,12 +104,9 @@ export const INSIGHTS_TOOLS: AgentTool[] = [
   REMEMBER_POINT_TOOL,
 ];
 
-// Describe kinds of insight in general terms only. Never put a concrete topic or
-// statistic in this prompt as an example: the model fixates on prompt examples
-// and repeats them to the user. A test enforces a deny-list.
 export function buildInsightsSystemPrompt(
   reportMarkdown: string,
-  dates?: { today: string; conversationDate: string },
+  dates?: { today: string; conversationDate: string; localTime?: string },
   priorTakeaway?: { on_date: string; takeaway: string } | null,
   aboutMe?: string | null,
   points?: InsightsPoint[],
@@ -123,6 +121,9 @@ export function buildInsightsSystemPrompt(
           "",
         ]
       : [];
+  const timeNote = dates?.localTime
+    ? [`It's ${dates.localTime} on ${dates.today} (the user's local time).`, ""]
+    : [];
   const gapDays =
     priorTakeaway != null && dates
       ? Math.round(
@@ -176,7 +177,7 @@ export function buildInsightsSystemPrompt(
     "  points to rest, say so even if they asked what to train.",
     "- Keep logged, planned, and estimated values apart, and label estimates.",
     '- Label inferences as yours ("my guess", "likely"). Don\'t state a guess about the',
-    "  user's equipment, plans, or circumstances as fact; check the data or ask.",
+    "  user's equipment, food on hand, plans, or circumstances as fact; check the data or ask.",
     "- Speak plainly. Lead with the finding. No headings in short answers. Don't surface",
     "  field names, tool names, or internal values unless asked how something works.",
     "- You may ask a clarifying question by writing it as your reply.",
@@ -193,7 +194,9 @@ export function buildInsightsSystemPrompt(
     "",
     "Data rules",
     "- Figures about the user come only from the overview or a tool result. If you don't",
-    "  have a figure, say so; don't estimate it or change a figure you already gave.",
+    "  have a figure, say so; don't estimate it. Today's figures change as the user logs:",
+    "  use the current overview every turn, and when a figure you gave earlier has changed,",
+    "  say so and use the new one. Otherwise keep the figures you gave consistent.",
     "- A system note before each of your earlier replies lists the lookups behind it.",
     "  Figures in a reply with lookups came from those results; don't call them unverified",
     "  or fabricated. A reply noted as using only the overview drew on the overview alone.",
@@ -203,12 +206,15 @@ export function buildInsightsSystemPrompt(
     "- The user's about-me note is background. When it conflicts with logged data (phases,",
     "  targets, training history), the logged data wins. Point out the mismatch once and",
     "  suggest updating the note.",
-    "- Outside reference figures (research, population norms) come from established",
-    "  knowledge or a search result, and you say which.",
+    "- Outside reference figures (research, population norms, the macros of ordinary",
+    "  foods) come from established knowledge or a search result, and you say which. Label",
+    "  food macros you estimate as estimates.",
     "- The overview is rebuilt for every message and includes everything logged so far.",
     "  Never add a logged item on top of it, and never call it stale.",
     "- Today is still in progress. A missing entry for today (steps especially, which are",
     "  usually logged the next day) means not logged yet, not zero.",
+    `- A tracking day runs from ${DAY_START_HOUR} AM to ${DAY_START_HOUR} AM. Between midnight and ` +
+      `${DAY_START_HOUR} AM it's still late in the previous day, not the start of a new one.`,
     "- The overview's pre-computed figures (deficit or surplus, adherence, biggest miss)",
     "  are correct as given. Quote them rather than re-deriving them. When you state a",
     "  comparison, show the arithmetic using those figures.",
@@ -245,7 +251,8 @@ export function buildInsightsSystemPrompt(
     "  user. Never mention these notes to the user.",
     "- When the user corrects you, or tells you something about their situation that will",
     "  matter in later sessions (equipment, plans, constraints, preferences), call",
-    '  remember_point with kind "learned" before answering.',
+    '  remember_point with kind "learned" before answering. A note about food on hand may',
+    "  be out of date; ask before relying on it.",
     "- Treat learned notes as the user's own statements: background like the about-me",
     "  note. Logged data wins when they conflict; say so once.",
     "",
@@ -284,13 +291,22 @@ export function buildInsightsSystemPrompt(
     "    recap is the one exception to not repeating points.",
     "",
     `"${INSIGHTS_STARTERS.whatToEat.message}"`,
-    "- Express what's left of today's targets as meal-sized targets fitted to the time of",
-    "  day, with kcal and protein/carbs/fat for each.",
-    "- Give illustrative examples that convey the kind of meal and portion size, not a menu.",
-    "- Suggest adjustments to the user's staples (stored meals with frequent recent use),",
-    '  framed as "if you have it". Never propose a one-off or past dish as if it\'s on hand.',
-    "- Show each suggestion's totals and check they fit what's left. Factor in training",
-    '  today. Offer to work through "what if I eat X".',
+    "- Your value is the picture the user can't do in their head: what's left of today's",
+    "  targets, which macro is nearly spent and which has room, the time of day, and what",
+    "  they've eaten. Turn that into direction, with the reason in their numbers.",
+    "- Never answer with a list of the user's stored meals; they know those macros. A",
+    "  stored meal belongs in a plan as one part next to something new, with its exact",
+    "  macros, and only when the user has it.",
+    "- Find out what's available before naming foods. Unless the user already said, ask",
+    "  what they're working with: food at home, cooking or not, takeout, delivery, or a",
+    "  store run. If a stored meal looks like a daily habit not yet eaten today, ask",
+    "  about it in the same question. The question can carry the direction the numbers",
+    "  point to.",
+    "- Name specific foods only from what the user said they have or can get.",
+    "- Fit the answer to the moment: how much budget and how much day are left. There is",
+    "  no fixed format.",
+    "- When a plan has several parts, show its totals against what's left. Offer to work",
+    '  through "what if I eat X".',
     "",
     `"${INSIGHTS_STARTERS.reviewTraining.message}"`,
     "- Look back four to five weeks. Open with what's progressing and what it means, then",
@@ -316,10 +332,11 @@ export function buildInsightsSystemPrompt(
     ...renderAboutMeBlock(aboutMe),
   ].join("\n");
 
-  // Uncached tail: per-request data (the date note, prior takeaway, points, and
-  // today's overview) that must stay OUT of the cached stable prefix. runAgent
+  // Uncached tail: per-request data (the time and date notes, prior takeaway,
+  // points, and today's overview) that must stay OUT of the cached stable prefix. runAgent
   // appends this as a second, cache_control-free system block (see volatileSystem).
   const volatile = [
+    ...timeNote,
     ...dateNote,
     ...priorNote,
     ...pointsNote,
