@@ -37,6 +37,36 @@ describe("/api/v1/signals/macros", () => {
   }
   const auth = { "x-forwarded-email": "test@example.com", "content-type": "application/json" };
 
+  it("?date= returns a null day_target for a day in a closed phase missing TDEE fields", async () => {
+    app = setup();
+    app.db
+      .prepare(
+        `INSERT INTO nutrition_phases
+        (user_id, name, intent, daily_kcal_target, base_protein_g, base_carb_g, base_fat_g,
+         started_on, ended_on)
+       VALUES (1, 'old', 'cut', 2000, 150, 200, 60, '2026-04-01', '2026-04-30')`,
+      )
+      .run();
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/v1/signals/macros?date=2026-04-15",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().day_target).toBeNull();
+  });
+
+  it("?date= returns 500 when the active phase is missing TDEE fields", async () => {
+    app = setup();
+    app.db.prepare("UPDATE nutrition_phases SET deficit_kcal = NULL WHERE user_id = 1").run();
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/v1/signals/macros?date=2026-05-08",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(500);
+  });
+
   it("?date= returns single-day shape {date, day_totals, day_target}", async () => {
     app = setup();
     // Seed two meals on 2026-05-08 in the user-day window (UTC, default tz).

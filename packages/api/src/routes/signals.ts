@@ -1,6 +1,4 @@
 import {
-  findActivePhase,
-  findStepLogByDate,
   findWorkoutByIdForUser,
   listExercises,
   listGroups,
@@ -22,7 +20,7 @@ import {
 } from "@almanac/core/schemas";
 import {
   computeAlcoholOverlay,
-  computeDailyTarget,
+  computeDailyTargetForDate,
   computeDayKcalIn,
   computeDayStatus,
   computeNextBestAction,
@@ -33,7 +31,6 @@ import {
   getTodayContext,
   recommendTemplateForUser,
   summarizeTrainingHistory,
-  WORKOUT_KCAL_PER_MIN,
 } from "@almanac/core/signals";
 import { currentUserDate, userDayWindow } from "@almanac/core/types";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -330,91 +327,18 @@ export const registerSignalsRoutes: FastifyPluginAsyncZod = async (app) => {
       const user = requireUser(app.db, req);
       const userId = user.id;
       const date = req.query.date ?? currentUserDate(new Date(), user.timezone);
-      const phase = findActivePhase(app.db, userId);
-      if (!phase) {
-        throw new ApiError(404, "not_found", "No active nutrition phase");
+      const result = computeDailyTargetForDate(app.db, userId, user.timezone, date);
+      if (result.kind === "no_phase") {
+        throw new ApiError(404, "not_found", "No nutrition phase on this date");
       }
-      // Migration 006 backfills the four TDEE refactor fields on the active
-      // phase; null here would indicate data drift. computeDailyTarget itself
-      // would throw, but the route surface should fail loud with a clearer
-      // message.
-      if (
-        phase.phase_type == null ||
-        phase.tdee_at_phase_start == null ||
-        phase.tdee_source == null ||
-        phase.deficit_kcal == null
-      ) {
+      if (result.kind === "phase_incomplete") {
         throw new ApiError(
-          500,
-          "internal",
-          `Active phase ${phase.id} is missing TDEE refactor fields — data integrity issue.`,
+          result.active ? 500 : 404,
+          result.active ? "internal" : "not_found",
+          `Phase ${result.phaseId} is missing TDEE refactor fields.`,
         );
       }
-      // Day buckets run against the user-TZ window (DAY_START_HOUR rollover),
-      // so an evening log that crosses UTC midnight stays on its local day.
-      const { startUtc, endUtc } = userDayWindow(date, user.timezone);
-      const startIso = startUtc.toISOString();
-      const endIso = endUtc.toISOString();
-      const workouts = app.db
-        .prepare(
-          `SELECT est_kcal, duration_min FROM workouts
-           WHERE user_id = ? AND started_at >= ? AND started_at < ?`,
-        )
-        .all(userId, startIso, endIso) as Array<{
-        est_kcal: number | null;
-        duration_min: number | null;
-      }>;
-      const cardioSessions = app.db
-        .prepare(
-          `SELECT est_kcal FROM cardio_sessions
-           WHERE user_id = ? AND started_at >= ? AND started_at < ?`,
-        )
-        .all(userId, startIso, endIso) as Array<{ est_kcal: number }>;
-      const meals = app.db
-        .prepare(
-          `SELECT kcal, protein_g, carb_g, fat_g FROM meals
-           WHERE user_id = ? AND eaten_at >= ? AND eaten_at < ?`,
-        )
-        .all(userId, startIso, endIso) as Array<{
-        kcal: number;
-        protein_g: number;
-        carb_g: number;
-        fat_g: number;
-      }>;
-
-      const cardio_kcal = cardioSessions.reduce((s, c) => s + c.est_kcal, 0);
-      let workout_kcal = 0;
-      for (const w of workouts) {
-        if (w.est_kcal != null) workout_kcal += w.est_kcal;
-        else if (w.duration_min != null)
-          workout_kcal += Math.round(w.duration_min * WORKOUT_KCAL_PER_MIN);
-      }
-      // Steps for the requested date — snapshot from the step-logs repo, same
-      // accounting today.ts and macros.ts use.
-      const stepLog = findStepLogByDate(app.db, userId, date);
-      const steps_kcal = stepLog?.est_kcal ?? null;
-      const intake = {
-        kcal: meals.reduce((s, m) => s + m.kcal, 0),
-        protein_g: meals.reduce((s, m) => s + m.protein_g, 0),
-        carb_g: meals.reduce((s, m) => s + m.carb_g, 0),
-        fat_g: meals.reduce((s, m) => s + m.fat_g, 0),
-      };
-      return computeDailyTarget({
-        phase: {
-          phase_type: phase.phase_type,
-          tdee_at_phase_start: phase.tdee_at_phase_start,
-          tdee_source: phase.tdee_source,
-          deficit_kcal: phase.deficit_kcal,
-          daily_kcal_target: phase.daily_kcal_target,
-          base_protein_g: phase.base_protein_g,
-          base_carb_g: phase.base_carb_g,
-          base_fat_g: phase.base_fat_g,
-        },
-        intake,
-        cardio_kcal,
-        workout_kcal,
-        steps_kcal,
-      });
+      return result.dayTarget;
     },
   );
 
