@@ -146,6 +146,21 @@ describe("nutrition-phases.repo", () => {
     expect(findPhaseOnDate(db, userId, "2026-03-01")?.name).toBe("cut");
   });
 
+  it("findPhaseOnDate prefers the later phase when an edited boundary overlaps", () => {
+    const db = freshDb();
+    const userId = seedUser(db);
+    const a = closeAndStartPhase(db, {
+      ...BASE_INPUT,
+      user_id: userId,
+      started_on: "2026-01-01",
+      name: "a",
+    });
+    closeAndStartPhase(db, { ...BASE_INPUT, user_id: userId, started_on: "2026-03-01", name: "b" });
+    closeAndStartPhase(db, { ...BASE_INPUT, user_id: userId, started_on: "2026-04-01", name: "c" });
+    updatePhase(db, userId, a.id, { ended_on: "2026-03-01" });
+    expect(findPhaseOnDate(db, userId, "2026-03-01")?.name).toBe("b");
+  });
+
   it("findPhaseOnDate returns null for a date before any phase", () => {
     const db = freshDb();
     const userId = seedUser(db);
