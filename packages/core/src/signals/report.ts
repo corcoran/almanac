@@ -1,6 +1,7 @@
 import type { Connection } from "../db/connection.js";
 import { addDaysIso, currentUserDate, userDayWindow } from "../domain/user-day.js";
 import { findDailyNet } from "../repos/daily-net.repo.js";
+import { listMeals } from "../repos/meals.repo.js";
 import { findActivePhase } from "../repos/nutrition-phases.repo.js";
 import { getUntrackedDays } from "../repos/untracked-periods.repo.js";
 import { findUserById } from "../repos/users.repo.js";
@@ -54,6 +55,22 @@ export function assembleReport(
     if (!workoutNameByDate.has(day)) workoutNameByDate.set(day, w.template_name);
   }
 
+  const dayWindow = userDayWindow(today, tz);
+  const today_meals = listMeals(db, userId, {
+    from: dayWindow.startUtc.toISOString(),
+    to: dayWindow.endUtc.toISOString(),
+    limit: 200,
+  })
+    .reverse()
+    .map((m) => ({
+      eaten_at: m.eaten_at,
+      name: m.name,
+      kcal: m.kcal,
+      protein_g: m.protein_g,
+      carb_g: m.carb_g,
+      fat_g: m.fat_g,
+    }));
+
   // 14-day per-day grid (oldest → newest).
   const untracked = getUntrackedDays(db, userId, fromDate, today);
   const history_14d: ShareReport["history_14d"] = [];
@@ -86,6 +103,7 @@ export function assembleReport(
   return {
     generated_for_date: today,
     context,
+    today_meals,
     history_14d,
     workouts: {
       window_from: windowFrom,

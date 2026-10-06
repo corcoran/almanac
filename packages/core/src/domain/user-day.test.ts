@@ -3,6 +3,7 @@ import {
   addDaysIso,
   currentUserDate,
   DAY_START_HOUR,
+  localClockTime,
   parseLogTimestamp,
   userDayWindow,
 } from "./user-day.js";
@@ -113,5 +114,16 @@ describe("addDaysIso", () => {
     expect(addDaysIso("2026-03-01", -1)).toBe("2026-02-28");
     expect(addDaysIso("2026-06-06", -1)).toBe("2026-06-05");
     expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
+  });
+});
+
+describe("localClockTime", () => {
+  it("renders a 12-hour clock in the user's zone with a plain space", () => {
+    expect(localClockTime(new Date("2026-10-05T20:12:00Z"), "America/Toronto")).toBe("4:12 PM");
+  });
+
+  it("shows the raw wall clock between midnight and 4am", () => {
+    expect(localClockTime(new Date("2026-10-06T05:30:00Z"), "America/Toronto")).toBe("1:30 AM");
+    expect(localClockTime(new Date("2026-10-06T04:05:00Z"), "America/Toronto")).toBe("12:05 AM");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createGroup } from "../repos/exercise-groups.repo.js";
 import { createExercise } from "../repos/exercises.repo.js";
+import { createMeal } from "../repos/meals.repo.js";
 import { closeAndStartPhase, type StartPhaseInput } from "../repos/nutrition-phases.repo.js";
 import { updateUser } from "../repos/users.repo.js";
 import { createTemplate } from "../repos/workout-templates.repo.js";
@@ -159,6 +160,42 @@ describe("assembleReport", () => {
     const day16 = report.history_14d.find((d) => d.date === "2026-06-16");
     expect(day15?.workout_name).toBe("PUSH");
     expect(day16?.workout_name).toBeNull();
+  });
+
+  function addMeal(db: ReturnType<typeof freshDb>, userId: number, at: string, name: string) {
+    createMeal(db, {
+      user_id: userId,
+      eaten_at: at,
+      name,
+      kcal: 500,
+      protein_g: 30,
+      carb_g: 50,
+      fat_g: 15,
+    });
+  }
+
+  it("today_meals lists the report day's meals oldest first", () => {
+    const { db, userId } = setupScenario();
+    startCutPhase(db, { user_id: userId, started_on: "2026-06-10" });
+    addMeal(db, userId, "2026-06-20T16:00:00Z", "Lunch");
+    addMeal(db, userId, "2026-06-20T12:00:00Z", "Breakfast");
+    const r = assembleReport(db, userId, NOW);
+    expect(r.today_meals.map((m) => m.name)).toEqual(["Breakfast", "Lunch"]);
+  });
+
+  it("today_meals includes an evening meal that falls on the next UTC date", () => {
+    const { db, userId } = setupScenario();
+    startCutPhase(db, { user_id: userId, started_on: "2026-06-10" });
+    addMeal(db, userId, "2026-06-21T01:30:00Z", "Late dinner");
+    const r = assembleReport(db, userId, new Date("2026-06-21T02:00:00Z"));
+    expect(r.today_meals.map((m) => m.name)).toEqual(["Late dinner"]);
+  });
+
+  it("today_meals excludes a pre-4am meal, which belongs to the previous day", () => {
+    const { db, userId } = setupScenario();
+    startCutPhase(db, { user_id: userId, started_on: "2026-06-10" });
+    addMeal(db, userId, "2026-06-20T06:30:00Z", "Late snack");
+    expect(assembleReport(db, userId, NOW).today_meals).toEqual([]);
   });
 
   // NOTE: the "phase_incomplete day yields day_target: null" case is intentionally

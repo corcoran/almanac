@@ -98,6 +98,20 @@ export function currentUserDate(at: Date, tz: string): string {
   return dtf.format(shifted); // en-CA → "YYYY-MM-DD"
 }
 
+/**
+ * 12-hour wall-clock time of `at` in `tz`, e.g. "4:12 PM". ICU puts a narrow
+ * no-break space before AM/PM; it is normalized to a plain space.
+ */
+export function localClockTime(at: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+  })
+    .format(at)
+    .replace(/\s/g, " ");
+}
+
 function wallTimeToUtc(date: string, hour: number, minute: number, tz: string, second = 0): Date {
   // Strategy: build a naive UTC instant from the wall components, then ask Intl
   // what wall-time *that UTC instant* renders to in `tz`. The difference is the

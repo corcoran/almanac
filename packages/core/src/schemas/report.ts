@@ -26,6 +26,16 @@ export const ReportHistoryDaySchema = DayMacrosResponseSchema.extend({
 export const ShareReportSchema = z.object({
   generated_for_date: IsoDateSchema,
   context: TodayContextResponseSchema,
+  today_meals: z.array(
+    z.object({
+      eaten_at: z.string(),
+      name: z.string().nullable(),
+      kcal: z.number(),
+      protein_g: z.number(),
+      carb_g: z.number(),
+      fat_g: z.number(),
+    }),
+  ),
   history_14d: z.array(ReportHistoryDaySchema),
   workouts: z.object({
     window_from: IsoDateSchema,

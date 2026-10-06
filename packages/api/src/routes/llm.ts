@@ -47,7 +47,7 @@ import {
   type WebSource,
 } from "@almanac/core/schemas";
 import { assembleReport, buildReportMarkdown } from "@almanac/core/signals";
-import { currentUserDate, type User } from "@almanac/core/types";
+import { currentUserDate, localClockTime, type User } from "@almanac/core/types";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireUser } from "../auth.js";
@@ -304,7 +304,8 @@ export function makeLlmRoutes(deps: LlmDeps): FastifyPluginAsyncZod {
       async (req) => {
         const user = requireUser(app.db, req);
         assertLlmEnabled(deps.config, user);
-        const today = currentUserDate(new Date(), user.timezone);
+        const now = new Date();
+        const today = currentUserDate(now, user.timezone);
         const onDate = req.body.on_date ?? today;
 
         const { hardCap } = resolveDailyLimits({
@@ -336,17 +337,12 @@ export function makeLlmRoutes(deps: LlmDeps): FastifyPluginAsyncZod {
         );
         const { stable: insightsStable, volatile: insightsVolatile } = buildInsightsSystemPrompt(
           reportMd,
-          { today, conversationDate: onDate },
+          { today, conversationDate: onDate, localTime: localClockTime(now, user.timezone) },
           priorTakeaway,
           user.about_me,
           points,
         );
-        const { dispatch, takePoints } = makeInsightsDispatch(
-          app.db,
-          user.id,
-          user.timezone,
-          new Date(),
-        );
+        const { dispatch, takePoints } = makeInsightsDispatch(app.db, user.id, user.timezone, now);
         const { searchEnabled } = resolveSearch(app.db, deps.config, user, today);
         const {
           result: rawResult,

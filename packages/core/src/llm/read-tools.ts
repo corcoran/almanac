@@ -8,7 +8,7 @@ import { listMeals } from "../repos/meals.repo.js";
 import { listPhases } from "../repos/nutrition-phases.repo.js";
 import { listSleepLogs } from "../repos/sleep.repo.js";
 import { listStepLogs } from "../repos/step-logs.repo.js";
-import { listStoredMealsWithUsage } from "../repos/stored-meals.repo.js";
+import { listStoredMeals } from "../repos/stored-meals.repo.js";
 import { listUntrackedPeriods } from "../repos/untracked-periods.repo.js";
 import { findUserById } from "../repos/users.repo.js";
 import { listTemplates } from "../repos/workout-templates.repo.js";
@@ -280,14 +280,20 @@ export const listMealsForDayTool: ReadTool = {
   definition: {
     name: "list_meals_for_day",
     description:
-      "The individual meals the user logged on a day, with name + macros + time — the " +
-      "meal-by-meal breakdown the overview does NOT contain (it only has the daily total). " +
+      "The individual meals the user logged on a day, with name + macros + time. " +
+      "Today's meals are already in the overview; use this for a past day. " +
       "Use when the user asks what they ate, or to break a day's intake into its meals. " +
-      "Omit `date` for today; pass `date` (YYYY-MM-DD) for a past day. Returns an array of " +
+      "`date` is YYYY-MM-DD for a past day (omitting it returns today, which the overview already has). Returns an array of " +
       "{ eaten_at, name, kcal, protein_g, carb_g, fat_g }.",
     input_schema: {
       type: "object",
-      properties: { date: { type: "string", description: "YYYY-MM-DD; omit for today." } },
+      properties: {
+        date: {
+          type: "string",
+          description:
+            "YYYY-MM-DD for a past day (omitting it returns today, which the overview already has).",
+        },
+      },
     },
   },
   handler:
@@ -324,29 +330,49 @@ export const listStoredMealsTool: ReadTool = {
   definition: {
     name: "list_stored_meals",
     description:
-      "The user's saved meal library (their reusable meals/recipes with macros). Use when " +
-      "the user asks what's in one of their stored/saved meals, or to reference a saved " +
-      "meal's macros — the overview does NOT include the saved-meal library. Takes no " +
-      "arguments. Returns an array of { id, name, kcal, protein_g, carb_g, fat_g, description, " +
-      "recent_uses, last_used_at }. `recent_uses` counts meals with the same name eaten in the " +
-      "last 14 days; a high count marks a staple, zero marks a one-off the user may not have on hand.",
+      "The user's saved meal library with macros. The overview does NOT include it. Takes no " +
+      "arguments. Each item has `days_eaten_14d` (how many of the 14 days before today a meal " +
+      "with this name was logged), `last_eaten_on` (most recent such day) and `eaten_today`. " +
+      "A meal eaten on most recent days up to yesterday and not yet today is a habit worth " +
+      "asking about. One eaten in a burst that then stopped is likely used up. Recent use " +
+      "never shows what's on hand.",
     input_schema: { type: "object", properties: {} },
   },
   handler:
-    ({ db, userId, now }) =>
+    ({ db, userId, tz, now }) =>
     () => {
-      const since = new Date(now.getTime() - 14 * 86_400_000).toISOString();
-      const meals = listStoredMealsWithUsage(db, userId, since).map((m) => ({
-        id: m.id,
-        name: m.name,
-        kcal: m.kcal,
-        protein_g: m.protein_g,
-        carb_g: m.carb_g,
-        fat_g: m.fat_g,
-        description: m.description,
-        recent_uses: m.recent_uses,
-        last_used_at: m.last_used_at,
-      }));
+      const today = currentUserDate(now, tz);
+      const eaten = listMeals(db, userId, {
+        from: userDayWindow(addDaysIso(today, -14), tz).startUtc.toISOString(),
+        to: userDayWindow(today, tz).endUtc.toISOString(),
+        limit: 200,
+      });
+      const usage = new Map<string, { days: Set<string>; today: boolean }>();
+      for (const m of eaten) {
+        if (m.name === null) continue;
+        const key = m.name.trim().toLowerCase();
+        const entry = usage.get(key) ?? { days: new Set<string>(), today: false };
+        const day = currentUserDate(new Date(m.eaten_at), tz);
+        if (day === today) entry.today = true;
+        else entry.days.add(day);
+        usage.set(key, entry);
+      }
+      const meals = listStoredMeals(db, userId).map((m) => {
+        const entry = usage.get(m.name.trim().toLowerCase());
+        const days = entry ? [...entry.days].sort() : [];
+        return {
+          id: m.id,
+          name: m.name,
+          kcal: m.kcal,
+          protein_g: m.protein_g,
+          carb_g: m.carb_g,
+          fat_g: m.fat_g,
+          description: m.description,
+          days_eaten_14d: days.length,
+          last_eaten_on: days.at(-1) ?? null,
+          eaten_today: entry?.today ?? false,
+        };
+      });
       return { kind: "continue", toolResult: meals };
     },
 };
