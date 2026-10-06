@@ -10,6 +10,7 @@ import { buildReportMarkdown } from "./report-markdown.js";
 function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
   const base: ShareReport = {
     generated_for_date: "2026-06-20",
+    today_meals: [],
     context: {
       now: "2026-06-20T14:00:00.000Z",
       today_date: "2026-06-20",
@@ -1116,5 +1117,36 @@ describe("buildReportMarkdown", () => {
       }),
     );
     expect(md).toContain("No workouts logged in this window.");
+  });
+
+  it("lists today's meals with local time and macros", () => {
+    const md = buildReportMarkdown(
+      makeReport({
+        today_meals: [
+          {
+            eaten_at: "2026-06-20T12:10:00.000Z",
+            name: "Oatmeal",
+            kcal: 350,
+            protein_g: 12,
+            carb_g: 60,
+            fat_g: 8,
+          },
+          {
+            eaten_at: "2026-06-20T13:00:00.000Z",
+            name: null,
+            kcal: 100,
+            protein_g: 1,
+            carb_g: 20,
+            fat_g: 1,
+          },
+        ],
+      }),
+    );
+    expect(md).toContain("8:10 AM Oatmeal: 350 kcal · 12 P / 60 C / 8 F");
+    expect(md).toContain("9:00 AM (unnamed): 100 kcal");
+  });
+
+  it("renders no meal lines when today_meals is empty", () => {
+    expect(buildReportMarkdown(makeReport())).not.toContain("Meals logged:");
   });
 });

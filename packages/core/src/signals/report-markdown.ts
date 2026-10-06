@@ -1,4 +1,5 @@
 import { kgToDisplayWeight, weightUnitLabel } from "../domain/units.js";
+import { localClockTime } from "../domain/user-day.js";
 import type { UnitSystem } from "../domain/users.js";
 import type { ShareReport } from "../schemas/report.js";
 
@@ -255,6 +256,15 @@ export function buildReportMarkdown(report: ShareReport): string {
       lines.push(
         `- Status: **${statusLabel(today.observed.status)}** (${signed(today.observed.vs_target)} vs target)`,
       );
+    }
+    if (report.today_meals.length > 0) {
+      lines.push("- Meals logged:");
+      for (const m of report.today_meals) {
+        const time = localClockTime(new Date(m.eaten_at), context.user.timezone);
+        lines.push(
+          `  - ${time} ${m.name ?? "(unnamed)"}: ${fmt(m.kcal)} kcal · ${g(m.protein_g)} P / ${g(m.carb_g)} C / ${g(m.fat_g)} F`,
+        );
+      }
     }
   } else {
     lines.push("- No meals logged yet today.");
