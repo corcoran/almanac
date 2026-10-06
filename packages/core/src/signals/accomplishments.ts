@@ -358,8 +358,8 @@ function dailyTargetStatusFor(
   tz: string,
 ): DailyTargetStatus | null {
   const result = computeDailyTargetForDate(db, userId, tz, date);
-  // No active phase OR an incomplete phase → not a streak day. The macros route
-  // throws 500 on `phase_incomplete` (data-integrity), but for an accomplishment
+  // No phase on that date OR an incomplete phase → not a streak day. The macros
+  // route throws 500 on an incomplete active phase, but for an accomplishment
   // streak the deliberate fork is to skip the day rather than error.
   if (result.kind !== "ready") return null;
   // No intake logged for the day → not a streak day (see doc comment): zero

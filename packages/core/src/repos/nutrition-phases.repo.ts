@@ -120,7 +120,8 @@ export function findActivePhase(db: Connection, userId: number): NutritionPhase 
 /**
  * Returns the phase containing the given date — i.e., where
  * `started_on <= date <= ended_on` (or `ended_on IS NULL`). Returns `null` if
- * the date predates all of the user's phases.
+ * no phase covers the date. Edited boundaries can overlap; the later-started
+ * phase wins.
  */
 export function findPhaseOnDate(
   db: Connection,
@@ -133,7 +134,9 @@ export function findPhaseOnDate(
        FROM nutrition_phases
        WHERE user_id = ?
          AND started_on <= ?
-         AND (ended_on IS NULL OR ended_on >= ?)`,
+         AND (ended_on IS NULL OR ended_on >= ?)
+       ORDER BY started_on DESC, id DESC
+       LIMIT 1`,
     )
     .get(userId, date, date) as NutritionPhase | undefined;
   return row ?? null;

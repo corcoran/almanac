@@ -323,6 +323,33 @@ describe("/api/v1/signals", () => {
     expect(body.base_kcal).toBeUndefined();
   });
 
+  it("GET /api/v1/signals/daily-target?date= uses the phase that covered that date", async () => {
+    app = setup();
+    app.db
+      .prepare(
+        `INSERT INTO nutrition_phases
+        (user_id, name, intent, phase_type, tdee_at_phase_start, tdee_source, deficit_kcal,
+         daily_kcal_target, base_protein_g, base_carb_g, base_fat_g, started_on, ended_on)
+       VALUES (1, 'maint', 'maintenance', 'maintenance', 2500, 'user_asserted', 0, 2500, 160, 280, 80,
+               '2026-04-01', '2026-04-30')`,
+      )
+      .run();
+    const past = await app.inject({
+      method: "GET",
+      url: "/api/v1/signals/daily-target?date=2026-04-15",
+      headers: auth,
+    });
+    expect(past.statusCode).toBe(200);
+    expect(past.json().target.kcal).toBe(2500);
+
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/v1/signals/daily-target?date=2026-03-15",
+      headers: auth,
+    });
+    expect(before.statusCode).toBe(404);
+  });
+
   it("GET /api/v1/signals/day-kcal-in sums meals + alcohol on the date", async () => {
     app = setup();
     app.db

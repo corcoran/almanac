@@ -233,4 +233,71 @@ describe("computeDailyTargetForDate", () => {
     if (result.kind !== "ready") throw new Error("expected ready");
     expect(result.dayTarget.observed.steps_kcal).toBe(400);
   });
+
+  it("grades each day against the phase that covered it, not the active one", () => {
+    const { db, userId } = setup();
+    const base = {
+      user_id: userId,
+      intent: "cut",
+      phase_type: "cut",
+      tdee_source: "user_asserted",
+      deficit_kcal: -500,
+      base_protein_g: 180,
+      base_carb_g: 170,
+      base_fat_g: 60,
+    } as const;
+    closeAndStartPhase(db, {
+      ...base,
+      name: "A",
+      tdee_at_phase_start: 2800,
+      daily_kcal_target: 2300,
+      started_on: "2026-05-01",
+    });
+    closeAndStartPhase(db, {
+      ...base,
+      name: "B",
+      tdee_at_phase_start: 2600,
+      daily_kcal_target: 2100,
+      started_on: "2026-05-21",
+    });
+    createMeal(db, {
+      user_id: userId,
+      eaten_at: "2026-05-20T16:00:00Z",
+      kcal: 2250,
+      protein_g: 180,
+      carb_g: 170,
+      fat_g: 60,
+    });
+
+    const yesterday = computeDailyTargetForDate(db, userId, "America/Toronto", "2026-05-20");
+    if (yesterday.kind !== "ready") throw new Error("expected ready");
+    expect(yesterday.phase.name).toBe("A");
+    expect(yesterday.dayTarget.target.kcal).toBe(2300);
+    expect(yesterday.dayTarget.observed.status).toBe("on_track");
+
+    const today = computeDailyTargetForDate(db, userId, "America/Toronto", "2026-05-21");
+    if (today.kind !== "ready") throw new Error("expected ready");
+    expect(today.phase.name).toBe("B");
+    expect(today.dayTarget.target.kcal).toBe(2100);
+  });
+
+  it("returns no_phase for a day before the first phase started", () => {
+    const { db, userId } = setup();
+    startCutPhase(db, userId);
+    const result = computeDailyTargetForDate(db, userId, "America/Toronto", "2026-04-30");
+    expect(result.kind).toBe("no_phase");
+  });
+
+  it("flags whether an incomplete phase is the active one", () => {
+    const { db, userId } = setup();
+    db.prepare(
+      `INSERT INTO nutrition_phases
+        (user_id, name, intent, daily_kcal_target, base_protein_g, base_carb_g, base_fat_g,
+         started_on, ended_on)
+       VALUES (?, 'old', 'cut', 2000, 150, 200, 60, '2026-04-01', '2026-04-30')`,
+    ).run(userId);
+    startCutPhase(db, userId);
+    const closed = computeDailyTargetForDate(db, userId, "America/Toronto", "2026-04-15");
+    expect(closed).toMatchObject({ kind: "phase_incomplete", active: false });
+  });
 });

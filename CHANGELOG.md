@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Past days keep their own phase's targets.** Starting a new phase used to
+  re-grade every earlier day against the new targets, in the week grid, the
+  intake calendar, the MCP macros tools, the coach and adherence streaks. Days
+  before your first phase now show intake with no target.
+
 ## [1.40.0] - 2026-10-02
 
 ### Changed

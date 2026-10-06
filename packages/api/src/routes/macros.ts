@@ -147,13 +147,13 @@ function computeForDate(
 
   // The day-totals + daily-target assembly lives in `computeDailyTargetForDate`
   // (core), shared with the accomplishment adherence detector so the streak's
-  // notion of "on track" stays identical to this dashboard's. The phase fork is
-  // deliberate: an incomplete active phase is a data-integrity issue here (500),
-  // whereas the detector treats it as "not a streak day".
+  // notion of "on track" stays identical to this dashboard's. An incomplete
+  // active phase is a data-integrity issue (500); an incomplete closed phase
+  // predates migration 006 and just has no target.
   const result = computeDailyTargetForDate(db, userId, tz, date);
   const day_totals = result.totals;
 
-  if (result.kind === "phase_incomplete") {
+  if (result.kind === "phase_incomplete" && result.active) {
     throw new ApiError(
       500,
       "internal",

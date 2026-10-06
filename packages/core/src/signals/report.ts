@@ -15,8 +15,8 @@ const HISTORY_DAYS = 14;
  * Assemble the LLM-share report: today's full context, a 14-day per-day macros
  * grid, and a workout-window summary. The history grid mirrors the macros
  * route's `computeForDate`, with one deliberate difference: a `phase_incomplete`
- * day yields `day_target: null` here (it does NOT throw), so a half-set-up phase
- * can't blow up the whole report.
+ * day yields `day_target: null` here even on the active phase (it does NOT
+ * throw), so a half-set-up phase can't blow up the whole report.
  */
 export function assembleReport(
   db: Connection,

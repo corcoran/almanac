@@ -2,7 +2,7 @@ import type { Connection } from "../db/connection.js";
 import type { NutritionPhase, PhaseType, TdeeSource } from "../domain/nutrition.js";
 import { addDaysIso, currentUserDate, userDayWindow } from "../domain/user-day.js";
 import { findLatestWeightKgUpTo } from "../repos/body-weights.repo.js";
-import { findActivePhase } from "../repos/nutrition-phases.repo.js";
+import { findPhaseOnDate } from "../repos/nutrition-phases.repo.js";
 import { findStepLogByDate } from "../repos/step-logs.repo.js";
 import { getUntrackedDays } from "../repos/untracked-periods.repo.js";
 import { findUserById } from "../repos/users.repo.js";
@@ -82,7 +82,7 @@ export function computeTdeeForUser(db: Connection, userId: number, now: Date): T
   });
 }
 
-/** An active phase with the four nullable TDEE-refactor fields proven non-null. */
+/** A phase with the four nullable TDEE-refactor fields proven non-null. */
 export type ReadyPhase = NutritionPhase & {
   phase_type: PhaseType;
   tdee_at_phase_start: number;
@@ -107,19 +107,26 @@ export type DayTotals = {
 /**
  * Result of assembling a single user-day's daily-target inputs. `totals` and
  * `mealCount` are present in EVERY branch (they don't depend on a phase) so a
- * caller can render intake even with no active phase. The phase fork is exposed
- * rather than resolved so each caller decides how to handle a missing or
- * incomplete phase:
- *   - `no_phase`        — user has no active phase.
- *   - `phase_incomplete`— active phase is missing the TDEE-refactor fields
- *                         (a data-integrity issue). The macros route throws 500;
- *                         the adherence detector treats it as "not a streak day".
+ * caller can render intake even with no phase. The phase is the one covering
+ * `date`, not the active one, so a past day keeps the targets it had. The fork
+ * is exposed rather than resolved so each caller decides how to handle a
+ * missing or incomplete phase:
+ *   - `no_phase`        — no phase covers `date`.
+ *   - `phase_incomplete`— the phase is missing the TDEE-refactor fields. Phases
+ *                         closed before migration 006 legitimately lack them;
+ *                         on the active phase (`active`) it's data drift.
  *   - `ready`           — `dayTarget` is the computed daily-target block; apply
  *                         the "no intake → not a streak day" rule via `mealCount`.
  */
 export type DailyTargetForDate =
   | { kind: "no_phase"; totals: DayTotals; mealCount: number }
-  | { kind: "phase_incomplete"; phaseId: number; totals: DayTotals; mealCount: number }
+  | {
+      kind: "phase_incomplete";
+      phaseId: number;
+      active: boolean;
+      totals: DayTotals;
+      mealCount: number;
+    }
   | {
       kind: "ready";
       phase: ReadyPhase;
@@ -182,7 +189,7 @@ export function computeDailyTargetForDate(
   };
   const mealCount = meals.length;
 
-  const phase = findActivePhase(db, userId);
+  const phase = findPhaseOnDate(db, userId, date);
   if (!phase) return { kind: "no_phase", totals, mealCount };
   if (
     phase.phase_type == null ||
@@ -190,7 +197,13 @@ export function computeDailyTargetForDate(
     phase.tdee_source == null ||
     phase.deficit_kcal == null
   ) {
-    return { kind: "phase_incomplete", phaseId: phase.id, totals, mealCount };
+    return {
+      kind: "phase_incomplete",
+      phaseId: phase.id,
+      active: phase.ended_on === null,
+      totals,
+      mealCount,
+    };
   }
   const ready: ReadyPhase = {
     ...phase,
