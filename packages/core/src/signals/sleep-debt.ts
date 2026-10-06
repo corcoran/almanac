@@ -29,14 +29,17 @@ export function computeSleepDebt(
   const inWindow = logs.filter(
     (l) => l.slept_on >= start && l.slept_on <= asOf && !untrackedDays.has(l.slept_on),
   );
-  let debt = 0;
+  let balance = 0;
   let total = 0;
   for (const l of inWindow) {
     total += l.hours;
-    if (l.hours < config.baselineHours) debt += config.baselineHours - l.hours;
+    balance += config.baselineHours - l.hours;
   }
   return {
-    debt_hours: debt,
+    // Long nights pay debt down, but surplus never banks: the floor is 0.
+    // Rounded so float residue can't leave a paid-off debt at 1e-16 (which
+    // reads as debt and blocks the debt-cleared win).
+    debt_hours: Math.max(0, Math.round(balance * 100) / 100),
     window_days: config.windowDays,
     baseline_hours: config.baselineHours,
     avg_hours: inWindow.length ? total / inWindow.length : 0,

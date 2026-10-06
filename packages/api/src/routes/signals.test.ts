@@ -229,7 +229,7 @@ describe("/api/v1/signals", () => {
 
   it("GET /api/v1/signals/sleep-debt counts logged nights in window", async () => {
     app = setup();
-    // Seed 3 nights within the default 7-day window ending today.
+    // Seed 3 nights within the default 14-night window ending today.
     const d = (n: number) => {
       const x = new Date(`${today}T00:00:00Z`);
       x.setUTCDate(x.getUTCDate() - n);
@@ -252,8 +252,9 @@ describe("/api/v1/signals", () => {
     expect(r.statusCode).toBe(200);
     const body = r.json();
     expect(body.nights_logged).toBe(3);
-    expect(body.window_days).toBe(7);
-    expect(body.debt_hours).toBeGreaterThan(0);
+    expect(body.window_days).toBe(14);
+    // 7.5 + 6 + 8 nets 2.5 h short of 3 × 8.
+    expect(body.debt_hours).toBe(2.5);
   });
 
   it("GET /api/v1/signals/alcohol-overlay aggregates drinks in 48h before workout", async () => {

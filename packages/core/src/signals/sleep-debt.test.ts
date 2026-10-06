@@ -13,18 +13,54 @@ describe("computeSleepDebt", () => {
     expect(r.avg_hours).toBe(8);
   });
 
-  it("accumulates deficit-only debt", () => {
+  it("long nights pay debt down", () => {
     const logs = [
       { slept_on: "2026-05-10", hours: 6 }, // -2
-      { slept_on: "2026-05-11", hours: 9 }, // +1, ignored
+      { slept_on: "2026-05-11", hours: 9 }, // +1
       { slept_on: "2026-05-12", hours: 5 }, // -3
     ];
     const r = computeSleepDebt(logs, "2026-05-12", {
       windowDays: 3,
       baselineHours: 8,
     });
-    expect(r.debt_hours).toBe(5);
+    expect(r.debt_hours).toBe(4);
     expect(r.nights_logged).toBe(3);
+  });
+
+  it("never goes below zero", () => {
+    const logs = [
+      { slept_on: "2026-05-11", hours: 7 }, // -1
+      { slept_on: "2026-05-12", hours: 10 }, // +2
+    ];
+    const r = computeSleepDebt(logs, "2026-05-12", { windowDays: 3, baselineHours: 8 });
+    expect(r.debt_hours).toBe(0);
+  });
+
+  it("pays off exactly despite decimal hours", () => {
+    const logs = [
+      { slept_on: "2026-05-10", hours: 7.1 },
+      { slept_on: "2026-05-11", hours: 7.7 },
+      { slept_on: "2026-05-12", hours: 9.2 },
+    ];
+    const r = computeSleepDebt(logs, "2026-05-12", { windowDays: 3, baselineHours: 8 });
+    expect(r.debt_hours).toBe(0);
+    const short = computeSleepDebt(logs.slice(0, 2), "2026-05-11", {
+      windowDays: 3,
+      baselineHours: 8,
+    });
+    expect(short.debt_hours).toBe(1.2);
+  });
+
+  it("defaults to a 14-night window", () => {
+    expect(DEFAULT_SLEEP_CONFIG.windowDays).toBe(14);
+    const logs = [
+      { slept_on: "2026-05-12", hours: 6 }, // 14 nights before 05-25: outside
+      { slept_on: "2026-05-13", hours: 7 }, // first night in the window
+    ];
+    const r = computeSleepDebt(logs, "2026-05-26", DEFAULT_SLEEP_CONFIG);
+    expect(r.debt_hours).toBe(1);
+    expect(r.nights_logged).toBe(1);
+    expect(r.window_days).toBe(14);
   });
 
   it("excludes untracked (vacation) nights from debt and average", () => {

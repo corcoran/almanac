@@ -28,6 +28,7 @@ import {
   computeStimStates,
   computeTdeeForUser,
   computeTrendWeight,
+  DEFAULT_SLEEP_CONFIG,
   getTodayContext,
   recommendTemplateForUser,
   summarizeTrainingHistory,
@@ -263,12 +264,12 @@ export const registerSignalsRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const userId = requireUserId(req);
       const today = todayIso();
-      const windowDays = req.query.window_days ?? 7;
+      const windowDays = req.query.window_days ?? DEFAULT_SLEEP_CONFIG.windowDays;
       const startDate = addDaysIso(today, -(windowDays - 1));
       const logs = app.db
         .prepare("SELECT slept_on, hours FROM sleep_logs WHERE user_id = ? AND slept_on >= ?")
         .all(userId, startDate) as Array<{ slept_on: string; hours: number }>;
-      return computeSleepDebt(logs, today, { windowDays, baselineHours: 8 });
+      return computeSleepDebt(logs, today, { ...DEFAULT_SLEEP_CONFIG, windowDays });
     },
   );
 

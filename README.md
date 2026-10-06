@@ -101,7 +101,7 @@ Everything lives at **[almanac-fitness.com](https://almanac-fitness.com/)**.
 ### Sleep
 
 - Hours and quality from 1 to 5 per night, handling timezone-aware midnight crossings.
-- A rolling sleep debt against a baseline, over a window you configure. It defaults to 14 days.
+- A sleep debt over the last 14 nights against an 8-hour baseline. Short nights add to it, long nights pay it down, and it never goes below zero.
 
 ### Accomplishments
 

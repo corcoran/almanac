@@ -13,7 +13,7 @@ import { listWorkoutsWithDetail } from "../repos/workouts.repo.js";
 import type { EnergyBalanceSchema } from "../schemas/signals.js";
 import { type Aggregate, makeAggregate } from "./aggregate.js";
 import { WORKOUT_KCAL_PER_MIN } from "./avg-activity.js";
-import { DEFAULT_DAY_STATUS_CONFIG } from "./config.js";
+import { DEFAULT_DAY_STATUS_CONFIG, DEFAULT_SLEEP_CONFIG } from "./config.js";
 import { computeDailyTarget, type DailyTargetOutput } from "./daily-target.js";
 import { computeDayKcalIn } from "./day-kcal-in.js";
 import { computeTdeeForUser } from "./inputs.js";
@@ -526,10 +526,17 @@ export function getTodayContext(
     // sibling week queries, which moved to the completed-days window): a
     // slept_on=today night is last night, already complete.
     .all(userId, sevenDaysAgo) as Array<{ slept_on: string; hours: number }>;
-  // computeSleepDebt clips to its own (7-day) window; weekUntracked spans the
-  // matching range, so nights inside a vacation are dropped from both debt and
-  // its average.
-  const sleepDebt = computeSleepDebt(weekSleep, today, undefined, weekUntracked);
+  // Sleep debt has its own, longer window than the week block, so it gets its
+  // own fetch and untracked set.
+  const debtFrom = addDays(today, -(DEFAULT_SLEEP_CONFIG.windowDays - 1));
+  const debtSleep = db
+    .prepare(
+      `SELECT slept_on, hours FROM sleep_logs
+       WHERE user_id = ? AND slept_on >= ?`,
+    )
+    .all(userId, debtFrom) as Array<{ slept_on: string; hours: number }>;
+  const debtUntracked = getUntrackedDays(db, userId, debtFrom, today);
+  const sleepDebt = computeSleepDebt(debtSleep, today, DEFAULT_SLEEP_CONFIG, debtUntracked);
   // Tracked-only nights for the week sleep average + its days_with_data count.
   const weekSleepTracked = weekSleep.filter((s) => !weekUntracked.has(s.slept_on));
   const sleepAvg =

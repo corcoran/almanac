@@ -658,14 +658,12 @@ function messageFor(
       // value 0 ⇒ debt-cleared flavor; otherwise the density good-night count.
       // Density rows always have value >= sleepDensityMinNights (> 0) — the
       // detector only pushes a density row when goodToday meets the threshold —
-      // so the 0 sentinel is unambiguous. The density window comes from
-      // config.sleepDensityWindowNights and the sleep-debt window from
-      // DEFAULT_SLEEP_CONFIG; both default to 7. Reconstruction uses
-      // DEFAULT_SLEEP_CONFIG here, so message text drifts only if those configs
-      // ever diverge (cosmetic; `value` is the canonical magnitude).
+      // so the 0 sentinel is unambiguous. Reconstruction uses the default
+      // density window, so the text drifts only if a non-default config was
+      // used at detection time (cosmetic; `value` is the canonical magnitude).
       return value === 0
         ? "Cleared your sleep debt"
-        : `${value} of the last ${DEFAULT_SLEEP_CONFIG.windowDays} nights at ${DEFAULT_SLEEP_CONFIG.baselineHours}h+`;
+        : `${value} of the last ${DEFAULT_ACCOMPLISHMENTS_CONFIG.sleepDensityWindowNights} nights at ${DEFAULT_SLEEP_CONFIG.baselineHours}h+`;
     default:
       return "Accomplishment";
   }
