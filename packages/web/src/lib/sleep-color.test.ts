@@ -35,3 +35,11 @@ describe("sleepColor", () => {
     expect(sleepColor(-1)).toBe(sleepColor(0));
   });
 });
+
+describe("sleepColor highlight", () => {
+  it("keeps the hue and lightens the bar", () => {
+    expect(sleepColor(8, { highlight: true })).toBe("hsl(135.0, 55%, 72%)");
+    expect(sleepColor(5, { highlight: true })).toBe("hsl(37.5, 55%, 72%)");
+    expect(sleepColor(8)).toBe("hsl(135.0, 55%, 55%)");
+  });
+});

@@ -17,9 +17,14 @@ import { type PanelName, useActivePanel } from "./composables/useActivePanel.js"
 import { useIsMobile } from "./composables/useIsMobile.js";
 import { useLastSeenVersion } from "./composables/useLastSeenVersion.js";
 import { useWelcomeDismissed } from "./composables/useWelcomeDismissed.js";
-import { reloadAfterSleepSave, sleepChartWindow } from "./lib/reload-after-log.js";
+import {
+  reloadAfterSleepSave,
+  reloadAfterStepsSave,
+  sleepChartWindow,
+} from "./lib/reload-after-log.js";
 import { reloadForViewedDate } from "./lib/reload-for-date.js";
 import { reloadNudge } from "./lib/reload-nudge.js";
+import { stepsChartRange } from "./lib/steps-chart.js";
 import type { UnitSystem } from "./lib/units.js";
 import { currentUserDate, daysAgoUserDate, daysAhead } from "./lib/user-day.js";
 import { useAuthStore } from "./stores/auth.js";
@@ -31,6 +36,7 @@ import { useMealsStore } from "./stores/meals.js";
 import { useNextBestActionStore } from "./stores/nextBestAction.js";
 import { useRecentWorkoutsStore } from "./stores/recent-workouts.js";
 import { useSleepLogsRangeStore } from "./stores/sleep-logs-range.js";
+import { useStepLogsRangeStore } from "./stores/step-logs-range.js";
 import { useStoredMealsStore } from "./stores/stored-meals.js";
 import { useTemplatesStore } from "./stores/templates.js";
 import { useTodayStore } from "./stores/today.js";
@@ -50,6 +56,7 @@ const exerciseGroupsStore = useExerciseGroupsStore();
 const macrosStore = useMacrosRangeStore();
 const weightsStore = useBodyWeightsRangeStore();
 const sleepLogsStore = useSleepLogsRangeStore();
+const stepLogsStore = useStepLogsRangeStore();
 const mealsStore = useMealsStore();
 const storedMealsStore = useStoredMealsStore();
 const nextBestActionStore = useNextBestActionStore();
@@ -189,6 +196,11 @@ onMounted(() => {
     const sleepWindow = sleepChartWindow(now, tz);
     void sleepLogsStore.load(client, sleepWindow.from, sleepWindow.to);
     sleepWindowDates.value = sleepWindow.dates;
+    const stepsTargetOn = todayStore.data?.steps_target.on_date;
+    if (stepsTargetOn !== undefined) {
+      stepsRange.value = stepsChartRange(stepsTargetOn);
+      void stepLogsStore.load(client, stepsRange.value.from, stepsRange.value.to);
+    }
     void weightsStore.load(client, fourteenDaysAgo, tomorrow);
     // Today's meals — the `/v1/meals` route uses TimestampRangeQuery which
     // resolves `from_date=X&to_date=X` to a single user-day window
@@ -206,6 +218,13 @@ onMounted(() => {
 // strings, so exact ISO match is sufficient.
 const staleNotice = ref<string | null>(null);
 const sleepWindowDates = ref<string[]>([]);
+// The steps chart window, fixed at boot to the live steps target day (like the
+// sleep window, it doesn't move when a past day is viewed).
+const stepsRange = ref<{ from: string; to: string; dates: string[] }>({
+  from: "",
+  to: "",
+  dates: [],
+});
 
 // The calendar day the user is currently viewing. Defaults to the real
 // today (derived from the today store's `now` + timezone); updated when
@@ -333,6 +352,20 @@ async function onSleepSaved(): Promise<void> {
   );
 }
 
+async function onStepsSaved(): Promise<void> {
+  const tz = todayStore.data?.user.timezone ?? "UTC";
+  const now = new Date();
+  await reloadAfterStepsSave(
+    { todayStore, stepLogsStore, macrosStore, nudgeStore: nextBestActionStore },
+    client,
+    {
+      viewedDate: isPastDay.value ? selectedDate.value : undefined,
+      steps: stepsRange.value,
+      macros: { from: daysAgoUserDate(now, 6, tz), to: currentUserDate(now, tz) },
+    },
+  );
+}
+
 async function onMealsChanged(): Promise<void> {
   const tz = todayStore.data?.user.timezone ?? "UTC";
   const now = new Date();
@@ -379,8 +412,6 @@ async function onCardioChanged(): Promise<void> {
     // The week grid's CARDIO + NET rows for today come from the macros range
     // store, not the today payload — refresh it so they're not left stale.
     macrosStore.reload(client, sevenDaysAgo, today),
-    // MovementBlock also covers steps; logging steps can resolve the
-    // unlogged_steps / log_yesterday_steps nudge — refresh next steps.
     reloadNudge(nextBestActionStore, client),
   ]);
 }
@@ -466,11 +497,11 @@ watch(
       />
     </div>
     <div v-if="needsOnboarding" class="onboarding-full" :class="{ 'has-banner': isPastDay }">
-      <TodayPane :client="client" :window-dates="sleepWindowDates" :selected-date="selectedDate" :meal-chat-enabled="mealChatEnabled" @open-settings="openSettings" @weight-saved="onWeightSaved" @sleep-saved="onSleepSaved" @cardio-changed="onCardioChanged" @meals-changed="onMealsChanged" @phase-changed="onPhaseChanged" @select-date="onSelectDate" @log-with-ai="showMealChat = true" />
+      <TodayPane :client="client" :window-dates="sleepWindowDates" :steps-window-dates="stepsRange.dates" :selected-date="selectedDate" :meal-chat-enabled="mealChatEnabled" @open-settings="openSettings" @weight-saved="onWeightSaved" @sleep-saved="onSleepSaved" @steps-saved="onStepsSaved" @cardio-changed="onCardioChanged" @meals-changed="onMealsChanged" @phase-changed="onPhaseChanged" @select-date="onSelectDate" @log-with-ai="showMealChat = true" />
     </div>
     <div v-else ref="panesRef" class="panes" :class="{ 'has-banner': isPastDay }">
       <section ref="dashboardRef" class="panel panel-dashboard">
-        <TodayPane ref="dashboardPaneRef" :client="client" :window-dates="sleepWindowDates" :selected-date="selectedDate" :meal-chat-enabled="mealChatEnabled" @open-settings="openSettings" @weight-saved="onWeightSaved" @sleep-saved="onSleepSaved" @cardio-changed="onCardioChanged" @meals-changed="onMealsChanged" @phase-changed="onPhaseChanged" @select-date="onSelectDate" @log-with-ai="showMealChat = true" />
+        <TodayPane ref="dashboardPaneRef" :client="client" :window-dates="sleepWindowDates" :steps-window-dates="stepsRange.dates" :selected-date="selectedDate" :meal-chat-enabled="mealChatEnabled" @open-settings="openSettings" @weight-saved="onWeightSaved" @sleep-saved="onSleepSaved" @steps-saved="onStepsSaved" @cardio-changed="onCardioChanged" @meals-changed="onMealsChanged" @phase-changed="onPhaseChanged" @select-date="onSelectDate" @log-with-ai="showMealChat = true" />
       </section>
       <section ref="workoutRef" class="panel panel-workout">
         <WorkoutPane :client="client" />
