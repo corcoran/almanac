@@ -273,6 +273,8 @@ export function buildReportMarkdown(report: ShareReport): string {
   lines.push(
     `- Energy balance: ${fmt(eb.total_in)} in − ${fmt(eb.tdee_baseline)} TDEE = **${signed(eb.net)} net** today`,
   );
+  const st = context.steps_target;
+  lines.push(`- Steps for ${st.on_date}: ${st.log ? fmt(st.log.count) : "not logged yet"}`);
   lines.push("");
 
   // --- Weight & TDEE -------------------------------------------------------
