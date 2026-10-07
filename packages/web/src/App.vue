@@ -17,6 +17,7 @@ import { type PanelName, useActivePanel } from "./composables/useActivePanel.js"
 import { useIsMobile } from "./composables/useIsMobile.js";
 import { useLastSeenVersion } from "./composables/useLastSeenVersion.js";
 import { useWelcomeDismissed } from "./composables/useWelcomeDismissed.js";
+import { reloadAfterSleepSave, sleepChartWindow } from "./lib/reload-after-log.js";
 import { reloadForViewedDate } from "./lib/reload-for-date.js";
 import { reloadNudge } from "./lib/reload-nudge.js";
 import type { UnitSystem } from "./lib/units.js";
@@ -185,8 +186,9 @@ onMounted(() => {
     // Sleep + body-weight repos treat `to` as EXCLUSIVE (slept_on /
     // measured_on < to), so we pad with tomorrow's user-date to include
     // today's just-logged entry in the histogram / sparkline.
-    void sleepLogsStore.load(client, fourteenDaysAgo, tomorrow);
-    sleepWindowDates.value = Array.from({ length: 14 }, (_, i) => daysAgoUserDate(now, 13 - i, tz));
+    const sleepWindow = sleepChartWindow(now, tz);
+    void sleepLogsStore.load(client, sleepWindow.from, sleepWindow.to);
+    sleepWindowDates.value = sleepWindow.dates;
     void weightsStore.load(client, fourteenDaysAgo, tomorrow);
     // Today's meals — the `/v1/meals` route uses TimestampRangeQuery which
     // resolves `from_date=X&to_date=X` to a single user-day window
@@ -321,16 +323,14 @@ async function onWeightSaved(): Promise<void> {
 
 async function onSleepSaved(): Promise<void> {
   const tz = todayStore.data?.user.timezone ?? "UTC";
-  const now = new Date();
-  const tomorrow = daysAhead(now, 1, tz);
-  const sevenDaysAgo = daysAgoUserDate(now, 6, tz);
-  await Promise.all([
-    todayStore.reload(client, isPastDay.value ? selectedDate.value : undefined),
-    sleepLogsStore.reload(client, sevenDaysAgo, tomorrow),
-    // Logging sleep resolves the stale_sleep_log / log_yesterday_sleep nudge —
-    // refresh next steps.
-    reloadNudge(nextBestActionStore, client),
-  ]);
+  await reloadAfterSleepSave(
+    { todayStore, sleepLogsStore, nudgeStore: nextBestActionStore },
+    client,
+    {
+      viewedDate: isPastDay.value ? selectedDate.value : undefined,
+      sleep: sleepChartWindow(new Date(), tz),
+    },
+  );
 }
 
 async function onMealsChanged(): Promise<void> {

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving sleep no longer shrinks the sleep chart to the last 7 nights until the
+  page is reloaded.
+
 ## [1.41.0] - 2026-10-05
 
 ### Changed
