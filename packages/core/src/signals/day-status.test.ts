@@ -6,7 +6,6 @@ import { createExercise } from "../repos/exercises.repo.js";
 import { createMeal } from "../repos/meals.repo.js";
 import { closeAndStartPhase } from "../repos/nutrition-phases.repo.js";
 import { createSleepLog } from "../repos/sleep.repo.js";
-import { createOrUpdateStepLog } from "../repos/step-logs.repo.js";
 import { createUntrackedPeriod } from "../repos/untracked-periods.repo.js";
 import { updateUser } from "../repos/users.repo.js";
 import { createWorkout } from "../repos/workouts.repo.js";
@@ -508,102 +507,6 @@ describe("computeDayStatus", () => {
       createBodyWeight(db, { user_id: userId, measured_on: "2026-05-19", weight_kg: 82 });
       const r = computeDayStatus(db, userId, new Date("2026-05-21T20:00:00Z"));
       expect(r.nudges.find((n) => n.code === "stale_weight_log")).toBeUndefined();
-    });
-  });
-
-  describe("summary.steps_logged", () => {
-    it("is true when a step log exists for the user-day", () => {
-      const { db, userId } = setup();
-      createOrUpdateStepLog(db, {
-        user_id: userId,
-        on_date: "2026-05-21",
-        steps: 8000,
-      });
-      const r = computeDayStatus(db, userId, new Date("2026-05-21T20:00:00Z"));
-      expect(r.summary.steps_logged).toBe(true);
-    });
-
-    it("is false when no step log exists for the user-day", () => {
-      const { db, userId } = setup();
-      // No step log seeded.
-      const r = computeDayStatus(db, userId, new Date("2026-05-21T20:00:00Z"));
-      expect(r.summary.steps_logged).toBe(false);
-    });
-
-    it("is true even when the logged steps count is zero (explicit zero, not missing)", () => {
-      // Mirrors the meals_logged story: { count: 0 } is distinct from null
-      // — the user told us they didn't walk, vs. we don't know yet.
-      const { db, userId } = setup();
-      createOrUpdateStepLog(db, {
-        user_id: userId,
-        on_date: "2026-05-21",
-        steps: 0,
-      });
-      const r = computeDayStatus(db, userId, new Date("2026-05-21T20:00:00Z"));
-      expect(r.summary.steps_logged).toBe(true);
-    });
-  });
-
-  describe("unlogged_steps nudge", () => {
-    it("fires at hour >= 20 for a cut phase with no step log", () => {
-      const { db, userId } = setup("America/Toronto", "cut");
-      // 2026-05-22T00:00:00Z = 20:00 ET on 2026-05-21.
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      const nudge = r.nudges.find((n) => n.code === "unlogged_steps");
-      expect(nudge).toBeDefined();
-      expect(defined(nudge, "nudge").severity).toBe("info");
-      expect((defined(nudge, "nudge").details as { hour_local: number }).hour_local).toBe(20);
-    });
-
-    it("fires at hour >= 20 for a bulk phase with no step log", () => {
-      const { db, userId } = setup("America/Toronto", "bulk");
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeDefined();
-    });
-
-    it("does NOT fire for a maintenance phase even past the threshold", () => {
-      // Maintenance doesn't need the NEAT precision a cut/bulk does.
-      const { db, userId } = setup("America/Toronto", "maintenance");
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeUndefined();
-    });
-
-    it("does NOT fire before hour 20 — user still has chances to walk", () => {
-      const { db, userId } = setup("America/Toronto", "cut");
-      // 2026-05-21T22:00:00Z = 18:00 ET — before the 20:00 gate.
-      const r = computeDayStatus(db, userId, new Date("2026-05-21T22:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeUndefined();
-    });
-
-    it("does NOT fire when a step log exists, even with zero steps", () => {
-      const { db, userId } = setup("America/Toronto", "cut");
-      createOrUpdateStepLog(db, {
-        user_id: userId,
-        on_date: "2026-05-21",
-        steps: 0,
-      });
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeUndefined();
-    });
-
-    it("does NOT fire when a step log exists with a nonzero count", () => {
-      const { db, userId } = setup("America/Toronto", "cut");
-      createOrUpdateStepLog(db, {
-        user_id: userId,
-        on_date: "2026-05-21",
-        steps: 9500,
-      });
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeUndefined();
-    });
-
-    it("does NOT fire when no nutrition phase is active", () => {
-      const db = freshDb();
-      const userId = seedUser(db);
-      updateUser(db, userId, { timezone: "America/Toronto" });
-      // No phase started.
-      const r = computeDayStatus(db, userId, new Date("2026-05-22T00:00:00Z"));
-      expect(r.nudges.find((n) => n.code === "unlogged_steps")).toBeUndefined();
     });
   });
 

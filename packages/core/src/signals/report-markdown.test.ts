@@ -14,6 +14,7 @@ function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
     context: {
       now: "2026-06-20T14:00:00.000Z",
       today_date: "2026-06-20",
+      steps_target: { on_date: "2026-06-19", log: null },
       user: {
         id: 1,
         name: "Jeff",

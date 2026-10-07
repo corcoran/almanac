@@ -89,6 +89,7 @@ function makeTodayFixture() {
   return {
     now: "2026-05-18T14:00:00Z",
     today_date: "2026-05-18",
+    steps_target: { on_date: "2026-05-17", log: null },
     user: {
       id: 1,
       name: "Tester",

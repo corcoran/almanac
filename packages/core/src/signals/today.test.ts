@@ -799,6 +799,38 @@ describe("getTodayContext", () => {
       expect(ctx.today.steps).toEqual({ id: row.id, count: 8000, est_kcal: null });
     });
 
+    it("steps_target is the previous calendar day with its log", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      const row = createOrUpdateStepLog(db, {
+        user_id: userId,
+        on_date: "2026-10-05",
+        steps: 9412,
+        est_kcal: 312,
+      });
+      // 10:00 EDT Oct 6
+      const ctx = getTodayContext(db, userId, new Date("2026-10-06T14:00:00Z"));
+      expect(ctx.steps_target).toEqual({
+        on_date: "2026-10-05",
+        log: { id: row.id, count: 9412, est_kcal: 312 },
+      });
+    });
+
+    it("steps_target equals today_date between midnight and the 4am rollover", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      // 01:00 EDT Oct 6, user-day still Oct 5
+      const ctx = getTodayContext(db, userId, new Date("2026-10-06T05:00:00Z"));
+      expect(ctx.steps_target.on_date).toBe("2026-10-05");
+      expect(ctx.steps_target.on_date).toBe(ctx.today_date);
+      expect(ctx.steps_target.log).toBeNull();
+    });
+
+    it("steps_target is D − 1 for a past-day view", () => {
+      const { db, userId } = setupTzScenario("America/Toronto");
+      // The signals route's past-day `now`: 04:00 local start + 12h
+      const ctx = getTodayContext(db, userId, new Date("2026-10-01T20:00:00Z"));
+      expect(ctx.steps_target.on_date).toBe("2026-09-30");
+    });
+
     it("a stored row is distinguished from absence regardless of its steps value", () => {
       // The repo layer isn't the validation boundary — StepLogInputSchema
       // rejects steps: 0 above the repo, but a row written directly still

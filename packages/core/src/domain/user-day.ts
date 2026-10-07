@@ -99,6 +99,22 @@ export function currentUserDate(at: Date, tz: string): string {
 }
 
 /**
+ * The day whose step total is due at `at`: the local calendar date minus one.
+ * Uses the midnight boundary, not DAY_START_HOUR, because phone step counters
+ * reset at midnight. Between 00:00 and DAY_START_HOUR this is the current
+ * user-day.
+ */
+export function stepsTargetDate(at: Date, tz: string): string {
+  const local = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
+  return addDaysIso(local, -1);
+}
+
+/**
  * 12-hour wall-clock time of `at` in `tz`, e.g. "4:12 PM". ICU puts a narrow
  * no-break space before AM/PM; it is normalized to a plain space.
  */

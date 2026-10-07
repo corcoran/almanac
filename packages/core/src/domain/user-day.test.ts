@@ -5,6 +5,7 @@ import {
   DAY_START_HOUR,
   localClockTime,
   parseLogTimestamp,
+  stepsTargetDate,
   userDayWindow,
 } from "./user-day.js";
 
@@ -125,5 +126,20 @@ describe("localClockTime", () => {
   it("shows the raw wall clock between midnight and 4am", () => {
     expect(localClockTime(new Date("2026-10-06T05:30:00Z"), "America/Toronto")).toBe("1:30 AM");
     expect(localClockTime(new Date("2026-10-06T04:05:00Z"), "America/Toronto")).toBe("12:05 AM");
+  });
+});
+
+describe("stepsTargetDate", () => {
+  const tz = "America/Toronto";
+  it.each([
+    ["2026-10-06T00:30:00", "2026-10-05"],
+    ["2026-10-06T03:59:00", "2026-10-05"],
+    ["2026-10-06T04:00:00", "2026-10-05"],
+    ["2026-10-06T23:59:00", "2026-10-05"],
+    ["2026-11-01T00:30:00", "2026-10-31"],
+    ["2026-03-08T00:30:00", "2026-03-07"],
+    ["2026-11-01T12:00:00", "2026-10-31"],
+  ])("%s local → %s", (wall, expected) => {
+    expect(stepsTargetDate(parseLogTimestamp(wall, tz), tz)).toBe(expected);
   });
 });

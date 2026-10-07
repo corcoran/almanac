@@ -1,5 +1,5 @@
 import type { Connection } from "../db/connection.js";
-import { currentUserDate } from "../domain/user-day.js";
+import { currentUserDate, stepsTargetDate } from "../domain/user-day.js";
 import { listBodyWeights } from "../repos/body-weights.repo.js";
 import { findActivePhase } from "../repos/nutrition-phases.repo.js";
 import { listSleepLogs } from "../repos/sleep.repo.js";
@@ -26,8 +26,7 @@ export type NextBestActionCode =
   | "low_intake_today"
   | "no_workout_streak"
   | "stale_weight_log"
-  | "stale_sleep_log"
-  | "unlogged_steps";
+  | "stale_sleep_log";
 
 export type NextBestAction = {
   code: NextBestActionCode;
@@ -75,10 +74,6 @@ function suggestedToolForNudge(code: DayStatusNudge["code"]): string {
       return "log_weight";
     case "stale_sleep_log":
       return "log_sleep";
-    // unlogged_steps is info-only in day-status today (never passes the warn/concern
-    // Tier-3 filter); mapped here for forward-compat if its severity ever escalates.
-    case "unlogged_steps":
-      return "log_steps";
     default:
       return "get_day_status";
   }
@@ -196,15 +191,18 @@ export function computeNextBestAction(
     });
   }
 
-  const yesterdaySteps = findStepLogByDate(db, userId, yesterday);
-  if (yesterdaySteps === null && !yesterdayUntracked) {
+  // Steps follow the midnight boundary, not the user-day: between midnight and
+  // DAY_START_HOUR the day that's due is the current user-day.
+  const stepsOn = stepsTargetDate(now, user.timezone);
+  const stepsOnUntracked = getUntrackedDays(db, userId, stepsOn, stepsOn).has(stepsOn);
+  if (findStepLogByDate(db, userId, stepsOn) === null && !stepsOnUntracked) {
     previousDayActions.push({
       code: "log_yesterday_steps",
       tier: "previous_day",
       title: "Log yesterday's steps",
-      detail: `No step count for ${yesterday}. A missed day is a permanent hole in NEAT/TDEE adherence.`,
+      detail: `No step count for ${stepsOn}. A missed day is a permanent hole in NEAT/TDEE adherence.`,
       suggested_tool: "log_steps",
-      suggested_args: { on_date: yesterday },
+      suggested_args: { on_date: stepsOn },
     });
   }
 

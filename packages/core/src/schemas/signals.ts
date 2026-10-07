@@ -367,6 +367,14 @@ export const TodayContextResponseSchema = z.object({
   // `now`'s date portion — surfacing it keeps consumers from inferring the
   // wrong date off `now` and contradicting get_day_status.date.
   today_date: IsoDateSchema,
+  // The day whose step total is due: the local calendar date minus one
+  // (midnight boundary, not the 4am rollover). On a past-day view, D − 1.
+  steps_target: z.object({
+    on_date: IsoDateSchema,
+    log: z
+      .object({ id: IdSchema, count: z.number().int(), est_kcal: z.number().int().nullable() })
+      .nullable(),
+  }),
   user: z.object({
     id: IdSchema,
     name: z.string(),
@@ -498,7 +506,6 @@ export const NudgeCodeSchema = z.enum([
   "no_workout_streak",
   "stale_weight_log",
   "stale_sleep_log",
-  "unlogged_steps",
 ]);
 
 export const DayStatusNudgeSchema = z.discriminatedUnion("code", [
@@ -536,14 +543,6 @@ export const DayStatusNudgeSchema = z.discriminatedUnion("code", [
       days_since_last: z.number().int().nonnegative().nullable(),
     }),
   }),
-  z.object({
-    code: z.literal("unlogged_steps"),
-    severity: NudgeSeveritySchema,
-    message: z.string(),
-    details: z.object({
-      hour_local: z.number().int(),
-    }),
-  }),
 ]);
 
 export const DayStatusResponseSchema = z.object({
@@ -560,7 +559,6 @@ export const DayStatusResponseSchema = z.object({
     weight_logged: z.boolean(),
     alcohol_logged: z.boolean(),
     meals_logged: z.boolean(),
-    steps_logged: z.boolean(),
     status: z.enum(["on_track", "at_risk", "off_track"]).nullable(),
   }),
   nudges: z.array(DayStatusNudgeSchema),
@@ -580,7 +578,6 @@ export const NextBestActionSchema = z.object({
     "no_workout_streak",
     "stale_weight_log",
     "stale_sleep_log",
-    "unlogged_steps",
   ]),
   tier: z.enum(["onboarding", "previous_day", "today"]),
   title: z.string(),
