@@ -10,7 +10,7 @@ export function makeGetTodayContextTool(deps: ToolDeps): Tool<GetTodayContextInp
   return {
     name: "get_today_context",
     description:
-      "Get the full TodayContext snapshot: current phase, today's macros so far, stim states, sleep, weight trend, recent workouts. Use this as the default starting point when the user asks 'how am I doing today' or any unscoped question about their current state. Each muscle group's `trainable_capacity` is one of `'depleted'` (don't train this group yet — recent heavy work, recovery not complete), `'recovering'` (acceptable but not optimal — mid-fade), or `'fresh'` (prime window — full output expected). The user's free-text \"about_me\" profile note (if set) is included as background context.",
+      "Get the full TodayContext snapshot: current phase, today's macros so far, stim states, sleep, weight trend, recent workouts. Use this as the default starting point when the user asks 'how am I doing today' or any unscoped question about their current state. Each muscle group's `trainable_capacity` is one of `'depleted'` (don't train this group yet — recent heavy work, recovery not complete), `'recovering'` (acceptable but not optimal — mid-fade), or `'fresh'` (prime window — full output expected). The user's free-text \"about_me\" profile note (if set) is included as background context. `steps_target` is the day whose step count is due (the previous calendar day) and its log, if any.",
     inputSchema: GetTodayContextInputSchema,
     annotations: {
       readOnlyHint: true,

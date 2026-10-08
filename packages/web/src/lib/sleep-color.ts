@@ -6,8 +6,9 @@
  */
 const SATURATION = 55; // %
 const LIGHTNESS = 55; // %
+const HIGHLIGHT_LIGHTNESS = 72; // %
 
-export function sleepColor(hours: number): string {
+export function sleepColor(hours: number, opts: { highlight?: boolean } = {}): string {
   // Two-segment linear hue:
   //   0-6h:  hue goes 0 (red) → 45 (amber)
   //   6-8h:  hue goes 45 (amber) → 135 (green)
@@ -21,5 +22,6 @@ export function sleepColor(hours: number): string {
   } else {
     hue = 135;
   }
-  return `hsl(${hue.toFixed(1)}, ${SATURATION}%, ${LIGHTNESS}%)`;
+  const lightness = opts.highlight ? HIGHLIGHT_LIGHTNESS : LIGHTNESS;
+  return `hsl(${hue.toFixed(1)}, ${SATURATION}%, ${lightness}%)`;
 }

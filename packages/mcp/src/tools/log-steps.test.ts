@@ -95,15 +95,16 @@ describe("log_steps", () => {
 });
 
 describe("log_steps guidance", () => {
-  it("tells the model not to prompt for today's count before evening", () => {
+  it("tells the model steps are logged the morning after, for steps_target", () => {
     const api = new ApiClient({ baseUrl: "http://x", fetchImpl: vi.fn() });
     const tool = makeLogStepsTool({
       api,
       currentUserId: async () => 1,
       currentToken: () => "alm_test",
     });
-    expect(tool.description).toContain("before evening");
-    expect(tool.description).toContain("can be updated");
+    expect(tool.description).toContain("morning after");
+    expect(tool.description).toContain("steps_target.on_date");
+    expect(tool.description).toContain("today so far");
   });
 });
 

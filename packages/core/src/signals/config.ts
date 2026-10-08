@@ -220,14 +220,6 @@ export type DayStatusConfig = {
    */
   noSleepMaxDays: number;
   /**
-   * User-local hour-of-day past which an unlogged steps day triggers the
-   * `unlogged_steps` nudge. Below this hour we don't fire because the user
-   * legitimately hasn't had the chance to walk yet. 20 (8pm) is the default —
-   * late enough that meaningful walking is in the past, early enough that
-   * the nudge can still prompt a log before sleep.
-   */
-  unloggedStepsHourThreshold: number;
-  /**
    * Minimum length (in consecutive days with no logged data of any kind) of a
    * trailing run before `get_today_context.unexplained_gap` surfaces it as a
    * mark-able gap. 4 days is long enough that a normal weekend skip doesn't
@@ -242,7 +234,6 @@ export const DEFAULT_DAY_STATUS_CONFIG: DayStatusConfig = {
   noWorkoutMaxDays: 7,
   noWeightMaxDays: 3,
   noSleepMaxDays: 2,
-  unloggedStepsHourThreshold: 20,
   gapDetectionMinDays: 4,
 };
 

@@ -14,6 +14,7 @@ function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
     context: {
       now: "2026-06-20T14:00:00.000Z",
       today_date: "2026-06-20",
+      steps_target: { on_date: "2026-06-19", log: null },
       user: {
         id: 1,
         name: "Jeff",
@@ -261,6 +262,23 @@ function makeReport(overrides: Partial<ShareReport> = {}): ShareReport {
 describe("buildReportMarkdown", () => {
   it("fixture satisfies ShareReportSchema", () => {
     expect(ShareReportSchema.safeParse(makeReport()).success).toBe(true);
+  });
+
+  it("names the steps target day and its logged count", () => {
+    const base = makeReport();
+    const md = buildReportMarkdown({
+      ...base,
+      context: {
+        ...base.context,
+        steps_target: { on_date: "2026-06-19", log: { id: 4, count: 9412, est_kcal: 312 } },
+      },
+    });
+    expect(md).toContain("- Steps for 2026-06-19: 9,412");
+  });
+
+  it("says the steps target day isn't logged yet", () => {
+    const md = buildReportMarkdown(makeReport());
+    expect(md).toContain("- Steps for 2026-06-19: not logged yet");
   });
 
   it("renders all sections, intro, and table header (happy path)", () => {

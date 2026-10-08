@@ -28,8 +28,87 @@ const STUBS = [
   "MacrosWeekGrid",
   "WeightBlock",
   "SleepBlock",
+  "StepsBlock",
   "MonthCalendar",
 ];
+
+function readyFixture() {
+  return {
+    now: "2026-06-03T14:00:00Z",
+    today_date: "2026-06-03",
+    steps_target: { on_date: "2026-06-02", log: null },
+    user: {
+      id: 1,
+      name: "Test",
+      timezone: "UTC",
+      preferred_unit_system: "metric",
+      activity_level: null,
+    },
+    phase: null,
+    today: {
+      kcal_in: 0,
+      protein_g_in: 0,
+      carb_g_in: 0,
+      fat_g_in: 0,
+      meals_logged_today: false,
+      target: null,
+      maintenance: null,
+      intake: { kcal: 0, protein_g: 0, carb_g: 0, fat_g: 0 },
+      observed: null,
+      body_weight_kg: null,
+      most_recent_weight: null,
+      sleep: null,
+      steps: null,
+      workouts: [],
+      cardio: [],
+      alcohol: [],
+      energy_balance: {
+        food_in: 0,
+        alcohol_in: 0,
+        total_in: 0,
+        tdee_baseline: 0,
+        cardio_out: 0,
+        workout_out: 0,
+        steps_out: 0,
+        net: 0,
+      },
+    },
+    week_to_date: {
+      workouts_count: { value: 0, window_days: 7, days_with_data: 0 },
+      cardio_sessions_count: { value: 0, window_days: 7, days_with_data: 0 },
+      cardio_minutes: { value: 0, window_days: 7, days_with_data: 0 },
+      cardio_kcal: { value: 0, window_days: 7, days_with_data: 0 },
+      alcohol_drinks_count: { value: 0, window_days: 7, days_with_data: 0 },
+      alcohol_kcal: { value: 0, window_days: 7, days_with_data: 0 },
+      drinking_days_count: { value: 0, window_days: 7, days_with_data: 0 },
+      avg_kcal_in: { value: 0, window_days: 7, days_with_data: 0 },
+      avg_protein_g: { value: 0, window_days: 7, days_with_data: 0 },
+      sleep_avg_hours: { value: 0, window_days: 7, days_with_data: 0 },
+      sleep_debt: {
+        debt_hours: 0,
+        nights_logged: 0,
+        baseline_hours: 8,
+      },
+    },
+    stim_states: [],
+    tdee: {
+      value: 2000,
+      basis: "profile_baseline",
+      components: {
+        avg_kcal_in: { value: 0, window_days: 0, days_with_data: 0 },
+        avg_net_kcal: { value: 0, window_days: 0, days_with_data: 0 },
+        avg_weight_change_kcal_per_day: 0,
+        measurement_days: 0,
+      },
+    },
+    trend_weight: { current_kg: null, as_of: null, weight_change: null },
+    profile_complete: true,
+    unexplained_gap: null,
+    phase_adherence: null,
+    accomplishments: [],
+    // biome-ignore lint/suspicious/noExplicitAny: minimal test fixture — TypeScript-checked children are stubbed
+  } as any;
+}
 
 describe("TodayPane", () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -39,6 +118,7 @@ describe("TodayPane", () => {
       props: {
         client: dummyClient,
         windowDates: WINDOW_DATES,
+        stepsWindowDates: WINDOW_DATES,
         selectedDate: "2026-06-03",
       },
       global: {
@@ -57,6 +137,7 @@ describe("TodayPane", () => {
       props: {
         client: dummyClient,
         windowDates: WINDOW_DATES,
+        stepsWindowDates: WINDOW_DATES,
         selectedDate: "2026-06-03",
       },
       global: {
@@ -73,86 +154,13 @@ describe("TodayPane", () => {
     // (and MonthCalendar) render. All children are stubbed so only the fields
     // accessed directly in TodayPane's script need to be present.
     store.status = "ready";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    store.data = {
-      now: "2026-06-03T14:00:00Z",
-      today_date: "2026-06-03",
-      user: {
-        id: 1,
-        name: "Test",
-        timezone: "UTC",
-        preferred_unit_system: "metric",
-        activity_level: null,
-      },
-      phase: null,
-      today: {
-        kcal_in: 0,
-        protein_g_in: 0,
-        carb_g_in: 0,
-        fat_g_in: 0,
-        meals_logged_today: false,
-        target: null,
-        maintenance: null,
-        intake: { kcal: 0, protein_g: 0, carb_g: 0, fat_g: 0 },
-        observed: null,
-        body_weight_kg: null,
-        most_recent_weight: null,
-        sleep: null,
-        steps: null,
-        workouts: [],
-        cardio: [],
-        alcohol: [],
-        energy_balance: {
-          food_in: 0,
-          alcohol_in: 0,
-          total_in: 0,
-          tdee_baseline: 0,
-          cardio_out: 0,
-          workout_out: 0,
-          steps_out: 0,
-          net: 0,
-        },
-      },
-      week_to_date: {
-        workouts_count: { value: 0, window_days: 7, days_with_data: 0 },
-        cardio_sessions_count: { value: 0, window_days: 7, days_with_data: 0 },
-        cardio_minutes: { value: 0, window_days: 7, days_with_data: 0 },
-        cardio_kcal: { value: 0, window_days: 7, days_with_data: 0 },
-        alcohol_drinks_count: { value: 0, window_days: 7, days_with_data: 0 },
-        alcohol_kcal: { value: 0, window_days: 7, days_with_data: 0 },
-        drinking_days_count: { value: 0, window_days: 7, days_with_data: 0 },
-        avg_kcal_in: { value: 0, window_days: 7, days_with_data: 0 },
-        avg_protein_g: { value: 0, window_days: 7, days_with_data: 0 },
-        sleep_avg_hours: { value: 0, window_days: 7, days_with_data: 0 },
-        sleep_debt: {
-          debt_hours: 0,
-          nights_logged: 0,
-          baseline_hours: 8,
-        },
-      },
-      stim_states: [],
-      tdee: {
-        value: 2000,
-        basis: "profile_baseline",
-        components: {
-          avg_kcal_in: { value: 0, window_days: 0, days_with_data: 0 },
-          avg_net_kcal: { value: 0, window_days: 0, days_with_data: 0 },
-          avg_weight_change_kcal_per_day: 0,
-          measurement_days: 0,
-        },
-      },
-      trend_weight: { current_kg: null, as_of: null, weight_change: null },
-      profile_complete: true,
-      unexplained_gap: null,
-      phase_adherence: null,
-      accomplishments: [],
-      // biome-ignore lint/suspicious/noExplicitAny: minimal test fixture — TypeScript-checked children are stubbed
-    } as any;
+    store.data = readyFixture();
 
     const wrapper = mount(TodayPane, {
       props: {
         client: dummyClient,
         windowDates: WINDOW_DATES,
+        stepsWindowDates: WINDOW_DATES,
         selectedDate: "2026-06-03",
       },
       global: {
@@ -168,6 +176,27 @@ describe("TodayPane", () => {
     } else {
       throw new Error("MonthCalendar stub not found — cannot test re-emit");
     }
+  });
+
+  it("renders StepsBlock after SleepBlock and re-emits its saved as steps-saved", async () => {
+    const store = useTodayStore();
+    store.status = "ready";
+    store.data = readyFixture();
+    const wrapper = mount(TodayPane, {
+      props: {
+        client: dummyClient,
+        windowDates: WINDOW_DATES,
+        stepsWindowDates: WINDOW_DATES,
+        selectedDate: "2026-06-03",
+      },
+      global: { stubs: STUBS },
+    });
+    const html = wrapper.html();
+    expect(html.indexOf("steps-block-stub")).toBeGreaterThan(html.indexOf("sleep-block-stub"));
+    const steps = wrapper.findComponent({ name: "StepsBlock" });
+    expect(steps.props("stepsTarget")).toEqual({ on_date: "2026-06-02", log: null });
+    await steps.vm.$emit("saved");
+    expect(wrapper.emitted("steps-saved")).toHaveLength(1);
   });
 
   // (Skip the "ready" test — exercising it requires constructing a full

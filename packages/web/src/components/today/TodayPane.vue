@@ -10,6 +10,7 @@ import { useBodyWeightsRangeStore } from "../../stores/body-weights-range.js";
 import { useMacrosRangeStore } from "../../stores/macros-range.js";
 import { useMealsStore } from "../../stores/meals.js";
 import { useSleepLogsRangeStore } from "../../stores/sleep-logs-range.js";
+import { useStepLogsRangeStore } from "../../stores/step-logs-range.js";
 import { useTodayStore } from "../../stores/today.js";
 import MonthCalendar from "../calendar/MonthCalendar.vue";
 import MacrosWeekGrid from "./MacrosWeekGrid.vue";
@@ -21,12 +22,15 @@ import PhaseFormModal from "./PhaseFormModal.vue";
 import PhaseHeader from "./PhaseHeader.vue";
 import RemainingToday from "./RemainingToday.vue";
 import SleepBlock from "./SleepBlock.vue";
+import StepsBlock from "./StepsBlock.vue";
 import StopPhaseDialog from "./StopPhaseDialog.vue";
 import WeightBlock from "./WeightBlock.vue";
 
 const props = defineProps<{
   client: ApiClient;
   windowDates: string[];
+  /** The steps chart's 14 days, ending at the live steps target day. */
+  stepsWindowDates: string[];
   selectedDate: string;
   mealChatEnabled?: boolean;
 }>();
@@ -34,6 +38,7 @@ const emit = defineEmits<{
   (e: "open-settings"): void;
   (e: "weight-saved"): void;
   (e: "sleep-saved"): void;
+  (e: "steps-saved"): void;
   (e: "cardio-changed"): void;
   (e: "meals-changed"): void;
   (e: "phase-changed"): void;
@@ -47,6 +52,7 @@ const { data: todayData, status: todayStatus, error: todayError } = storeToRefs(
 const { data: macrosData } = storeToRefs(useMacrosRangeStore());
 const { data: weightsData } = storeToRefs(useBodyWeightsRangeStore());
 const { data: sleepData } = storeToRefs(useSleepLogsRangeStore());
+const { data: stepLogsData } = storeToRefs(useStepLogsRangeStore());
 const { data: mealsData } = storeToRefs(useMealsStore());
 
 // The phase-card element, exposed for App.vue's useElementVisibility: the
@@ -153,7 +159,6 @@ function onRequestCreateFromCurrent(): void {
     />
     <MovementBlock
       :cardio="todayData.today.cardio"
-      :steps="todayData.today.steps"
       :client="client"
       :date="selectedDate"
       :is-past-day="isPastDay"
@@ -178,6 +183,14 @@ function onRequestCreateFromCurrent(): void {
       :date="selectedDate"
       :is-past-day="isPastDay"
       @saved="emit('sleep-saved')"
+    />
+    <StepsBlock
+      :steps-target="todayData.steps_target"
+      :logs="stepLogsData"
+      :window-dates="stepsWindowDates"
+      :client="client"
+      :is-past-day="isPastDay"
+      @saved="emit('steps-saved')"
     />
     <MonthCalendar
       v-if="todayDate"

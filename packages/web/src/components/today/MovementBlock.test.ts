@@ -81,12 +81,12 @@ function previewResponse(est_kcal_hr: number) {
   };
 }
 
-const MB_BASE = () => ({ cardio: [], steps: null, client: makeClient(), date: "2026-06-15" });
+const MB_BASE = () => ({ cardio: [], client: makeClient(), date: "2026-06-15" });
 
 describe("MovementBlock", () => {
   it("renders the empty-state message when cardio is []", () => {
     const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
+      props: { cardio: [], client: makeClient(), date: "2026-06-15" },
     });
     expect(wrapper.find('[data-test="cardio-empty"]').exists()).toBe(true);
     expect(wrapper.text()).toMatch(/no cardio logged today/i);
@@ -100,7 +100,7 @@ describe("MovementBlock", () => {
           makeCardio({ id: 1, modality: "bike", duration_min: 45, est_kcal: 320 }),
           makeCardio({ id: 2, modality: "row", duration_min: 20, est_kcal: 180 }),
         ],
-        steps: null,
+
         client: makeClient(),
         date: "2026-06-15",
       },
@@ -122,7 +122,7 @@ describe("MovementBlock", () => {
     const wrapper = mount(MovementBlock, {
       props: {
         cardio: [makeCardio({ modality: null })],
-        steps: null,
+
         client: makeClient(),
         date: "2026-06-15",
       },
@@ -138,7 +138,7 @@ describe("MovementBlock", () => {
     const wrapper = mount(MovementBlock, {
       props: {
         cardio: [makeCardio({ modality: "bike", duration_min: null, est_kcal: 200 })],
-        steps: null,
+
         client: makeClient(),
         date: "2026-06-15",
       },
@@ -153,7 +153,7 @@ describe("MovementBlock", () => {
 
   it("captions the block 'Today's Movement'", () => {
     const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
+      props: { cardio: [], client: makeClient(), date: "2026-06-15" },
     });
     expect(wrapper.find(".caption").text()).toBe("Today's Movement");
     expect(wrapper.find('[data-test="movement-block"]').exists()).toBe(true);
@@ -163,7 +163,7 @@ describe("MovementBlock", () => {
     const wrapper = mount(MovementBlock, {
       props: {
         cardio: [],
-        steps: null,
+
         client: makeClient(),
         date: "2026-06-15",
         isPastDay: false,
@@ -174,7 +174,7 @@ describe("MovementBlock", () => {
 
   it("captions the block 'Movement · <date>' when viewing a past day", () => {
     const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-10", isPastDay: true },
+      props: { cardio: [], client: makeClient(), date: "2026-06-10", isPastDay: true },
     });
     const caption = wrapper.find(".caption").text();
     expect(caption).not.toBe("Today's Movement");
@@ -184,70 +184,9 @@ describe("MovementBlock", () => {
     expect(caption).toContain("10");
   });
 
-  it("renders 'Steps: — not logged' when steps is null", () => {
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
-    });
-    const row = wrapper.find('[data-test="steps-row"]');
-    expect(row.exists()).toBe(true);
-    expect(row.text()).toContain("Steps:");
-    expect(row.text()).toMatch(/not logged/i);
-    expect(row.text()).not.toMatch(/syncs next day/i);
-  });
-
-  it("renders 'Steps: N → K kcal' when steps is populated", () => {
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [],
-        steps: { id: 1, count: 8432, est_kcal: 312 },
-        client: makeClient(),
-        date: "2026-06-15",
-      },
-    });
-    const row = wrapper.find('[data-test="steps-row"]');
-    expect(row.text()).toContain("8,432");
-    expect(row.text()).toContain("312");
-    expect(row.text()).toContain("kcal");
-    expect(row.text()).not.toMatch(/syncs next day/i);
-  });
-
-  it("renders an explicit zero-count step log as a real zero (not deferred)", () => {
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [],
-        steps: { id: 1, count: 0, est_kcal: 0 },
-        client: makeClient(),
-        date: "2026-06-15",
-      },
-    });
-    const row = wrapper.find('[data-test="steps-row"]');
-    expect(row.text()).toContain("0");
-    expect(row.text()).not.toMatch(/syncs next day/i);
-  });
-
-  it("shows the steps footer alongside cardio sessions", () => {
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [makeCardio({ id: 1, modality: "bike", duration_min: 45, est_kcal: 320 })],
-        steps: { id: 1, count: 5000, est_kcal: 200 },
-        client: makeClient(),
-        date: "2026-06-15",
-      },
-    });
-    expect(wrapper.findAll('[data-test="cardio-row"]')).toHaveLength(1);
-    expect(wrapper.find('[data-test="steps-row"]').text()).toContain("5,000");
-  });
-
-  it("localizes a large steps est_kcal with grouping", () => {
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [],
-        steps: { id: 1, count: 20000, est_kcal: 1234 },
-        client: makeClient(),
-        date: "2026-06-15",
-      },
-    });
-    expect(wrapper.find('[data-test="steps-row"]').text()).toContain("1,234");
+  it("does not render a steps row", () => {
+    const wrapper = mount(MovementBlock, { props: MB_BASE() });
+    expect(wrapper.find('[data-test="steps-row"]').exists()).toBe(false);
   });
 });
 
@@ -717,145 +656,5 @@ describe("MovementBlock kcal preview", () => {
     await settle();
 
     expect(paths).toHaveLength(0);
-  });
-});
-
-describe("MovementBlock steps editing", () => {
-  it("shows an edit control on the steps row", () => {
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
-    });
-    expect(wrapper.find('[data-test="steps-edit"]').exists()).toBe(true);
-  });
-
-  it("edit → input prefilled with current count when a row exists", async () => {
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [],
-        steps: { id: 3, count: 8432, est_kcal: 312 },
-        client: makeClient(),
-        date: "2026-06-15",
-      },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    const input = wrapper.find('[data-test="steps-edit-input"]');
-    expect(input.exists()).toBe(true);
-    expect((input.element as HTMLInputElement).value).toBe("8432");
-  });
-
-  it("edit → input empty when no row exists", async () => {
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    expect((wrapper.find('[data-test="steps-edit-input"]').element as HTMLInputElement).value).toBe(
-      "",
-    );
-  });
-
-  it("save POSTs { on_date, steps } and emits changed", async () => {
-    const calls: Array<{ path: string; body: unknown }> = [];
-    const client = makeClient({
-      post: async (path, body) => {
-        calls.push({ path, body });
-        return { id: 5 };
-      },
-    });
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client, date: "2026-06-12" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    await wrapper.find('[data-test="steps-edit-input"]').setValue("9000");
-    await wrapper.find('[data-test="steps-edit-save"]').trigger("click");
-    await flushPromises();
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.path).toBe("/v1/step-logs");
-    expect(calls[0]?.body).toEqual({ on_date: "2026-06-12", steps: 9000 });
-    expect(wrapper.emitted("changed")).toHaveLength(1);
-  });
-
-  it("disables save for empty, zero, or non-integer input", async () => {
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    const input = wrapper.find('[data-test="steps-edit-input"]');
-    const save = wrapper.find('[data-test="steps-edit-save"]');
-    expect((save.element as HTMLButtonElement).disabled).toBe(true);
-    await input.setValue("12abc");
-    expect((save.element as HTMLButtonElement).disabled).toBe(true);
-    await input.setValue("-5");
-    expect((save.element as HTMLButtonElement).disabled).toBe(true);
-    await input.setValue("0");
-    expect((save.element as HTMLButtonElement).disabled).toBe(true);
-    await input.setValue("7500");
-    expect((save.element as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("cancel closes the editor without a request", async () => {
-    const calls: string[] = [];
-    const client = makeClient({
-      post: async (p) => {
-        calls.push(p);
-        return { id: 1 };
-      },
-    });
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client, date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    await wrapper.find('[data-test="steps-edit-input"]').setValue("9000");
-    await wrapper.find('[data-test="steps-edit-cancel"]').trigger("click");
-    expect(wrapper.find('[data-test="steps-edit-input"]').exists()).toBe(false);
-    expect(calls).toHaveLength(0);
-    expect(wrapper.emitted("changed")).toBeUndefined();
-  });
-
-  it("does not emit changed and shows an error when save fails", async () => {
-    const client = makeClient({
-      post: async () => {
-        throw new Error("nope");
-      },
-    });
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client, date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    await wrapper.find('[data-test="steps-edit-input"]').setValue("9000");
-    await wrapper.find('[data-test="steps-edit-save"]').trigger("click");
-    await flushPromises();
-    expect(wrapper.emitted("changed")).toBeUndefined();
-    expect(wrapper.find('[data-test="steps-edit-error"]').exists()).toBe(true);
-  });
-
-  it("no delete control when steps is null", async () => {
-    const wrapper = mount(MovementBlock, {
-      props: { cardio: [], steps: null, client: makeClient(), date: "2026-06-15" },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    expect(wrapper.find('[data-test="steps-edit-delete"]').exists()).toBe(false);
-  });
-
-  it("delete DELETEs by id and emits changed", async () => {
-    const calls: string[] = [];
-    const client = makeClient({
-      delete: async (path) => {
-        calls.push(path);
-        return undefined;
-      },
-    });
-    const wrapper = mount(MovementBlock, {
-      props: {
-        cardio: [],
-        steps: { id: 42, count: 8432, est_kcal: 312 },
-        client,
-        date: "2026-06-15",
-      },
-    });
-    await wrapper.find('[data-test="steps-edit"]').trigger("click");
-    await wrapper.find('[data-test="steps-edit-delete"]').trigger("click");
-    await flushPromises();
-    expect(calls).toEqual(["/v1/step-logs/42"]);
-    expect(wrapper.emitted("changed")).toHaveLength(1);
   });
 });

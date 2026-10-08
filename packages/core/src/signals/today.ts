@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Connection } from "../db/connection.js";
 import type { NutritionPhase } from "../domain/nutrition.js";
-import { currentUserDate, userDayWindow } from "../domain/user-day.js";
+import { currentUserDate, stepsTargetDate, userDayWindow } from "../domain/user-day.js";
 import type { ActivityLevel, UnitSystem } from "../domain/users.js";
 import { listGroups } from "../repos/exercise-groups.repo.js";
 import { listExercises } from "../repos/exercises.repo.js";
@@ -70,6 +70,11 @@ export type TodayContext = {
    * contradicting `get_day_status.date` (which reports this same value).
    */
   today_date: string;
+  /** The day whose step total is due (see stepsTargetDate) and its log, if any. */
+  steps_target: {
+    on_date: string;
+    log: { id: number; count: number; est_kcal: number | null } | null;
+  };
   user: {
     id: number;
     name: string;
@@ -350,6 +355,8 @@ export function getTodayContext(
   // Looked up unconditionally so the no-phase branch can still surface
   // today.steps and energy_balance.steps_out for the dashboard.
   const todayStepLog = findStepLogByDate(db, userId, today);
+  const stepsTargetOn = stepsTargetDate(now, tz);
+  const stepsTargetLog = findStepLogByDate(db, userId, stepsTargetOn);
   const todayStepsKcal = todayStepLog?.est_kcal ?? null;
 
   // Today's intake — always computed (no phase needed). Kept as a single
@@ -739,6 +746,12 @@ export function getTodayContext(
   return {
     now: now.toISOString(),
     today_date: today,
+    steps_target: {
+      on_date: stepsTargetOn,
+      log: stepsTargetLog
+        ? { id: stepsTargetLog.id, count: stepsTargetLog.steps, est_kcal: stepsTargetLog.est_kcal }
+        : null,
+    },
     user: {
       id: user.id,
       name: user.name,

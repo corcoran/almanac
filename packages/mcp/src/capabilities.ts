@@ -132,7 +132,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     {
       name: "steps",
       summary:
-        "A daily step count (one row per calendar date, upserted). Drives a small NEAT kcal estimate (derived from latest body weight when not supplied) that feeds TDEE adherence.",
+        "A daily step count (one row per calendar date, upserted). Drives a small NEAT kcal estimate (derived from latest body weight when not supplied) that feeds TDEE adherence. Logged the morning after for the previous calendar day.",
     },
     {
       name: "workout",
@@ -284,7 +284,7 @@ export const ALMANAC_CAPABILITIES: CapabilitiesResponse = {
     {
       name: "get_day_status",
       summary:
-        "End-of-day glanceable status: today's summary + a nudges[] array (low_intake_today / no_workout_streak / stale_weight_log / stale_sleep_log / unlogged_steps) flagging patterns worth surfacing.",
+        "End-of-day glanceable status: today's summary + a nudges[] array (low_intake_today / no_workout_streak / stale_weight_log / stale_sleep_log) flagging patterns worth surfacing.",
     },
     {
       name: "get_tdee",

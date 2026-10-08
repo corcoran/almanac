@@ -2,12 +2,10 @@
 import {
   CardioKcalEstimateSchema,
   CardioSessionEnrichedResponseSchema,
-  StepLogResponseSchema,
 } from "@almanac/core/schemas";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { z } from "zod";
 import type { ApiClient } from "../../api/client.js";
-import { useInlineEdit } from "../../composables/useInlineEdit.js";
 import { useIsMobile } from "../../composables/useIsMobile.js";
 import CardioSessionRow from "./CardioSessionRow.vue";
 
@@ -27,7 +25,6 @@ type CardioEdit = {
 
 const props = defineProps<{
   cardio: CardioSession[];
-  steps: { id: number; count: number; est_kcal: number | null } | null;
   client: ApiClient;
   date: string;
   /** True when viewing a past day (calendar traversal). When false/omitted the
@@ -224,51 +221,6 @@ async function onDelete(id: number): Promise<void> {
     await props.client.delete(`/v1/cardio-sessions/${id}`, z.undefined());
   });
 }
-
-// --- Steps inline edit ---
-
-const stepsEdit = useInlineEdit();
-const stepsDraft = ref("");
-const stepsInputRef = ref<HTMLInputElement | null>(null);
-
-function beginStepsEdit(): void {
-  stepsDraft.value = props.steps ? String(props.steps.count) : "";
-  stepsEdit.startEdit();
-  void nextTick(() => stepsInputRef.value?.focus());
-}
-
-const stepsInputValid = computed(() => {
-  const s = stepsDraft.value.trim();
-  if (s === "") return false;
-  const n = Number(s);
-  return Number.isInteger(n) && n >= 1;
-});
-const stepsSaveDisabled = computed(() => stepsEdit.pending.value || !stepsInputValid.value);
-const stepsKcalLabel = computed(() =>
-  props.steps?.est_kcal != null ? `${props.steps.est_kcal.toLocaleString("en-US")} kcal` : "—",
-);
-
-async function onStepsSave(): Promise<void> {
-  const n = Number(stepsDraft.value.trim());
-  if (!(Number.isInteger(n) && n >= 1)) return;
-  await stepsEdit.save(async () => {
-    await props.client.post(
-      "/v1/step-logs",
-      { on_date: props.date, steps: n },
-      StepLogResponseSchema,
-    );
-    emit("changed");
-  });
-}
-
-async function onStepsDelete(): Promise<void> {
-  const row = props.steps;
-  if (!row) return;
-  await stepsEdit.save(async () => {
-    await props.client.delete(`/v1/step-logs/${row.id}`, z.undefined());
-    emit("changed");
-  });
-}
 </script>
 
 <template>
@@ -368,67 +320,6 @@ async function onStepsDelete(): Promise<void> {
       @click="openAdd"
     >+ Add cardio</button>
     <div v-if="error" class="cardio-error" data-test="cardio-error">{{ error }}</div>
-    <div class="steps-row" data-test="steps-row">
-      <template v-if="!stepsEdit.isEditing.value">
-        <span class="label">Steps:</span>
-        <template v-if="steps">
-          <span class="value">{{ steps.count.toLocaleString("en-US") }}</span>
-          <span class="kcal">→ {{ stepsKcalLabel }}</span>
-        </template>
-        <template v-else>
-          <span class="value missing">— not logged</span>
-        </template>
-        <button
-          type="button"
-          class="steps-edit-btn"
-          data-test="steps-edit"
-          aria-label="Edit steps"
-          @click="beginStepsEdit"
-        >✎</button>
-      </template>
-      <template v-else>
-        <span class="label">Steps:</span>
-        <input
-          ref="stepsInputRef"
-          v-model="stepsDraft"
-          type="text"
-          inputmode="numeric"
-          class="steps-input"
-          data-test="steps-edit-input"
-          @keydown.esc="stepsEdit.cancel()"
-          @keydown.enter.prevent="!stepsSaveDisabled && onStepsSave()"
-        />
-        <button
-          type="button"
-          class="save"
-          data-test="steps-edit-save"
-          :disabled="stepsSaveDisabled"
-          @click="onStepsSave"
-        >Save</button>
-        <button
-          v-if="steps"
-          type="button"
-          class="cancel delete"
-          data-test="steps-edit-delete"
-          aria-label="Delete steps"
-          :disabled="stepsEdit.pending.value"
-          @click="onStepsDelete"
-        >🗑</button>
-        <button
-          type="button"
-          class="cancel"
-          data-test="steps-edit-cancel"
-          aria-label="Cancel"
-          :disabled="stepsEdit.pending.value"
-          @click="stepsEdit.cancel()"
-        >×</button>
-      </template>
-    </div>
-    <div
-      v-if="stepsEdit.error.value"
-      class="cardio-error"
-      data-test="steps-edit-error"
-    >{{ stepsEdit.error.value }}</div>
   </div>
 </template>
 
@@ -460,67 +351,6 @@ async function onStepsDelete(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.steps-row {
-  margin-top: 12px;
-  border-top: 1px solid var(--line, #262a36);
-  padding-top: 8px;
-  font-size: 11px;
-  color: var(--ink-faint, #6b7180);
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.steps-row .label { color: var(--ink-dim, #9aa0ad); }
-.steps-row .value { color: var(--ink, #e6e8ee); font-weight: 600; }
-.steps-row .value.missing { color: var(--ink-faint, #6b7180); font-weight: 400; font-style: italic; }
-.steps-row .kcal { color: var(--ink-dim, #9aa0ad); }
-.steps-row .steps-edit-btn {
-  margin-left: auto;
-  background: transparent;
-  border: none;
-  color: var(--ink-faint, #6b7180);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-.steps-row .steps-edit-btn:hover { color: var(--ink, #e6e8ee); }
-.steps-row .steps-input {
-  width: 72px;
-  background: var(--surface-2, #1f2330);
-  border: 1px solid var(--line-2, #353a4a);
-  border-radius: 6px;
-  padding: 4px 7px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink, #e6e8ee);
-  font-variant-numeric: tabular-nums;
-}
-.steps-row .steps-input:focus { outline: none; border-color: var(--accent, #4a7dff); }
-.steps-row .save {
-  margin-left: auto;
-  background: var(--accent, #4a7dff);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.steps-row .save:disabled { background: var(--line-2, #353a4a); color: var(--ink-faint, #6b7180); cursor: not-allowed; }
-.steps-row .cancel {
-  background: transparent;
-  border: none;
-  color: var(--ink-dim, #9aa0ad);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
 }
 .add-btn {
   margin-top: 8px; width: 100%;

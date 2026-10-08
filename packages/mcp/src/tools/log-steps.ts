@@ -5,7 +5,9 @@ import type { Tool, ToolDeps } from "../tool.js";
 const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const LogStepsInputSchema = z.object({
-  on_date: DateOnly.describe("The calendar date the steps were taken on (YYYY-MM-DD)."),
+  on_date: DateOnly.describe(
+    "The calendar date the steps were walked (YYYY-MM-DD), usually get_today_context.steps_target.on_date.",
+  ),
   steps: z
     .number()
     .int()
@@ -31,7 +33,7 @@ export function makeLogStepsTool(deps: ToolDeps): Tool<LogStepsInput> {
   return {
     name: "log_steps",
     description:
-      "Log a daily step count. Idempotent: re-logging the same `on_date` upserts the existing entry. When `est_kcal` is omitted, the server computes a kcal estimate from the latest body weight; pass `est_kcal` to override. Don't prompt for today's count before evening — a partial count logged early becomes the permanent record and silences the reminder that would have caught it. If the user offers one mid-day, log it and say it can be updated.",
+      "Log a daily step count. Steps are logged the morning after: a count given without a date belongs to `get_today_context.steps_target.on_date`. Log a count for the day in progress only when the user says it's today so far. Idempotent: re-logging the same `on_date` upserts. When `est_kcal` is omitted, the server computes one from the latest body weight; pass `est_kcal` to override.",
     inputSchema: LogStepsInputSchema,
     annotations: {
       readOnlyHint: false,

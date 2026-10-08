@@ -74,6 +74,11 @@ const SLEEP_BASE_PROPS = () => ({
 });
 
 describe("SleepBlock", () => {
+  it("has a Sleep caption", () => {
+    const wrapper = mount(SleepBlock, { props: SLEEP_BASE_PROPS() });
+    expect(wrapper.find('[data-test="sleep-caption"]').text()).toBe("Sleep");
+  });
+
   it("renders last night's hours from the night dated today (Xh Ym)", () => {
     // Sleep is dated the wake-up day, so "last night" is the night dated
     // *today* = windowDates[6] = 2026-05-22, whose fixture night is 6.667h →
@@ -212,7 +217,7 @@ describe("SleepBlock", () => {
         date: "2026-05-22",
       },
     });
-    const labels = wrapper.findAll('[data-test="sleep-bar-hours"]').map((el) => el.text());
+    const labels = wrapper.findAll('[data-test="sleep-bar-value"]').map((el) => el.text());
     // Hours fixture: 6.2, 7.0, 7.0, 5.4, 9.0, 6.5, 6.667
     // formatHours drops trailing .0 (so 7.0 → "7", 9.0 → "9").
     expect(labels).toEqual(["6.2", "7", "7", "5.4", "9", "6.5", "6.7"]);
@@ -343,7 +348,7 @@ describe("SleepBlock", () => {
     for (const g of ghosts) {
       expect(g.find(".lbl").exists()).toBe(true);
     }
-    expect(ghosts.every((g) => g.find('[data-test="sleep-bar-hours"]').exists() === false)).toBe(
+    expect(ghosts.every((g) => g.find('[data-test="sleep-bar-value"]').exists() === false)).toBe(
       true,
     );
   });
@@ -402,15 +407,16 @@ describe("SleepBlock", () => {
     // Display-row label is date-aware (locale-robust: assert the parts).
     const displayLabel = wrapper.find(".stat-row .label").text();
     expect(displayLabel).not.toBe("Last night");
-    expect(displayLabel).toContain("Sat");
+    expect(displayLabel).toContain("Night of");
+    expect(displayLabel).toContain("Fri");
     expect(displayLabel).toContain("May");
-    expect(displayLabel).toContain("16");
+    expect(displayLabel).toContain("15");
     // Edit-row label too.
     await wrapper.find('[data-test="block-edit"]').trigger("click");
     const editLabel = wrapper.find(".edit-row .label").text();
-    expect(editLabel).toContain("Sat");
+    expect(editLabel).toContain("Fri");
     expect(editLabel).toContain("May");
-    expect(editLabel).toContain("16");
+    expect(editLabel).toContain("15");
   });
 
   it("keeps 'Last night' when isPastDay is explicitly false", () => {
@@ -579,5 +585,133 @@ describe("SleepBlock inline edit", () => {
     await wrapper.find('[data-test="sleep-save"]').trigger("click");
     await flushPromises();
     expect((calls[0]?.body as { slept_on: string }).slept_on).toBe("2026-05-21");
+  });
+});
+
+describe("SleepBlock bar-click editing", () => {
+  type Call = { method: string; path: string; body?: unknown };
+  function recordingClient(calls: Call[]) {
+    return {
+      post: async (path: string, body: unknown) => {
+        calls.push({ method: "POST", path, body });
+        return {
+          id: 99,
+          user_id: 1,
+          slept_on: "2026-05-18",
+          hours: 7.5,
+          quality: null,
+          notes: null,
+          created_at: "2026-05-18T08:00:00Z",
+        };
+      },
+      get: async () => [],
+      delete: async (path: string) => {
+        calls.push({ method: "DELETE", path });
+        return undefined;
+      },
+    } as unknown as import("../../api/client.js").ApiClient;
+  }
+
+  it("clicking a logged bar edits that night: prefilled, dated label, saves to it", async () => {
+    const calls: Call[] = [];
+    const wrapper = mount(SleepBlock, {
+      props: { ...SLEEP_BASE_PROPS(), client: recordingClient(calls) },
+    });
+    // windowDates[2] = 2026-05-18 (Mon), fixture 7.0h
+    await at(wrapper.findAll('[data-test="sleep-bar"]'), 2).trigger("click");
+    const input = wrapper.find('[data-test="sleep-hours-input"]');
+    expect((input.element as HTMLInputElement).value).toBe("7");
+    expect(wrapper.find(".edit-row .label").text()).toContain("Night of");
+    expect(wrapper.find(".edit-row .label").text()).toContain("17");
+    expect(at(wrapper.findAll('[data-test="sleep-bar"]'), 2).classes()).toContain("editing");
+    await input.setValue("7.5");
+    await wrapper.find('[data-test="sleep-save"]').trigger("click");
+    await flushPromises();
+    expect(calls).toEqual([
+      {
+        method: "POST",
+        path: "/v1/sleep-logs",
+        body: { slept_on: "2026-05-18", hours: 7.5, quality: null },
+      },
+    ]);
+    expect(wrapper.emitted("saved")).toHaveLength(1);
+  });
+
+  it("clicking a ghost opens an empty editor for that night", async () => {
+    const nights = makeNights().filter((n) => n.slept_on !== "2026-05-19");
+    const wrapper = mount(SleepBlock, { props: { ...SLEEP_BASE_PROPS(), nights } });
+    await at(wrapper.findAll('[data-test="sleep-ghost"]'), 0).trigger("click");
+    expect(
+      (wrapper.find('[data-test="sleep-hours-input"]').element as HTMLInputElement).value,
+    ).toBe("");
+    expect(wrapper.find(".edit-row .label").text()).toContain("18");
+  });
+
+  it("ignores bar clicks while an edit is open", async () => {
+    const wrapper = mount(SleepBlock, { props: SLEEP_BASE_PROPS() });
+    await wrapper.find('[data-test="block-edit"]').trigger("click");
+    await at(wrapper.findAll('[data-test="sleep-bar"]'), 2).trigger("click");
+    expect(wrapper.find(".edit-row .label").text()).toBe("Last night");
+  });
+
+  it("labels each bar with the weekday the night started", () => {
+    const wrapper = mount(SleepBlock, { props: SLEEP_BASE_PROPS() });
+    const labels = wrapper.findAll('[data-test="sleep-bar"] .lbl').map((l) => l.text());
+    // windowDates run Sat 16 … Fri 22 May (wake dates) → nights Fri 15 … Thu 21.
+    expect(labels[0]).toBe("Fr");
+    expect(labels[6]).toBe("Th");
+  });
+
+  it("bars are labelled buttons", () => {
+    const wrapper = mount(SleepBlock, { props: SLEEP_BASE_PROPS() });
+    const bar = at(wrapper.findAll('[data-test="sleep-bar"]'), 2);
+    expect(bar.element.tagName).toBe("BUTTON");
+    expect(bar.attributes("aria-label")).toContain("Edit sleep for night of");
+  });
+
+  it("Delete asks to confirm; Yes deletes the edited night, No backs out", async () => {
+    const calls: Call[] = [];
+    const wrapper = mount(SleepBlock, {
+      props: { ...SLEEP_BASE_PROPS(), client: recordingClient(calls) },
+    });
+    await wrapper.find('[data-test="block-edit"]').trigger("click");
+    await wrapper.find('[data-test="sleep-delete"]').trigger("click");
+    await wrapper.find('[data-test="sleep-delete-no"]').trigger("click");
+    expect(calls).toHaveLength(0);
+    await wrapper.find('[data-test="sleep-delete"]').trigger("click");
+    await wrapper.find('[data-test="sleep-delete-yes"]').trigger("click");
+    await flushPromises();
+    // today = 2026-05-22 → fixture night id 7
+    expect(calls).toEqual([{ method: "DELETE", path: "/v1/sleep-logs/7" }]);
+    expect(wrapper.emitted("saved")).toHaveLength(1);
+  });
+
+  it("offers no Delete for an unlogged night", async () => {
+    const nights = makeNights().filter((n) => n.slept_on !== "2026-05-22");
+    const wrapper = mount(SleepBlock, { props: { ...SLEEP_BASE_PROPS(), nights } });
+    await wrapper.find('[data-test="block-edit"]').trigger("click");
+    expect(wrapper.find('[data-test="sleep-delete"]').exists()).toBe(false);
+  });
+});
+
+describe("SleepBlock last-night highlight", () => {
+  it("draws the viewed night lighter than an equal-hours neighbour", () => {
+    // windowDates[1] and [2] are both 7.0h; viewing 05-18 makes [2] the highlighted night.
+    const wrapper = mount(SleepBlock, {
+      props: { ...SLEEP_BASE_PROPS(), date: "2026-05-18", isPastDay: true },
+    });
+    const bars = wrapper.findAll('[data-test="sleep-bar"]');
+    const bg = (i: number) =>
+      /background-color:\s*([^;]+)/.exec(at(bars, i).attributes("style") ?? "")?.[1]?.trim();
+    expect(at(bars, 2).classes()).toContain("target");
+    expect(at(bars, 1).classes()).not.toContain("target");
+    expect(bg(2)).not.toBe(bg(1));
+  });
+
+  it("highlights an unlogged last night's ghost", () => {
+    const nights = makeNights().filter((n) => n.slept_on !== "2026-05-22");
+    const wrapper = mount(SleepBlock, { props: { ...SLEEP_BASE_PROPS(), nights } });
+    const ghosts = wrapper.findAll('[data-test="sleep-ghost"]');
+    expect(at(ghosts, ghosts.length - 1).classes()).toContain("target");
   });
 });

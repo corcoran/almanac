@@ -150,6 +150,47 @@ describe("computeNextBestAction — previous-day tier", () => {
   });
 });
 
+describe("log_yesterday_steps between midnight and the 4am rollover", () => {
+  // 01:00 EDT Jun 4: the user-day is still Jun 3, and Jun 3's steps are due.
+  const AFTER_MIDNIGHT = new Date("2026-06-04T05:00:00Z");
+
+  function onboardedUser() {
+    const { db, userId } = bareUser();
+    completeProfile(db, userId);
+    createBodyWeight(db, { user_id: userId, weight_kg: 77, measured_on: "2026-06-01" });
+    startMaintenancePhase(db, userId);
+    createTemplate(db, { user_id: userId, name: "PUSH A", items: [] });
+    createSleepLog(db, { user_id: userId, slept_on: "2026-06-02", hours: 7.5, quality: 3 });
+    return { db, userId };
+  }
+
+  it("targets the calendar day that just ended", () => {
+    const { db, userId } = onboardedUser();
+    const res = computeNextBestAction(db, userId, AFTER_MIDNIGHT);
+    const action = res.actions.find((a) => a.code === "log_yesterday_steps");
+    expect(action?.suggested_args).toMatchObject({ on_date: "2026-06-03" });
+  });
+
+  it("is satisfied by a log on the calendar day that just ended", () => {
+    const { db, userId } = onboardedUser();
+    createOrUpdateStepLog(db, { user_id: userId, on_date: "2026-06-03", steps: 9000 });
+    const res = computeNextBestAction(db, userId, AFTER_MIDNIGHT);
+    expect(res.actions.find((a) => a.code === "log_yesterday_steps")).toBeUndefined();
+  });
+
+  it("is suppressed when that day is untracked", () => {
+    const { db, userId } = onboardedUser();
+    createUntrackedPeriod(db, {
+      user_id: userId,
+      started_on: "2026-06-03",
+      ended_on: "2026-06-03",
+      reason: "vacation",
+    });
+    const res = computeNextBestAction(db, userId, AFTER_MIDNIGHT);
+    expect(res.actions.find((a) => a.code === "log_yesterday_steps")).toBeUndefined();
+  });
+});
+
 describe("untracked-day suppression of yesterday backfill", () => {
   const NOW = new Date("2026-05-21T18:00:00Z"); // today=2026-05-21, yesterday=2026-05-20
 

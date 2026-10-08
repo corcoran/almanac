@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { SleepLogResponseSchema, type TodayContextResponseSchema } from "@almanac/core/schemas";
+import { addDaysIso } from "@almanac/core/types";
 import { computed, nextTick, ref } from "vue";
-import type { z } from "zod";
+import { z } from "zod";
 import type { ApiClient } from "../../api/client.js";
 import { useInlineEdit } from "../../composables/useInlineEdit.js";
 import { sleepBarGeometry } from "../../lib/bar-chart.js";
 import { sleepColor } from "../../lib/sleep-color.js";
 import BlockEditButton from "./BlockEditButton.vue";
+import DayBarChart, { type ChartBar } from "./DayBarChart.vue";
 import QualityPicker from "./QualityPicker.vue";
 
 type SleepDebt = z.infer<typeof TodayContextResponseSchema>["week_to_date"]["sleep_debt"];
@@ -47,10 +49,18 @@ const shortDateFmt = new Intl.DateTimeFormat(undefined, {
   timeZone: "UTC",
 });
 
-// "Last night" on today; the night's short date when traversing a past day.
-const rowLabel = computed(() =>
-  props.isPastDay ? shortDateFmt.format(new Date(`${props.date}T12:00:00Z`)) : "Last night",
-);
+// Nights are stored on the wake date (`slept_on`) but shown by the evening they
+// started, so a bar or label for slept_on D reads as the night of D − 1.
+function nightOf(sleptOn: string): string {
+  return addDaysIso(sleptOn, -1);
+}
+
+function nightLabel(sleptOn: string): string {
+  return `Night of ${shortDateFmt.format(new Date(`${nightOf(sleptOn)}T12:00:00Z`))}`;
+}
+
+// "Last night" on today; the night's date when traversing a past day.
+const rowLabel = computed(() => (props.isPastDay ? nightLabel(props.date) : "Last night"));
 
 /** "6h 40m" from a decimal hours value. */
 function formatHoursMinutes(hoursDecimal: number): string {
@@ -75,6 +85,28 @@ const geometry = computed(() =>
     props.windowDates,
     BAR_DIMS,
   ),
+);
+
+const chartBars = computed<ChartBar[]>(() =>
+  geometry.value.bars.map((bar) => {
+    const highlighted = bar.slept_on === props.date;
+    const base = {
+      key: bar.slept_on,
+      dayLabel: dayOfWeekLabel(nightOf(bar.slept_on)),
+      ariaLabel: barAriaLabel(bar.slept_on),
+      highlighted,
+    };
+    return bar.logged
+      ? {
+          ...base,
+          logged: true,
+          heightPct: bar.heightPct,
+          color: sleepColor(bar.hours, { highlight: highlighted }),
+          valueLabel: formatHours(bar.hours),
+          classes: bar.isShort ? ["short"] : [],
+        }
+      : { ...base, logged: false, heightPct: 0 };
+  }),
 );
 
 // "Last night" is the night dated *today* — keyed on props.date, which is
@@ -109,8 +141,29 @@ function activeNight(): SleepLog | undefined {
   return props.nights.find((n) => n.slept_on === props.date);
 }
 
-function beginEdit(): void {
-  const night = activeNight();
+// The night being edited: props.date from the ✎ button, or a clicked bar's date.
+const editingDate = ref("");
+const confirmingDelete = ref(false);
+
+const editingNight = computed(() => props.nights.find((n) => n.slept_on === editingDate.value));
+
+const editLabel = computed(() =>
+  editingDate.value === props.date ? rowLabel.value : nightLabel(editingDate.value),
+);
+
+function barAriaLabel(sleptOn: string): string {
+  return `Edit sleep for night of ${shortDateFmt.format(new Date(`${nightOf(sleptOn)}T12:00:00Z`))}`;
+}
+
+function onBarClick(sleptOn: string): void {
+  if (edit.isEditing.value) return;
+  beginEdit(sleptOn);
+}
+
+function beginEdit(sleptOn: string = props.date): void {
+  editingDate.value = sleptOn;
+  confirmingDelete.value = false;
+  const night = editingNight.value;
   hoursDraft.value = night ? String(night.hours) : "";
   qualityDraft.value = night?.quality ?? null;
   edit.startEdit();
@@ -130,9 +183,18 @@ async function onSave(): Promise<void> {
   await edit.save(async () => {
     await props.client.post(
       "/v1/sleep-logs",
-      { slept_on: props.date, hours: n, quality: qualityDraft.value },
+      { slept_on: editingDate.value, hours: n, quality: qualityDraft.value },
       SleepLogResponseSchema,
     );
+    emit("saved");
+  });
+}
+
+async function onDeleteConfirmed(): Promise<void> {
+  const night = editingNight.value;
+  if (!night) return;
+  await edit.save(async () => {
+    await props.client.delete(`/v1/sleep-logs/${night.id}`, z.undefined());
     emit("saved");
   });
 }
@@ -140,7 +202,8 @@ async function onSave(): Promise<void> {
 
 <template>
   <div class="block sleep-block" data-test="sleep-block">
-    <BlockEditButton v-if="!edit.isEditing.value" label="Edit sleep" @click="beginEdit" />
+    <BlockEditButton v-if="!edit.isEditing.value" label="Edit sleep" @click="beginEdit()" />
+    <div class="caption" data-test="sleep-caption">Sleep</div>
 
     <div v-if="!edit.isEditing.value" class="stat-row">
       <span class="label">{{ rowLabel }}</span>
@@ -155,7 +218,7 @@ async function onSave(): Promise<void> {
     </div>
 
     <div v-else class="stat-row edit-row">
-      <span class="label">{{ rowLabel }}</span>
+      <span class="label">{{ editLabel }}</span>
       <input
         ref="hoursInputRef"
         v-model="hoursDraft"
@@ -168,25 +231,52 @@ async function onSave(): Promise<void> {
       />
       <span class="unit-label">h</span>
       <QualityPicker v-model="qualityDraft" label="Sleep quality" />
-      <button
-        type="button"
-        class="save"
-        data-test="sleep-save"
-        :disabled="saveDisabled"
-        @click="onSave"
-      >
-        Save
-      </button>
-      <button
-        type="button"
-        class="cancel"
-        data-test="sleep-cancel"
-        aria-label="Cancel"
-        :disabled="edit.pending.value"
-        @click="edit.cancel()"
-      >
-        ×
-      </button>
+      <span v-if="confirmingDelete" class="confirm" data-test="sleep-delete-confirm">
+        <span class="q">Delete?</span>
+        <button
+          type="button"
+          class="yes"
+          data-test="sleep-delete-yes"
+          :disabled="edit.pending.value"
+          @click="onDeleteConfirmed"
+        >
+          Yes
+        </button>
+        <button type="button" class="no" data-test="sleep-delete-no" @click="confirmingDelete = false">
+          No
+        </button>
+      </span>
+      <template v-else>
+        <button
+          type="button"
+          class="save"
+          data-test="sleep-save"
+          :disabled="saveDisabled"
+          @click="onSave"
+        >
+          Save
+        </button>
+        <button
+          v-if="editingNight"
+          type="button"
+          class="delete"
+          data-test="sleep-delete"
+          :disabled="edit.pending.value"
+          @click="confirmingDelete = true"
+        >
+          Delete
+        </button>
+        <button
+          type="button"
+          class="cancel"
+          data-test="sleep-cancel"
+          aria-label="Cancel"
+          :disabled="edit.pending.value"
+          @click="edit.cancel()"
+        >
+          ×
+        </button>
+      </template>
     </div>
     <div v-if="edit.error.value" class="edit-error" data-test="sleep-edit-error">
       {{ edit.error.value }}
@@ -199,33 +289,14 @@ async function onSave(): Promise<void> {
     >
       No sleep logged in the last {{ windowDates.length }} nights.
     </p>
-    <div v-else class="sleep-bars">
-      <div
-        v-if="geometry.bars.length > 0"
-        class="reference"
-        data-test="sleep-reference"
-        :style="{ bottom: `${geometry.referenceLinePct}%` }"
-      >8h</div>
-      <template v-for="bar in geometry.bars" :key="bar.slept_on">
-        <div
-          v-if="bar.logged"
-          class="bar"
-          :class="{ short: bar.isShort, 'tiny-bar': bar.heightPct < 25 }"
-          :style="{ height: `${bar.heightPct}%`, backgroundColor: sleepColor(bar.hours) }"
-          data-test="sleep-bar"
-        >
-          <span class="bar-hours" data-test="sleep-bar-hours">{{ formatHours(bar.hours) }}</span>
-          <span class="lbl">{{ dayOfWeekLabel(bar.slept_on) }}</span>
-        </div>
-        <div
-          v-else
-          class="bar ghost"
-          data-test="sleep-ghost"
-        >
-          <span class="lbl">{{ dayOfWeekLabel(bar.slept_on) }}</span>
-        </div>
-      </template>
-    </div>
+    <DayBarChart
+      v-else
+      test-id="sleep"
+      :bars="chartBars"
+      :editing-key="edit.isEditing.value ? editingDate : null"
+      :reference="{ pct: geometry.referenceLinePct, label: '8h' }"
+      @select="onBarClick"
+    />
   </div>
 </template>
 
@@ -238,6 +309,13 @@ async function onSave(): Promise<void> {
   margin-bottom: 12px;
 }
 .sleep-block { position: relative; }
+.caption {
+  font-size: 11px;
+  color: var(--ink-faint, #6b7180);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+}
 .stat-row {
   display: flex;
   align-items: baseline;
@@ -267,6 +345,7 @@ async function onSave(): Promise<void> {
   color: var(--ink-dim, #9aa0ad);
 }
 .stat-row .delta {
+  margin-left: auto;
   color: var(--ink-dim, #9aa0ad);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
@@ -317,76 +396,39 @@ async function onSave(): Promise<void> {
   cursor: pointer;
   padding: 0 2px;
 }
+.edit-row .delete {
+  background: transparent;
+  border: 1px solid var(--line-2, #353a4a);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--bad, #f08a8a);
+  cursor: pointer;
+}
+.edit-row .confirm {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.edit-row .confirm .q { color: var(--ink-dim, #9aa0ad); }
+.edit-row .confirm .yes,
+.edit-row .confirm .no {
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--line-2, #353a4a);
+  background: transparent;
+  color: var(--ink, #e6e8ee);
+}
+.edit-row .confirm .yes { background: var(--bad, #f08a8a); border-color: var(--bad, #f08a8a); color: #1a0d0d; }
 .edit-error { font-size: 11px; color: var(--bad, #f08a8a); margin-bottom: 6px; }
 .sleep-empty {
   margin: 8px 0 0;
   font-style: italic;
   color: var(--ink-faint, #6b7180);
   font-size: 12px;
-}
-.sleep-bars {
-  position: relative;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 4px;
-  height: 60px;
-  margin-top: 8px;
-  padding-bottom: 14px;
-}
-.sleep-bars .bar {
-  /* Background is set inline per-bar from sleepColor(hours) — red → amber
-     → green gradient. This fallback shows only if the inline style is
-     unset (defensive; in practice always present). */
-  background: var(--line-2, #2a2f3d);
-  border-radius: 2px;
-  align-self: end;
-  position: relative;
-}
-.sleep-bars .bar.ghost {
-  /* Unlogged day: a short, faint dashed placeholder pinned at the baseline.
-     Signals "no log here" without competing with real bars. */
-  height: 14%;
-  background: transparent;
-  border: 1px dashed var(--line-2, #2a2f3d);
-  opacity: 0.55;
-}
-.sleep-bars .lbl {
-  position: absolute;
-  bottom: -14px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  color: var(--ink-faint, #6b7180);
-  font-size: 9px;
-}
-.sleep-bars .bar-hours {
-  position: absolute;
-  top: 2px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--ink, #e6e8ee);
-  line-height: 1;
-  pointer-events: none;
-}
-.sleep-bars .bar.tiny-bar .bar-hours {
-  /* Bars too thin for the label to sit inside — float it above instead. */
-  top: -12px;
-  color: var(--ink-dim, #9aa0ad);
-}
-.sleep-bars .reference {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 0;
-  border-top: 1px dashed var(--line-2, #2a2f3d);
-  color: var(--ink-faint, #6b7180);
-  font-size: 9px;
-  padding-left: 2px;
-  line-height: 0;
-  pointer-events: none;
 }
 </style>

@@ -42,12 +42,6 @@ export type DayStatusNudge =
       severity: NudgeSeverity;
       message: string;
       details: { days_since_last: number | null };
-    }
-  | {
-      code: "unlogged_steps";
-      severity: NudgeSeverity;
-      message: string;
-      details: { hour_local: number };
     };
 
 export type DayStatus = {
@@ -64,7 +58,6 @@ export type DayStatus = {
     weight_logged: boolean;
     alcohol_logged: boolean;
     meals_logged: boolean;
-    steps_logged: boolean;
     status: DailyTargetStatus | null;
   };
   nudges: DayStatusNudge[];
@@ -160,7 +153,6 @@ export function computeDayStatus(
     weight_logged: ctx.today.body_weight_kg !== null,
     alcohol_logged: ctx.today.alcohol.length > 0,
     meals_logged: ctx.today.meals_logged_today,
-    steps_logged: ctx.today.steps !== null,
     status,
   };
 
@@ -347,29 +339,6 @@ export function computeDayStatus(
         details: { days_since_last: daysSince },
       });
     }
-  }
-
-  // --- Nudge: unlogged_steps -----------------------------------------------
-  // Soft prompt to log today's steps. Fires when:
-  //   - the active phase is a cut or bulk (maintenance doesn't need the precision),
-  //   - no step log exists for today's user-day, AND
-  //   - user-local time is past the configured threshold (default 20:00).
-  //
-  // Severity: info. The visible gap in the dashboard is the primary nudge;
-  // this entry is the explicit prompt the LLM can surface verbatim. Cardio
-  // and workouts are not factored in — this is purely about NEAT visibility.
-  const phaseType = ctx.phase?.phase_type;
-  if (
-    (phaseType === "cut" || phaseType === "bulk") &&
-    ctx.today.steps === null &&
-    hourLocal >= config.unloggedStepsHourThreshold
-  ) {
-    nudges.push({
-      code: "unlogged_steps",
-      severity: "info",
-      message: `No steps logged today yet (it's ${hourLocal}:00 local).`,
-      details: { hour_local: hourLocal },
-    });
   }
 
   return { date: today, summary, nudges };

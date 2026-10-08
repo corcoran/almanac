@@ -13,8 +13,7 @@ type Action = {
     | "low_intake_today"
     | "no_workout_streak"
     | "stale_weight_log"
-    | "stale_sleep_log"
-    | "unlogged_steps";
+    | "stale_sleep_log";
   tier: "onboarding" | "previous_day" | "today";
   title: string;
   detail: string;
