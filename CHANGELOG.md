@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-10-08
+
 ### Changed
 
 - **Steps are logged the morning after.** Steps have their own block under
   Sleep, with a 14-day chart and average, and the edit logs the day that just
   ended. The evening "no steps today" reminder is gone.
+- **Click a sleep or steps bar to edit that day.** Sleep is now labelled by
+  the night it started, so both charts line up.
 
 ### Fixed
 
