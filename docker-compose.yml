@@ -18,7 +18,7 @@
 
 services:
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
     container_name: almanac-oauth2-proxy
     restart: unless-stopped
     command:
@@ -33,12 +33,13 @@ services:
       - "--backend-logout-url=${OAUTH2_PROXY_BACKEND_LOGOUT_URL:-}"
       - "--cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}"
       - "--cookie-secure=true"
+      # The Google provider defaults to forcing the consent screen on every
+      # sign-in, and Google emails a "granted access" alert for each one.
+      - "--approval-prompt=auto"
       - "--cookie-samesite=lax"
       # Session cookie lifetime. Default is 168h (7 days), which for a
       # single-user home app meant re-authing weekly. Extend to 30 days.
-      # (No --cookie-refresh: silent renewal needs a Google refresh token
-      #  via access_type=offline, which this proxy path doesn't request —
-      #  a longer hard expiry is the simpler win here.)
+      # (No --cookie-refresh: a longer hard expiry is the simpler win here.)
       - "--cookie-expire=720h"
       - "--redirect-url=${OAUTH2_PROXY_REDIRECT_URL}"
       - "--client-id=${OAUTH2_PROXY_CLIENT_ID}"
@@ -231,14 +232,14 @@ services:
   #
   # Scope is opt-in via --label-enable: only the three services carrying the
   # `com.centurylinklabs.watchtower.enable=true` label are watched. oauth2-proxy
-  # is deliberately NOT labelled — its image is pinned (v7.15.3) and must not move.
+  # is deliberately NOT labelled — its image is pinned and must not move.
   #
   # Auth: the almanac images are private, so watchtower reads the deploying
   # user's docker creds (the same ~/.docker/config.json that `docker login
   # ghcr.io` wrote) to pull. Mounted read-only. If that PAT expires, pulls fail
   # silently except for the email below — so keep it alive.
   watchtower:
-    image: ghcr.io/nicholas-fedor/watchtower:latest
+    image: ghcr.io/nicholas-fedor/watchtower:1.23.2
     container_name: almanac-watchtower
     restart: unless-stopped
     volumes:

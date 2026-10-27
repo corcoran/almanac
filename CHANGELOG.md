@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Internal
+
+- Signing in with Google no longer re-asks for consent every time, so Google
+  stops emailing a "granted access" alert on each sign-in.
+- oauth2-proxy is pinned to v7.15.5, which fixes two critical authentication
+  bypasses. Watchtower is pinned to 1.23.2.
+
 ## [1.42.1] - 2026-10-26
 
 ### Fixed
