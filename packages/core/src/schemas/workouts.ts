@@ -105,6 +105,7 @@ const ExerciseInstanceResponseSchema = z.object({
   id: IdSchema,
   workout_id: IdSchema,
   exercise_id: IdSchema,
+  exercise_name: z.string().optional(),
   display_order: z.number().int().nonnegative(),
   planned_sets: z.number().int().nonnegative(),
   notes: z.string().nullable(),

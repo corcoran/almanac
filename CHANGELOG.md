@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Training history now reports progression for every lift logged twice in the
   window, tagged with its split. It was capped at five, which in a rotation
   meant only the most recent split's lifts.
+- Single-workout reads (MCP `get_workout`, the coach's workout lookup) include
+  each exercise's name, not just its id.
 
 ## [1.42.0] - 2026-10-08
 
