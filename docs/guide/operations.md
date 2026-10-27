@@ -122,9 +122,10 @@ itself.**
 
 > **Image: a maintained fork.** The original `containrrr/watchtower` was
 > archived in December 2025, so the compose uses the community fork
-> `ghcr.io/nicholas-fedor/watchtower`, which continues the same codebase.
+> `nickfedor/watchtower` from Docker Hub, which continues the same codebase.
 > Labels, env vars, and the shoutrrr notifier are unchanged; only the image
-> reference differs.
+> reference differs. Its `ghcr.io` image stops at 1.21.2, so pin Docker Hub
+> tags.
 
 How it's scoped and wired:
 
