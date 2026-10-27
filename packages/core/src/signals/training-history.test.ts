@@ -494,6 +494,71 @@ describe("summarizeTrainingHistory", () => {
     expect(prog.direction).toBe("stalled");
   });
 
+  it("reports every repeated lift across all splits, tagged with its split", () => {
+    const db = freshDb();
+    const userId = seedUser(db);
+    const group = createGroup(db, { user_id: userId, name: "All", display_order: 1 });
+    const split = (name: string, lifts: string[]) => {
+      const exercises = lifts.map((n) =>
+        createExercise(db, { user_id: userId, group_id: group.id, name: n }),
+      );
+      const tpl = createTemplate(db, {
+        user_id: userId,
+        name,
+        items: exercises.map((e, i) => ({
+          exercise_id: e.id,
+          display_order: i + 1,
+          default_sets: 2,
+          default_reps: 10,
+        })),
+      });
+      return { tpl, exercises };
+    };
+    const pull = split("PULL", ["Row", "Curl"]);
+    const legs = split("LEGS", ["Squat", "Lunge"]);
+    const push = split("PUSH", ["Bench", "OHP", "Dip", "Fly", "Raise", "Pushdown", "Press"]);
+
+    // Two rounds of PULL → LEGS → PUSH, so PUSH is always the most recent.
+    let day = 15;
+    for (let round = 0; round < 2; round++) {
+      for (const { tpl, exercises } of [pull, legs, push]) {
+        createWorkout(db, {
+          user_id: userId,
+          template_id: tpl.id,
+          started_at: `2026-06-${day}T10:00:00Z`,
+          duration_min: 45,
+          rpe: 7,
+          exercises: exercises.map((e, i) => ({
+            exercise_id: e.id,
+            display_order: i + 1,
+            planned_sets: 1,
+            sets: [{ reps: 10, weight_kg: 22.68 }],
+          })),
+        });
+        day += 2;
+      }
+    }
+
+    const out = summarizeTrainingHistory(
+      db,
+      userId,
+      new Date("2026-06-28T12:00:00Z"),
+      "America/Toronto",
+      { days: 14 },
+    );
+    expect(out.load_progression).toHaveLength(11);
+    const row = defined(
+      out.load_progression.find((l) => l.exercise_name === "Row"),
+      "Row progression",
+    );
+    expect(row.template_name).toBe("PULL");
+    const squat = defined(
+      out.load_progression.find((l) => l.exercise_name === "Squat"),
+      "Squat progression",
+    );
+    expect(squat.template_name).toBe("LEGS");
+  });
+
   it("notes a frequency imbalance across splits", () => {
     const { db, userId, squat, legsTpl, pullTpl, row } = setupMultiSplit();
     const legsSets = [

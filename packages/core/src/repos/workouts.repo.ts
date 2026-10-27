@@ -150,10 +150,13 @@ export function findWorkoutById(db: Connection, id: number): Workout | null {
   if (!w) return null;
   const instances = db
     .prepare(
-      `SELECT ${EXERCISE_INSTANCE_COLUMNS}
-       FROM exercise_instances
-       WHERE workout_id = ?
-       ORDER BY display_order`,
+      `SELECT ${EXERCISE_INSTANCE_COLUMNS.split(", ")
+        .map((c) => `ei.${c}`)
+        .join(", ")}, e.name AS exercise_name
+       FROM exercise_instances ei
+       JOIN exercises e ON e.id = ei.exercise_id
+       WHERE ei.workout_id = ?
+       ORDER BY ei.display_order`,
     )
     .all(id) as ExerciseInstance[];
   const setStmt = db.prepare(

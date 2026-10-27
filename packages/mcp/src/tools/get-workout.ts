@@ -12,7 +12,7 @@ export function makeGetWorkoutTool(deps: ToolDeps): Tool<GetWorkoutInput> {
   return {
     name: "get_workout",
     description:
-      "Fetch a single workout by id with its full nested structure (exercise instances and sets). Use after `get_recent_workouts` returns an id of interest.",
+      "Fetch a single workout by id with its full nested structure (exercise instances with exercise_name, and sets). Use after `get_recent_workouts` returns an id of interest.",
     inputSchema: GetWorkoutInputSchema,
     annotations: {
       readOnlyHint: true,

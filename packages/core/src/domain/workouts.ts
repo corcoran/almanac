@@ -11,6 +11,8 @@ export type ExerciseInstance = {
   id: number;
   workout_id: number;
   exercise_id: number;
+  /** Populated on detailed reads (`findWorkoutById` and the paths built on it). */
+  exercise_name?: string;
   display_order: number;
   planned_sets: number;
   notes: string | null;

@@ -340,6 +340,7 @@ describe("/api/v1/workouts", () => {
     const body = r.json();
     expect(body.id).toBe(id);
     expect(body.exercises.length).toBe(1);
+    expect(body.exercises[0].exercise_name).toBe("Bench");
     expect(body.exercises[0].sets.length).toBe(2);
     expect(body.exercises[0].sets[1].reps).toBe(9);
   });

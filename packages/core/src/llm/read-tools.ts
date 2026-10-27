@@ -486,7 +486,8 @@ export const getTrainingHistoryTool: ReadTool = {
       "for recovery state (that's get_workout_recommendation). Per workout split: session " +
       "count, last trained, average RPE and whether RPE is drifting up/down vs the user's " +
       "own baseline, template-deviation rate (skipped exercises) + a notable deviation, plus " +
-      "load progression (which main lifts are climbing/stalled/dropping) and a frequency " +
+      "load progression (every lift logged 2+ times, climbing/stalled/dropping, tagged with " +
+      "its split) and a frequency " +
       "imbalance note. Surface the NON-OBVIOUS findings here (an RPE creep, a lagging split, " +
       "a stalling lift) — do not just restate what the user obviously did. Input: optional " +
       "`days` (1-35, default 14).",

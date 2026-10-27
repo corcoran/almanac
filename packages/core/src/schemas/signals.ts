@@ -235,6 +235,7 @@ export const TrainingHistorySummarySchema = z.object({
   load_progression: z.array(
     z.object({
       exercise_name: z.string(),
+      template_name: z.string(),
       direction: z.enum(["climbing", "stalled", "dropping"]),
       from_kg: z.number(),
       to_kg: z.number(),

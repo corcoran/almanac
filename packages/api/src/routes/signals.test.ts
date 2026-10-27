@@ -534,6 +534,49 @@ describe("/api/v1/signals", () => {
     expect(body.window_days).toBe(14);
   });
 
+  it("GET /api/v1/signals/training-history tags load progression with its split", async () => {
+    app = setup();
+    app.db
+      .prepare("INSERT INTO exercise_groups (user_id, name, display_order) VALUES (1, 'Push', 0)")
+      .run();
+    app.db.prepare("INSERT INTO exercises (user_id, group_id, name) VALUES (1, 1, 'Bench')").run();
+    for (const offset of [-3, -1]) {
+      const c = await app.inject({
+        method: "POST",
+        url: "/api/v1/workouts",
+        headers: auth,
+        payload: {
+          started_at: `${addDaysIso(today, offset)}T12:00:00Z`,
+          rpe: 7,
+          exercises: [
+            {
+              exercise_id: 1,
+              display_order: 1,
+              planned_sets: 1,
+              sets: [{ reps: 8, weight_kg: 60 }],
+            },
+          ],
+        },
+      });
+      expect(c.statusCode).toBe(201);
+    }
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/v1/signals/training-history?days=14",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().load_progression).toEqual([
+      {
+        exercise_name: "Bench",
+        template_name: "Unlabeled",
+        direction: "stalled",
+        from_kg: 60,
+        to_kg: 60,
+      },
+    ]);
+  });
+
   it("GET /api/v1/signals/day-status returns summary + nudges shape", async () => {
     // Smoke-test the API surface — the underlying signal has exhaustive
     // unit coverage in core; here we just verify the route is wired up and
