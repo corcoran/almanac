@@ -21,7 +21,8 @@ export function makeGetTrainingHistoryTool(deps: ToolDeps): Tool<GetTrainingHist
       "get_recommended_template, which gives recovery state). Per split: sessions, last " +
       "trained, average RPE and whether it's drifting up/down vs the user's baseline, " +
       "template-deviation rate + a notable deviation, plus load progression " +
-      "(climbing/stalled/dropping main lifts) and a frequency-imbalance note. Use it to " +
+      "(every lift logged 2+ times, climbing/stalled/dropping, tagged with its split) and a " +
+      "frequency-imbalance note. Use it to " +
       "surface non-obvious training patterns. Input: optional `days` (1-35, default 14).",
     inputSchema: GetTrainingHistoryInputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },

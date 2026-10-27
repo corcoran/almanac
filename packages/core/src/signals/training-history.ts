@@ -11,7 +11,6 @@ const DEVIATION_NOTABLE_RATE = 0.4;
 // offer — a 2.5 kg bar read every one of those as flat. Stays above a 2.5 lb
 // micro-jump (1.13 kg) so plate-level wobble still counts as stalled.
 const LOAD_THRESHOLD_KG = 2;
-const LOAD_PROGRESSION_CAP = 5;
 
 function deviationStats(
   sessions: { exercises?: { exercise_id: number; skipped_at: string | null }[] }[],
@@ -37,14 +36,13 @@ function deviationStats(
   return { rate: Math.round(rate * 100) / 100, notable };
 }
 
-function loadProgression(
-  workouts: {
+function loadProgression<
+  W extends {
     started_at: string;
     exercises?: { exercise_id: number; sets?: { weight_kg: number | null }[] }[];
-  }[],
-  exerciseName: Map<number, string>,
-): LoadProgress[] {
-  const byEx = new Map<number, { date: string; topKg: number }[]>();
+  },
+>(workouts: W[], exerciseName: Map<number, string>, splitName: (w: W) => string): LoadProgress[] {
+  const byEx = new Map<number, { date: string; topKg: number; split: string }[]>();
   for (const w of workouts) {
     for (const ei of w.exercises ?? []) {
       const weights = (ei.sets ?? [])
@@ -53,16 +51,13 @@ function loadProgression(
       if (weights.length === 0) continue;
       const topKg = Math.max(...weights);
       const arr = byEx.get(ei.exercise_id) ?? [];
-      arr.push({ date: w.started_at, topKg });
+      arr.push({ date: w.started_at, topKg, split: splitName(w) });
       byEx.set(ei.exercise_id, arr);
     }
   }
-  const entries = [...byEx.entries()]
-    .filter(([, pts]) => pts.length >= 2)
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, LOAD_PROGRESSION_CAP);
   const out: LoadProgress[] = [];
-  for (const [exId, pts] of entries) {
+  for (const [exId, pts] of byEx) {
+    if (pts.length < 2) continue;
     const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
@@ -76,12 +71,17 @@ function loadProgression(
           : "stalled";
     out.push({
       exercise_name: exerciseName.get(exId) ?? `exercise ${exId}`,
+      template_name: last.split,
       direction,
       from_kg: first.topKg,
       to_kg: last.topKg,
     });
   }
-  return out;
+  return out.sort(
+    (a, b) =>
+      a.template_name.localeCompare(b.template_name) ||
+      a.exercise_name.localeCompare(b.exercise_name),
+  );
 }
 
 function rpeTrend(sortedAscSessions: { rpe: number }[]): RpeTrend {
@@ -126,6 +126,8 @@ export type SplitSummary = {
 
 export type LoadProgress = {
   exercise_name: string;
+  /** Split of the most recent session the lift appeared in. */
+  template_name: string;
   direction: LoadDirection;
   from_kg: number;
   to_kg: number;
@@ -174,10 +176,12 @@ export function summarizeTrainingHistory(
   const exercises = listExercises(db, userId, { includeArchived: true });
   const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
 
+  const splitName = (w: { template_id: number | null }) =>
+    w.template_id != null ? (templateName.get(w.template_id) ?? "Unlabeled") : "Unlabeled";
+
   const groups = new Map<string, typeof workouts>();
   for (const w of workouts) {
-    const name =
-      w.template_id != null ? (templateName.get(w.template_id) ?? "Unlabeled") : "Unlabeled";
+    const name = splitName(w);
     const arr = groups.get(name) ?? [];
     arr.push(w);
     groups.set(name, arr);
@@ -206,7 +210,7 @@ export function summarizeTrainingHistory(
     window_days: opts.days,
     sessions: workouts.length,
     by_split,
-    load_progression: loadProgression(workouts, exerciseName),
+    load_progression: loadProgression(workouts, exerciseName, splitName),
     frequency_note: frequencyNote(by_split),
   };
 }

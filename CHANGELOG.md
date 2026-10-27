@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Training history now reports progression for every lift logged twice in the
+  window, tagged with its split. It was capped at five, which in a rotation
+  meant only the most recent split's lifts.
+
 ## [1.42.0] - 2026-10-08
 
 ### Changed
